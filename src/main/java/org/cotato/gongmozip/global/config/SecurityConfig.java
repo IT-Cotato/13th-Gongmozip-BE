@@ -28,8 +28,11 @@ public class SecurityConfig {
                 // 접근 권한 설정
                 .authorizeHttpRequests(auth -> auth.requestMatchers(
                                 "/api/members/signup", // 회원 가입
-                                "/swagger-ui/**", "/v3/api-docs/**" // swagger
-                        )
+                                "/api/members/email/verify-request", // 인증코드 발송
+                                "/api/members/email/verify", // 인증코드 확인
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**" // swagger
+                                )
                         .permitAll()
                         .anyRequest()
                         .authenticated());
