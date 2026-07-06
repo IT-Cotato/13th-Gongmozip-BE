@@ -17,6 +17,9 @@ public enum MemberErrorCode implements BaseErrorCode {
 
     // 409
     DUPLICATE_EMAIL(HttpStatus.CONFLICT, "MEMBER_409_1", "이미 가입된 이메일입니다."),
+
+    // 429
+    TOO_MANY_VERIFY_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "MEMBER_429_1", "인증 시도 횟수를 초과했습니다. 잠시 후 다시 시도해 주세요."),
     ;
 
     private final HttpStatus httpStatus;

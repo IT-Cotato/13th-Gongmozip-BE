@@ -30,9 +30,11 @@ public class MemberService {
     private static final String VERIFY_CODE_PREFIX = "email:verify:";
     private static final String VERIFY_CODE_ISSUED_PREFIX = "email:verify:issued:";
     private static final String VERIFIED_PREFIX = "email:verified:";
+    private static final String VERIFY_FAIL_PREFIX = "email:verify:fail:";
     private static final long VERIFY_CODE_TTL = 5;
     private static final long VERIFY_CODE_ISSUED_TTL = 10;
     private static final long VERIFIED_TTL = 30;
+    private static final int MAX_VERIFY_ATTEMPTS = 5;
 
     @Value("${spring.mail.username}")
     private String mailUsername;
@@ -51,10 +53,11 @@ public class MemberService {
             throw new CustomException(MemberErrorCode.DUPLICATE_EMAIL);
         }
 
-        // 코드 생성 및 redis에 저장(TTL: 5)
+        // 코드 생성 및 redis에 저장(TTL: 5), 새 코드 발급 시 실패 카운터 초기화
         String code = generateCode();
         redisUtil.set(VERIFY_CODE_PREFIX + request.email(), code, VERIFY_CODE_TTL, TimeUnit.MINUTES);
         redisUtil.set(VERIFY_CODE_ISSUED_PREFIX + request.email(), "true", VERIFY_CODE_ISSUED_TTL, TimeUnit.MINUTES);
+        redisUtil.delete(VERIFY_FAIL_PREFIX + request.email());
 
         // 이메일 전송
         sendEmail(request.email(), code);
@@ -62,6 +65,12 @@ public class MemberService {
 
     // 이메일 전송 코드 확인 메서드
     public void confirmVerificationCode(EmailVerifyConfirmRequest request) {
+        String failKey = VERIFY_FAIL_PREFIX + request.email();
+        String failCount = redisUtil.get(failKey);
+        if (failCount != null && Integer.parseInt(failCount) >= MAX_VERIFY_ATTEMPTS) {
+            throw new MemberException(MemberErrorCode.TOO_MANY_VERIFY_ATTEMPTS);
+        }
+
         String stored = redisUtil.get(VERIFY_CODE_PREFIX + request.email());
 
         // redis에 이메일 인증 내역이 없는 경우
@@ -75,10 +84,12 @@ public class MemberService {
         }
         // 같지 않은 경우
         if (!stored.equals(request.code())) {
+            redisUtil.incrementWithTtl(failKey, VERIFY_CODE_TTL, TimeUnit.MINUTES);
             throw new MemberException(MemberErrorCode.INVALID_VERIFY_CODE);
         }
 
         redisUtil.delete(VERIFY_CODE_PREFIX + request.email());
+        redisUtil.delete(failKey);
         // 인증 30분 동안 유효
         redisUtil.set(VERIFIED_PREFIX + request.email(), "true", VERIFIED_TTL, TimeUnit.MINUTES);
     }
