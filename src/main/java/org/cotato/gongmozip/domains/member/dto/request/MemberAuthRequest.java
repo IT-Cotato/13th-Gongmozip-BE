@@ -2,6 +2,9 @@ package org.cotato.gongmozip.domains.member.dto.request;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.time.LocalDate;
+import org.cotato.gongmozip.domains.member.enums.Gender;
 
 public class MemberAuthRequest {
 
@@ -10,4 +13,11 @@ public class MemberAuthRequest {
 
     // 이메일 인증코드 확인 요청
     public record EmailVerifyConfirmRequest(@Email @NotBlank String email, @NotBlank String code) {}
+
+    // 회원가입 요청
+    public record SignUpRequest(
+            @Email @NotBlank String email,
+            @NotBlank String password,
+            @NotNull Gender gender,
+            @NotNull LocalDate birthDate) {}
 }
