@@ -20,6 +20,9 @@ public enum MemberErrorCode implements BaseErrorCode {
 
     // 429
     TOO_MANY_VERIFY_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "MEMBER_429_1", "인증 시도 횟수를 초과했습니다. 잠시 후 다시 시도해 주세요."),
+
+    // 500
+    EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "MEMBER_500_1", "이메일 전송에 실패했습니다. 잠시 후 다시 시도해 주세요."),
     ;
 
     private final HttpStatus httpStatus;

@@ -18,6 +18,7 @@ import org.cotato.gongmozip.global.exception.CustomException;
 import org.cotato.gongmozip.global.redis.RedisUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -131,6 +132,10 @@ public class MemberService {
         message.setTo(to);
         message.setSubject("[공모집] 이메일 인증코드");
         message.setText("인증코드: " + code + "\n\n인증코드는 5분간 유효합니다.");
-        mailSender.send(message);
+        try {
+            mailSender.send(message);
+        } catch (MailException e) {
+            throw new MemberException(MemberErrorCode.EMAIL_SEND_FAILED);
+        }
     }
 }
