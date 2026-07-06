@@ -1,6 +1,6 @@
 package org.cotato.gongmozip.domains.member.service;
 
-import java.util.Random;
+import java.security.SecureRandom;
 import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.member.converter.MemberConverter;
@@ -17,6 +17,7 @@ import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.global.exception.CustomException;
 import org.cotato.gongmozip.global.redis.RedisUtil;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -102,15 +103,19 @@ public class MemberService {
             throw new MemberException(MemberErrorCode.EMAIL_NOT_VERIFIED);
         }
 
-        Member member = MemberConverter.toMember(request, passwordEncoder.encode(request.password()));
-        memberRepository.save(member);
+        try {
+            Member member = MemberConverter.toMember(request, passwordEncoder.encode(request.password()));
+            memberRepository.saveAndFlush(member);
 
-        MemberProfile memberProfile = MemberConverter.toMemberProfile(request, member);
-        memberProfileRepository.save(memberProfile);
+            MemberProfile memberProfile = MemberConverter.toMemberProfile(request, member);
+            memberProfileRepository.save(memberProfile);
 
-        redisUtil.delete(VERIFIED_PREFIX + request.email());
+            redisUtil.delete(VERIFIED_PREFIX + request.email());
 
-        return MemberConverter.toSignUpResponse(member);
+            return MemberConverter.toSignUpResponse(member);
+        } catch (DataIntegrityViolationException e) {
+            throw new MemberException(MemberErrorCode.DUPLICATE_EMAIL);
+        }
     }
 
     // 인증 코드 생성 메서드
