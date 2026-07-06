@@ -36,6 +36,7 @@ public class MemberService {
     private static final long VERIFY_CODE_ISSUED_TTL = 10;
     private static final long VERIFIED_TTL = 30;
     private static final int MAX_VERIFY_ATTEMPTS = 5;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     @Value("${spring.mail.username}")
     private String mailUsername;
@@ -120,7 +121,7 @@ public class MemberService {
 
     // 인증 코드 생성 메서드
     private String generateCode() {
-        return String.format("%06d", new Random().nextInt(1_000_000));
+        return String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
     }
 
     // 이메일 전송 메서드
