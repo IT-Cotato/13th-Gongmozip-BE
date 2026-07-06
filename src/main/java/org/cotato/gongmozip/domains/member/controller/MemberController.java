@@ -6,6 +6,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyConfirmRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyRequest;
+import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.SignUpRequest;
+import org.cotato.gongmozip.domains.member.dto.response.MemberAuthResponse.SignUpResponse;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberSuccessCode;
 import org.cotato.gongmozip.domains.member.service.MemberService;
@@ -42,5 +44,13 @@ public class MemberController {
             @RequestBody @Valid EmailVerifyConfirmRequest request) {
         memberService.confirmVerificationCode(request);
         return BaseResponseFormatter.success(MemberSuccessCode.EMAIL_VERIFY_SUCCESS);
+    }
+
+    @Operation(summary = "이메일 회원가입")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = MemberErrorCode.class)
+    @PostMapping("/signup")
+    public ResponseEntity<BaseResponse<SignUpResponse>> signUp(@RequestBody @Valid SignUpRequest request) {
+        SignUpResponse response = memberService.signUp(request);
+        return BaseResponseFormatter.success(MemberSuccessCode.SIGN_UP_SUCCESS, response);
     }
 }
