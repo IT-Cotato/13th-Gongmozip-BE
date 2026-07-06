@@ -3,10 +3,16 @@ package org.cotato.gongmozip.domains.member.service;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.domains.member.converter.MemberConverter;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyConfirmRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyRequest;
+import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.SignUpRequest;
+import org.cotato.gongmozip.domains.member.dto.response.MemberAuthResponse.SignUpResponse;
+import org.cotato.gongmozip.domains.member.entity.Member;
+import org.cotato.gongmozip.domains.member.entity.MemberProfile;
 import org.cotato.gongmozip.domains.member.exception.MemberException;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
+import org.cotato.gongmozip.domains.member.repository.MemberProfileRepository;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.global.exception.CustomException;
 import org.cotato.gongmozip.global.redis.RedisUtil;
@@ -15,6 +21,7 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +38,7 @@ public class MemberService {
     private String mailUsername;
 
     private final MemberRepository memberRepository;
+    private final MemberProfileRepository memberProfileRepository;
     private final PasswordEncoder passwordEncoder;
     private final JavaMailSender mailSender;
     private final RedisUtil redisUtil;
@@ -73,6 +81,25 @@ public class MemberService {
         redisUtil.delete(VERIFY_CODE_PREFIX + request.email());
         // 인증 30분 동안 유효
         redisUtil.set(VERIFIED_PREFIX + request.email(), "true", VERIFIED_TTL, TimeUnit.MINUTES);
+    }
+
+    @Transactional
+    // 회원 가입 메서드
+    public SignUpResponse signUp(SignUpRequest request) {
+        // 이메일 인증이 진행되지 않은 경우
+        if (!redisUtil.exists(VERIFIED_PREFIX + request.email())) {
+            throw new MemberException(MemberErrorCode.EMAIL_NOT_VERIFIED);
+        }
+
+        Member member = MemberConverter.toMember(request, passwordEncoder.encode(request.password()));
+        memberRepository.save(member);
+
+        MemberProfile memberProfile = MemberConverter.toMemberProfile(request, member);
+        memberProfileRepository.save(memberProfile);
+
+        redisUtil.delete(VERIFIED_PREFIX + request.email());
+
+        return MemberConverter.toSignUpResponse(member);
     }
 
     // 인증 코드 생성 메서드
