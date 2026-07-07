@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: gongmozip
+
+  # 1. 데이터베이스 설정
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME}?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # 2. JPA 설정 (Hibernate)
+  jpa:
+    hibernate:
+      ddl-auto: update # 테이블 자동 업데이트 (데이터 유지)
+    show-sql: false
+    open-in-view: false      # OSIV 비활성화
+    properties:
+      hibernate:
+        format_sql: true     # SQL 예쁘게 출력
+
+  # 3. Redis 설정
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  # 4. 이메일 설정 (Gmail SMTP)
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}  # 이메일 앱 비밀번호 입력
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          ssl:
+            trust: smtp.gmail.com
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
