@@ -5,7 +5,12 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.global.redis.RedisUtil;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -20,9 +25,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String AUTHORIZATION_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
+    private static final String BLACKLIST_PREFIX = "blacklist:";
 
     private final JwtProvider jwtProvider;
     private final CustomUserDetailsService customUserDetailsService;
+    private final RedisUtil redisUtil;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
@@ -30,7 +37,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = extractToken(request);
 
-        if (StringUtils.hasText(token) && jwtProvider.validateToken(token)) {
+        if (StringUtils.hasText(token) && jwtProvider.validateToken(token) && !isBlacklisted(token)) {
             String email = jwtProvider.getEmail(token);
             UserDetails userDetails = customUserDetailsService.loadUserByUsername(email);
 
@@ -51,5 +58,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return bearerToken.substring(BEARER_PREFIX.length());
         }
         return null;
+    }
+
+    private boolean isBlacklisted(String token) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String hash = HexFormat.of().formatHex(digest.digest(token.getBytes(StandardCharsets.UTF_8)));
+            return redisUtil.exists(BLACKLIST_PREFIX + hash);
+        } catch (NoSuchAlgorithmException e) {
+            return false;
+        }
     }
 }
