@@ -2,16 +2,19 @@ package org.cotato.gongmozip.domains.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import org.cotato.gongmozip.domains.auth.dto.request.AuthRequest.LoginRequest;
+import org.cotato.gongmozip.domains.auth.dto.response.AuthResponse.LoginResult;
 import org.cotato.gongmozip.domains.auth.exception.AuthException;
 import org.cotato.gongmozip.domains.auth.exception.codes.AuthErrorCode;
-import org.cotato.gongmozip.domains.auth.dto.response.AuthResponse.LoginResult;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.enums.MemberStatus;
 import org.cotato.gongmozip.domains.member.exception.MemberException;
@@ -139,5 +142,55 @@ class AuthServiceTest {
                 eq(REFRESH_TOKEN_EXPIRATION),
                 eq(TimeUnit.MILLISECONDS)
         );
+    }
+
+    // ========== 로그아웃 메서드 테스트 ==========
+
+    @DisplayName("로그아웃 시 유효한 Access Token은 블랙리스트에 등록된다.")
+    @Test
+    void 로그아웃_시_유효한_AccessToken은_블랙리스트에_등록된다() {
+        // given
+        long remainingMillis = 1800000L;
+        given(jwtProvider.getRemainingExpirationMillis(ACCESS_TOKEN)).willReturn(remainingMillis);
+
+        // when
+        authService.logout(TEST_MEMBER_ID, ACCESS_TOKEN);
+
+        // then
+        then(redisUtil)
+                .should()
+                .set(
+                        argThat(key -> key.startsWith("blacklist:")),
+                        eq("logout"),
+                        eq(remainingMillis),
+                        eq(TimeUnit.MILLISECONDS));
+    }
+
+    @DisplayName("로그아웃 시 만료된 Access Token은 블랙리스트에 등록되지 않는다.")
+    @Test
+    void 로그아웃_시_만료된_AccessToken은_블랙리스트에_등록되지_않는다() {
+        // given
+        given(jwtProvider.getRemainingExpirationMillis(ACCESS_TOKEN)).willReturn(0L);
+
+        // when
+        authService.logout(TEST_MEMBER_ID, ACCESS_TOKEN);
+
+        // then
+        then(redisUtil)
+                .should(never())
+                .set(argThat(key -> key.startsWith("blacklist:")), eq("logout"), anyLong(), eq(TimeUnit.MILLISECONDS));
+    }
+
+    @DisplayName("로그아웃 시 Refresh Token이 Redis에서 삭제된다.")
+    @Test
+    void 로그아웃_시_RefreshToken이_Redis에서_삭제된다() {
+        // given
+        given(jwtProvider.getRemainingExpirationMillis(ACCESS_TOKEN)).willReturn(1800000L);
+
+        // when
+        authService.logout(TEST_MEMBER_ID, ACCESS_TOKEN);
+
+        // then
+        then(redisUtil).should().delete("refresh:" + TEST_MEMBER_ID);
     }
 }
