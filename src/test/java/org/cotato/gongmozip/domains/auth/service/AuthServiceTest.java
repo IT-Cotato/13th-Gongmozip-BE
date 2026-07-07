@@ -56,6 +56,8 @@ class AuthServiceTest {
     private static final String ENCODED_PASSWORD = "encodedPassword";
     private static final String ACCESS_TOKEN = "accessToken";
     private static final String REFRESH_TOKEN = "refreshToken";
+    private static final String NEW_ACCESS_TOKEN = "newAccessToken";
+    private static final String NEW_REFRESH_TOKEN = "newRefreshToken";
     private static final long REFRESH_TOKEN_EXPIRATION = 1209600000L;
 
     @BeforeEach
@@ -192,5 +194,75 @@ class AuthServiceTest {
 
         // then
         then(redisUtil).should().delete("refresh:" + TEST_MEMBER_ID);
+    }
+
+    // ========== 토큰 재발급 메서드 테스트 ==========
+
+    @DisplayName("유효하지 않은 Refresh Token으로 재발급하면 예외가 발생한다.")
+    @Test
+    void 유효하지_않은_RefreshToken으로_재발급하면_예외가_발생한다() {
+        // given
+        given(jwtProvider.validateToken(REFRESH_TOKEN)).willReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> authService.reissue(REFRESH_TOKEN))
+                .isInstanceOf(AuthException.class)
+                .hasMessage(AuthErrorCode.INVALID_REFRESH_TOKEN.getMessage());
+    }
+
+    @DisplayName("Redis에 저장된 토큰과 불일치하면 예외가 발생한다.")
+    @Test
+    void Redis에_저장된_토큰과_불일치하면_예외가_발생한다() {
+        // given
+        given(jwtProvider.validateToken(REFRESH_TOKEN)).willReturn(true);
+        given(jwtProvider.getMemberId(REFRESH_TOKEN)).willReturn(TEST_MEMBER_ID);
+        given(redisUtil.get("refresh:" + TEST_MEMBER_ID)).willReturn("differentToken");
+
+        // when & then
+        assertThatThrownBy(() -> authService.reissue(REFRESH_TOKEN))
+                .isInstanceOf(AuthException.class)
+                .hasMessage(AuthErrorCode.INVALID_REFRESH_TOKEN.getMessage());
+    }
+
+    @DisplayName("재발급 성공 시 새 Access Token과 Refresh Token이 반환된다.")
+    @Test
+    void 재발급_성공_시_새_AccessToken과_RefreshToken이_반환된다() {
+        // given
+        given(jwtProvider.validateToken(REFRESH_TOKEN)).willReturn(true);
+        given(jwtProvider.getMemberId(REFRESH_TOKEN)).willReturn(TEST_MEMBER_ID);
+        given(jwtProvider.getEmail(REFRESH_TOKEN)).willReturn(TEST_EMAIL);
+        given(redisUtil.get("refresh:" + TEST_MEMBER_ID)).willReturn(REFRESH_TOKEN);
+        given(jwtProvider.generateAccessToken(TEST_MEMBER_ID, TEST_EMAIL)).willReturn(NEW_ACCESS_TOKEN);
+        given(jwtProvider.generateRefreshToken(TEST_MEMBER_ID, TEST_EMAIL)).willReturn(NEW_REFRESH_TOKEN);
+
+        // when
+        LoginResult result = authService.reissue(REFRESH_TOKEN);
+
+        // then
+        assertThat(result.accessToken()).isEqualTo(NEW_ACCESS_TOKEN);
+        assertThat(result.refreshToken()).isEqualTo(NEW_REFRESH_TOKEN);
+    }
+
+    @DisplayName("재발급 성공 시 새 Refresh Token이 Redis에 저장된다.")
+    @Test
+    void 재발급_성공_시_새_RefreshToken이_Redis에_저장된다() {
+        // given
+        given(jwtProvider.validateToken(REFRESH_TOKEN)).willReturn(true);
+        given(jwtProvider.getMemberId(REFRESH_TOKEN)).willReturn(TEST_MEMBER_ID);
+        given(jwtProvider.getEmail(REFRESH_TOKEN)).willReturn(TEST_EMAIL);
+        given(redisUtil.get("refresh:" + TEST_MEMBER_ID)).willReturn(REFRESH_TOKEN);
+        given(jwtProvider.generateAccessToken(TEST_MEMBER_ID, TEST_EMAIL)).willReturn(NEW_ACCESS_TOKEN);
+        given(jwtProvider.generateRefreshToken(TEST_MEMBER_ID, TEST_EMAIL)).willReturn(NEW_REFRESH_TOKEN);
+
+        // when
+        authService.reissue(REFRESH_TOKEN);
+
+        // then
+        then(redisUtil).should().set(
+                eq("refresh:" + TEST_MEMBER_ID),
+                eq(NEW_REFRESH_TOKEN),
+                eq(REFRESH_TOKEN_EXPIRATION),
+                eq(TimeUnit.MILLISECONDS)
+        );
     }
 }

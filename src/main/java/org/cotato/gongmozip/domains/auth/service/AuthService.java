@@ -56,6 +56,27 @@ public class AuthService {
         return new LoginResult(accessToken, refreshToken);
     }
 
+    // 토큰 재발급 메서드
+    public LoginResult reissue(String refreshToken) {
+        if (!jwtProvider.validateToken(refreshToken)) {
+            throw new AuthException(AuthErrorCode.INVALID_REFRESH_TOKEN);
+        }
+
+        Long memberId = jwtProvider.getMemberId(refreshToken);
+        String email = jwtProvider.getEmail(refreshToken);
+
+        String storedToken = redisUtil.get(REFRESH_TOKEN_PREFIX + memberId);
+        if (!refreshToken.equals(storedToken)) {
+            throw new AuthException(AuthErrorCode.INVALID_REFRESH_TOKEN);
+        }
+
+        String newAccessToken = jwtProvider.generateAccessToken(memberId, email);
+        String newRefreshToken = jwtProvider.generateRefreshToken(memberId, email);
+        redisUtil.set(REFRESH_TOKEN_PREFIX + memberId, newRefreshToken, refreshTokenExpiration, TimeUnit.MILLISECONDS);
+
+        return new LoginResult(newAccessToken, newRefreshToken);
+    }
+
     // 로그아웃 메서드
     public void logout(Long memberId, String accessToken) {
         long remainingMillis = jwtProvider.getRemainingExpirationMillis(accessToken);
