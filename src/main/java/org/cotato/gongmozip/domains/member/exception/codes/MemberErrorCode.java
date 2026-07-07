@@ -15,6 +15,9 @@ public enum MemberErrorCode implements BaseErrorCode {
     EMAIL_NOT_VERIFIED(HttpStatus.BAD_REQUEST, "MEMBER_400_3", "이메일 인증이 완료되지 않았습니다."),
     VERIFY_CODE_NOT_ISSUED(HttpStatus.BAD_REQUEST, "MEMBER_400_4", "인증코드가 발급된 적 없습니다. 먼저 이메일 인증을 요청해 주세요."),
 
+    // 404
+    MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_404_1", "존재하지 않는 회원입니다."),
+
     // 409
     DUPLICATE_EMAIL(HttpStatus.CONFLICT, "MEMBER_409_1", "이미 가입된 이메일입니다."),
 
