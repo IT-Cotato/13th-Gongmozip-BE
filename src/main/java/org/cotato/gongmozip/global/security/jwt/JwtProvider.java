@@ -57,6 +57,11 @@ public class JwtProvider {
         return parseClaims(token).getSubject();
     }
 
+    // Access Token 남은 만료 시간(ms) 반환
+    public long getRemainingExpirationMillis(String token) {
+        return parseClaims(token).getExpiration().getTime() - System.currentTimeMillis();
+    }
+
     // 토큰 생성 메서드(email + memberId 조합)
     private String buildToken(Long memberId, String email, long expiration) {
         Date now = new Date();
