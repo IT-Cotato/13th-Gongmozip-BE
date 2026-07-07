@@ -24,6 +24,7 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -84,6 +85,29 @@ public class AuthController {
         response.addHeader(HttpHeaders.SET_COOKIE, deleteCookie.toString());
 
         return BaseResponseFormatter.success(AuthSuccessCode.LOGOUT_SUCCESS);
+    }
+
+    @Operation(summary = "토큰 재발급")
+    @CustomErrorCodes(
+            commonErrorCodes = GlobalErrorCode.class,
+            domainErrorCodes = {AuthErrorCode.class})
+    @PostMapping("/reissue")
+    public ResponseEntity<BaseResponse<LoginResponse>> reissue(
+            @CookieValue(name = REFRESH_TOKEN_COOKIE, required = false) String refreshToken,
+            HttpServletResponse response) {
+
+        LoginResult result = authService.reissue(refreshToken);
+
+        ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, result.refreshToken())
+                .httpOnly(true)
+                .secure(false)
+                .sameSite("Strict")
+                .maxAge(refreshTokenExpiration / 1000)
+                .path("/api/auth")
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+
+        return BaseResponseFormatter.success(AuthSuccessCode.REISSUE_SUCCESS, new LoginResponse(result.accessToken()));
     }
 
     private String extractToken(HttpServletRequest request) {
