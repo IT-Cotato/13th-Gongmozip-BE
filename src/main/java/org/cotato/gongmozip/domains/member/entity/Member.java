@@ -36,6 +36,6 @@ public class Member extends BaseEntity {
     @Column(name = "status", nullable = false, length = 30)
     private MemberStatus status;
 
-    @Column(name = "email_verificated_at")
+    @Column(name = "email_verified_at")
     private LocalDateTime emailVerifiedAt;
 }

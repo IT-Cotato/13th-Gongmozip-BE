@@ -1,5 +1,8 @@
 package org.cotato.gongmozip.global.config;
 
+import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.global.security.jwt.JwtAuthenticationEntryPoint;
+import org.cotato.gongmozip.global.security.jwt.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -9,10 +12,15 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -30,12 +38,18 @@ public class SecurityConfig {
                                 "/api/members/signup", // 회원 가입
                                 "/api/members/email/verify-request", // 인증코드 발송
                                 "/api/members/email/verify", // 인증코드 확인
+                                "/api/auth/login", // 로그인
+                                "/api/auth/reissue", // 토큰 재발급
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**" // swagger
                                 )
                         .permitAll()
                         .anyRequest()
-                        .authenticated());
+                        .authenticated())
+                // 인증 실패 시 401 응답 처리
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+                // JWT 필터를 UsernamePasswordAuthenticationFilter 앞에 등록
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
