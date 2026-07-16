@@ -138,12 +138,13 @@ class AuthServiceTest {
         authService.login(request);
 
         // then
-        then(redisUtil).should().set(
-                eq("refresh:" + TEST_MEMBER_ID),
-                eq(REFRESH_TOKEN),
-                eq(REFRESH_TOKEN_EXPIRATION),
-                eq(TimeUnit.MILLISECONDS)
-        );
+        then(redisUtil)
+                .should()
+                .set(
+                        eq("refresh:" + TEST_MEMBER_ID),
+                        eq(REFRESH_TOKEN),
+                        eq(REFRESH_TOKEN_EXPIRATION),
+                        eq(TimeUnit.MILLISECONDS));
     }
 
     // ========== 로그아웃 메서드 테스트 ==========
@@ -258,11 +259,12 @@ class AuthServiceTest {
         authService.reissue(REFRESH_TOKEN);
 
         // then
-        then(redisUtil).should().set(
-                eq("refresh:" + TEST_MEMBER_ID),
-                eq(NEW_REFRESH_TOKEN),
-                eq(REFRESH_TOKEN_EXPIRATION),
-                eq(TimeUnit.MILLISECONDS)
-        );
+        then(redisUtil)
+                .should()
+                .set(
+                        eq("refresh:" + TEST_MEMBER_ID),
+                        eq(NEW_REFRESH_TOKEN),
+                        eq(REFRESH_TOKEN_EXPIRATION),
+                        eq(TimeUnit.MILLISECONDS));
     }
 }
