@@ -460,9 +460,8 @@ public class ProfileConverter {
     public static ProfileCertification toProfileCertification(
             CreateCertificationRequest request, Profile profile, Certification certification) {
         // 마스터 자격증이 있는 경우 이름과 카테고리를 마스터 자격증 기준으로 세팅
-        String certName = certification != null
-                ? certification.getCertificateName()
-                : (request.certificateName() != null ? request.certificateName().trim() : null);
+        String sourceName = certification != null ? certification.getCertificateName() : request.certificateName();
+        String certName = sourceName != null ? sourceName.trim() : null;
         org.cotato.gongmozip.domains.profile.enums.CertificationCategory categoryCode =
                 certification != null ? certification.getCategoryCode() : request.categoryCode();
         return ProfileCertification.builder()
