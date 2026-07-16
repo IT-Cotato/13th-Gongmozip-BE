@@ -27,4 +27,7 @@ public interface ProfileCertificationRepository extends JpaRepository<ProfileCer
     boolean existsByProfileAndCertification(Profile profile, Certification certification);
 
     boolean existsByProfileAndIsCustomTrueAndCertificateNameIgnoreCase(Profile profile, String certificateName);
+
+    boolean existsByProfileAndIsCustomTrueAndCertificateNameIgnoreCaseAndProfileCertificationIdNot(
+            Profile profile, String certificateName, Long profileCertificationId);
 }

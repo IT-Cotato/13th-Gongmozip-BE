@@ -18,7 +18,6 @@ public enum ProfileErrorCode implements BaseErrorCode {
 
     // 403
     PROFILE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "PROFILE_403_1", "해당 프로필에 접근할 권한이 없습니다."),
-    PRIVATE_PROFILE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "PROFILE_403_2", "비공개 프로필 접근에 실패했습니다."),
 
     // 404
     PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "PROFILE_404_1", "프로필을 찾을 수 없습니다."),
