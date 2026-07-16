@@ -422,4 +422,83 @@ class ProfileServiceTest {
                 .isInstanceOf(ProfileException.class)
                 .hasMessage(ProfileErrorCode.PROJECT_NOT_FOUND.getMessage());
     }
+
+    @DisplayName("진행 종료만 전달하면 기존 종료일을 유지한다.")
+    @Test
+    void 진행_종료만_전달하면_기존_종료일을_유지한다() {
+        Profile profile =
+                Profile.builder().profileId(10L).member(member).nickname("러너").build();
+        LocalDate originalEndedAt = LocalDate.of(2026, 6, 30);
+        ProjectExperience project = ProjectExperience.builder()
+                .projectId(20L)
+                .profile(profile)
+                .projectName("프로젝트")
+                .description("설명")
+                .role("역할")
+                .techStacks(List.of("Spring"))
+                .startedAt(LocalDate.of(2026, 1, 1))
+                .endedAt(originalEndedAt)
+                .isOngoing(true)
+                .build();
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
+        given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
+
+        profileService.updateProject(
+                10L, 20L, new UpdateProjectRequest(null, null, null, null, null, null, false), member);
+
+        assertThat(project.isOngoing()).isFalse();
+        assertThat(project.getEndedAt()).isEqualTo(originalEndedAt);
+    }
+
+    @DisplayName("종료일만 전달하면 진행 중 상태가 해제된다.")
+    @Test
+    void 종료일만_전달하면_진행_중_상태가_해제된다() {
+        Profile profile =
+                Profile.builder().profileId(10L).member(member).nickname("러너").build();
+        ProjectExperience project = ProjectExperience.builder()
+                .projectId(20L)
+                .profile(profile)
+                .projectName("프로젝트")
+                .description("설명")
+                .role("역할")
+                .techStacks(List.of("Spring"))
+                .startedAt(LocalDate.of(2026, 1, 1))
+                .isOngoing(true)
+                .build();
+        LocalDate endedAt = LocalDate.of(2026, 7, 1);
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
+        given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
+
+        profileService.updateProject(
+                10L, 20L, new UpdateProjectRequest(null, null, null, null, null, endedAt, null), member);
+
+        assertThat(project.isOngoing()).isFalse();
+        assertThat(project.getEndedAt()).isEqualTo(endedAt);
+    }
+
+    @DisplayName("프로젝트 콘텐츠가 변경되면 기존 AI 요약을 제거한다.")
+    @Test
+    void 프로젝트_콘텐츠가_변경되면_AI_요약을_제거한다() {
+        Profile profile =
+                Profile.builder().profileId(10L).member(member).nickname("러너").build();
+        ProjectExperience project = ProjectExperience.builder()
+                .projectId(20L)
+                .profile(profile)
+                .projectName("프로젝트")
+                .description("설명")
+                .role("역할")
+                .techStacks(List.of("Spring"))
+                .startedAt(LocalDate.of(2026, 1, 1))
+                .isOngoing(true)
+                .aiSummary("기존 요약")
+                .build();
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
+        given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
+
+        ProjectResponse response = profileService.updateProject(
+                10L, 20L, new UpdateProjectRequest("변경된 프로젝트", null, null, null, null, null, null), member);
+
+        assertThat(project.getAiSummary()).isNull();
+        assertThat(response.aiSummaryStatus()).isEqualTo("OUTDATED");
+    }
 }

@@ -238,11 +238,20 @@ public class ProfileService {
         }
 
         LocalDate started = request.startedAt() != null ? request.startedAt() : project.getStartedAt();
-        Boolean ongoing = request.isOngoing() != null ? request.isOngoing() : project.isOngoing();
+        Boolean ongoing;
+        if (request.isOngoing() != null) {
+            ongoing = request.isOngoing();
+        } else if (request.endedAt() != null) {
+            ongoing = false;
+        } else {
+            ongoing = project.isOngoing();
+        }
         LocalDate ended = project.getEndedAt();
 
-        if (request.isOngoing() != null || request.endedAt() != null) {
-            ended = ongoing ? null : request.endedAt();
+        if (Boolean.TRUE.equals(ongoing)) {
+            ended = null;
+        } else if (request.endedAt() != null) {
+            ended = request.endedAt();
         }
 
         validateProjectPeriod(started, ended, ongoing);
@@ -267,14 +276,14 @@ public class ProfileService {
 
         if (request.startedAt() != null) project.updateStartedAt(request.startedAt());
         project.updateEndedAt(ended);
-        if (request.isOngoing() != null) project.updateIsOngoing(request.isOngoing());
+        if (request.isOngoing() != null || request.endedAt() != null) project.updateIsOngoing(ongoing);
 
         // 콘텐츠가 수정되었고 기존 AI 요약이 존재하면 OUTDATED 처리
         String aiStatus = "NOT_CREATED";
         if (project.getAiSummary() != null) {
             if (contentChanged) {
                 aiStatus = "OUTDATED";
-                // 실제 엔티티에 바로 반영하진 않으나 비즈니스 응답으로 내려줌
+                project.updateAiSummary(null);
             } else {
                 aiStatus = "CREATED";
             }
