@@ -1,6 +1,7 @@
 package org.cotato.gongmozip.domains.profile.converter;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.dto.request.ProfileRequest.CreateAwardRequest;
@@ -26,7 +27,7 @@ public class ProfileConverter {
                 .gpaScale(request.gpaScale())
                 .interestCategories(request.interestCategories())
                 .isMain(isMain)
-                .isPublic(request.isPublic() == null ? true : request.isPublic())
+                .isPublic(request.isPublic())
                 .build();
     }
 
@@ -185,36 +186,141 @@ public class ProfileConverter {
                 certDetails);
     }
 
+    // 분교(입결 독립) 또는 이원화이지만 입결 차이가 현저한 캠퍼스 패턴
+    // 정규화(공백제거+대문자) 후 매칭
+    private static final Set<String> REGIONAL_CAMPUS_PATTERNS = Set.of(
+            // 분교 – 별도 브랜드·입결
+            "연세대학교미래",
+            "연세대미래",
+            "연세대학교원주",
+            "연세대원주",
+            "고려대학교세종",
+            "고려대세종",
+            "한양대학교ERICA",
+            "한양대ERICA",
+            "한양대학교에리카",
+            "한양대에리카",
+            "동국대학교경주",
+            "동국대경주",
+            "동국대학교WISE",
+            "동국대WISE",
+            "건국대학교글로컬",
+            "건국대글로컬",
+            // 이원화이지만 입결 차이가 큰 캠퍼스
+            "단국대학교천안",
+            "단국대천안",
+            "홍익대학교세종",
+            "홍익대세종",
+            "상명대학교천안",
+            "상명대천안");
+
+    // 서울 소재 대학교 키워드 (이원화 캠퍼스는 본교 키워드로 포괄)
+    private static final Set<String> SEOUL_UNIVERSITY_KEYWORDS = Set.of(
+            "서울대학교",
+            "서울대",
+            "연세대학교",
+            "연세대",
+            "고려대학교",
+            "고려대",
+            "서강대학교",
+            "서강대",
+            "성균관대학교",
+            "성균관대",
+            "한양대학교",
+            "한양대",
+            "중앙대학교",
+            "중앙대",
+            "경희대학교",
+            "경희대",
+            "한국외국어대학교",
+            "한국외대",
+            "외국어대",
+            "서울시립대학교",
+            "시립대",
+            "이화여자대학교",
+            "이화여대",
+            "이화대",
+            "건국대학교",
+            "건국대",
+            "동국대학교",
+            "동국대",
+            "홍익대학교",
+            "홍익대",
+            "숙명여자대학교",
+            "숙명여대",
+            "숙명대",
+            "성신여자대학교",
+            "성신여대",
+            "세종대학교",
+            "세종대",
+            "광운대학교",
+            "광운대",
+            "국민대학교",
+            "국민대",
+            "숭실대학교",
+            "숭실대",
+            "단국대학교",
+            "단국대",
+            "명지대학교",
+            "명지대",
+            "덕성여자대학교",
+            "덕성여대",
+            "동덕여자대학교",
+            "동덕여대",
+            "상명대학교",
+            "상명대",
+            "서울여자대학교",
+            "서울여대",
+            "가톨릭대학교",
+            "가톨릭대",
+            "삼육대학교",
+            "삼육대",
+            "한성대학교",
+            "한성대",
+            "서경대학교",
+            "서경대",
+            "성공회대학교",
+            "성공회대");
+
+    /**
+     * 학교 이름을 기반으로 대학 지역을 판별합니다.
+     *
+     * <p>판별 기준: 행정적 이원화 편제보다 실제 입결(입시 경쟁률/컷라인) 및 시장에서의 브랜드 위상을 기준으로 합니다.
+     *
+     * <ol>
+     *   <li>입력값 정규화 (공백 제거 + 대문자 변환)
+     *   <li>지방 분교 패턴 우선 차단 → "기타 지역 대학교"
+     *   <li>"서울캠퍼스" / "서울교정" 명시 여부 확인 → "서울 소재 대학교"
+     *   <li>서울 소재 대학 키워드 매칭 → "서울 소재 대학교"
+     *   <li>Fallback → "기타 지역 대학교"
+     * </ol>
+     */
     private static String getSchoolRegion(String schoolName) {
         if (schoolName == null) return null;
-        if (schoolName.contains("숙명")
-                || schoolName.contains("서울")
-                || schoolName.contains("연세")
-                || schoolName.contains("고려")
-                || schoolName.contains("한양")
-                || schoolName.contains("서강")
-                || schoolName.contains("성균관")
-                || schoolName.contains("이화")
-                || schoolName.contains("중앙")
-                || schoolName.contains("경희")
-                || schoolName.contains("외대")
-                || schoolName.contains("시립")
-                || schoolName.contains("건국")
-                || schoolName.contains("동국")
-                || schoolName.contains("홍익")
-                || schoolName.contains("국민")
-                || schoolName.contains("숭실")
-                || schoolName.contains("세종")
-                || schoolName.contains("단국")
-                || schoolName.contains("광운")
-                || schoolName.contains("명지")
-                || schoolName.contains("상명")
-                || schoolName.contains("가톨릭")
-                || schoolName.contains("덕성")
-                || schoolName.contains("동덕")
-                || schoolName.contains("서울여대")) {
+
+        // STEP 1: 정규화
+        String clean = schoolName.replaceAll("\\s+", "").toUpperCase();
+
+        // STEP 2: 분교 패턴 우선 차단
+        for (String pattern : REGIONAL_CAMPUS_PATTERNS) {
+            if (clean.contains(pattern.toUpperCase())) {
+                return "기타 지역 대학교";
+            }
+        }
+
+        // STEP 3: 서울 캠퍼스 명시 여부
+        if (clean.contains("서울캠퍼스") || clean.contains("서울교정")) {
             return "서울 소재 대학교";
         }
+
+        // STEP 4: 서울 소재 대학 키워드 매칭
+        for (String keyword : SEOUL_UNIVERSITY_KEYWORDS) {
+            if (clean.contains(keyword.toUpperCase())) {
+                return "서울 소재 대학교";
+            }
+        }
+
+        // STEP 5: Fallback
         return "기타 지역 대학교";
     }
 
@@ -350,15 +456,20 @@ public class ProfileConverter {
                 list, page.getNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages(), page.hasNext());
     }
 
-    // === Certification ===
+    // 자격증
     public static ProfileCertification toProfileCertification(
             CreateCertificationRequest request, Profile profile, Certification certification) {
-        String certName = certification != null ? certification.getCertificateName() : request.certificateName();
+        // 마스터 자격증이 있는 경우 이름과 카테고리를 마스터 자격증 기준으로 세팅
+        String certName = certification != null
+                ? certification.getCertificateName()
+                : (request.certificateName() != null ? request.certificateName().trim() : null);
+        org.cotato.gongmozip.domains.profile.enums.CertificationCategory categoryCode =
+                certification != null ? certification.getCategoryCode() : request.categoryCode();
         return ProfileCertification.builder()
                 .profile(profile)
                 .certification(certification)
                 .certificateName(certName)
-                .categoryCode(request.categoryCode())
+                .categoryCode(categoryCode)
                 .issuer(request.issuer())
                 .acquiredAt(request.acquiredAt())
                 .isCustom(request.isCustom())
