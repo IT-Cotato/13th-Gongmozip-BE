@@ -30,9 +30,13 @@ public class StringListConverter implements AttributeConverter<List<String>, Str
         if (dbData == null || dbData.trim().isEmpty()) {
             return new ArrayList<>();
         }
+        String trimmedData = dbData.trim();
         try {
             return objectMapper.readValue(dbData, new TypeReference<ArrayList<String>>() {});
         } catch (JsonProcessingException e) {
+            if (looksLikeJson(trimmedData)) {
+                throw new IllegalArgumentException("List<String> 역직렬화 실패", e);
+            }
             // 기존 콤마 구분 데이터 하위 호환 처리
             List<String> fallback = new ArrayList<>();
             for (String s : dbData.split(",")) {
@@ -41,5 +45,9 @@ public class StringListConverter implements AttributeConverter<List<String>, Str
             }
             return fallback;
         }
+    }
+
+    private boolean looksLikeJson(String value) {
+        return value.startsWith("[") || value.startsWith("{") || value.startsWith("\"");
     }
 }
