@@ -38,6 +38,11 @@ public class ProfileService {
 
     @Transactional
     public CreateProfileResponse createProfile(CreateProfileRequest request, Member member) {
+        // 동시성 보안: 회원 행에 비관적 락을 겁산 후 대표 프로필 생성
+        memberRepository
+                .findByIdWithLock(member.getMemberId())
+                .orElseThrow(() -> new ProfileException(ProfileErrorCode.PROFILE_ACCESS_DENIED));
+
         validateGpa(request.gpa(), request.gpaScale());
 
         // 닉네임 중복 체크
@@ -114,6 +119,11 @@ public class ProfileService {
 
     @Transactional
     public void deleteProfile(Long profileId, Member member) {
+        // 동시성 보안: 회원 행에 비관적 락을 겁산 후 삭제 진행
+        memberRepository
+                .findByIdWithLock(member.getMemberId())
+                .orElseThrow(() -> new ProfileException(ProfileErrorCode.PROFILE_ACCESS_DENIED));
+
         Profile profile = getProfileAndValidateOwner(profileId, member);
         boolean deletedIsMain = profile.isMain();
 
@@ -128,6 +138,11 @@ public class ProfileService {
 
     @Transactional
     public UpdateMainProfileResponse setMainProfile(Long profileId, Member member) {
+        // 동시성 보안: 회원 행에 비관적 락을 겁산 후 대표 설정 진행
+        memberRepository
+                .findByIdWithLock(member.getMemberId())
+                .orElseThrow(() -> new ProfileException(ProfileErrorCode.PROFILE_ACCESS_DENIED));
+
         Profile profile = getProfileAndValidateOwner(profileId, member);
 
         if (profile.isMain()) {
@@ -164,8 +179,9 @@ public class ProfileService {
                 .findById(profileId)
                 .orElseThrow(() -> new ProfileException(ProfileErrorCode.PROFILE_NOT_FOUND));
 
+        // 비공개 프로필은 존재하지 않는 리소스와 동일하게 처리 (PROFILE_NOT_FOUND)
         if (!profile.isPublic()) {
-            throw new ProfileException(ProfileErrorCode.PRIVATE_PROFILE_ACCESS_DENIED);
+            throw new ProfileException(ProfileErrorCode.PROFILE_NOT_FOUND);
         }
 
         List<ProjectExperience> projects = projectExperienceRepository.findAllByProfile(profile);
@@ -441,13 +457,15 @@ public class ProfileService {
         }
 
         if (cert.isCustom()) {
-            if (request.certificateName() != null && !request.certificateName().equals(cert.getCertificateName())) {
-                // 중복 체크
-                if (profileCertificationRepository.existsByProfileAndIsCustomTrueAndCertificateNameIgnoreCase(
-                        profile, request.certificateName().trim())) {
+            if (request.certificateName() != null
+                    && !request.certificateName().trim().equals(cert.getCertificateName())) {
+                // 자기 자신을 제외한 중복 체크
+                if (profileCertificationRepository
+                        .existsByProfileAndIsCustomTrueAndCertificateNameIgnoreCaseAndProfileCertificationIdNot(
+                                profile, request.certificateName().trim(), cert.getProfileCertificationId())) {
                     throw new ProfileException(ProfileErrorCode.DUPLICATE_CERTIFICATION);
                 }
-                cert.updateCertificateName(request.certificateName());
+                cert.updateCertificateName(request.certificateName().trim());
             }
             if (request.categoryCode() != null) {
                 cert.updateCategoryCode(request.categoryCode());
