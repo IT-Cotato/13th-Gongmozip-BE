@@ -4,6 +4,8 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.List;
@@ -18,10 +20,10 @@ public class ProfileRequest {
             @NotNull @Min(1) @Max(6) Integer grade,
             @NotBlank @Size(max = 150) String major,
             @Size(max = 150) String secondaryMajor,
-            @NotNull Double gpa,
-            @NotNull Double gpaScale,
+            @NotNull @PositiveOrZero Double gpa,
+            @NotNull @Positive Double gpaScale,
             @NotNull List<InterestCategory> interestCategories,
-            Boolean isPublic) {}
+            @NotNull Boolean isPublic) {}
 
     public record UpdateProfileRequest(
             @Size(min = 1, max = 50) String nickname,

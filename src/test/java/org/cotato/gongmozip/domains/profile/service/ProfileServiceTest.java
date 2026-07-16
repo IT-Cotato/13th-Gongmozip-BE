@@ -71,6 +71,7 @@ class ProfileServiceTest {
         // given
         CreateProfileRequest request = new CreateProfileRequest(
                 "러너", "학교", 3, "소프트웨어", "경영", 4.0, 4.5, List.of(InterestCategory.IT_AI_TECH), true);
+        given(memberRepository.findByIdWithLock(1L)).willReturn(Optional.of(member));
         given(profileRepository.existsByNickname("러너")).willReturn(false);
         given(profileRepository.countByMember(member)).willReturn(0);
 
@@ -88,6 +89,7 @@ class ProfileServiceTest {
         // given
         CreateProfileRequest request = new CreateProfileRequest(
                 "러너2", "학교", 3, "소프트웨어", "경영", 4.0, 4.5, List.of(InterestCategory.IT_AI_TECH), true);
+        given(memberRepository.findByIdWithLock(1L)).willReturn(Optional.of(member));
         given(profileRepository.existsByNickname("러너2")).willReturn(false);
         given(profileRepository.countByMember(member)).willReturn(1);
 
@@ -118,6 +120,7 @@ class ProfileServiceTest {
                 .isMain(false)
                 .build();
 
+        given(memberRepository.findByIdWithLock(1L)).willReturn(Optional.of(member));
         given(profileRepository.findById(20L)).willReturn(Optional.of(targetMain));
         given(profileRepository.findByMemberAndIsMainTrue(member)).willReturn(Optional.of(currentMain));
 
@@ -188,7 +191,7 @@ class ProfileServiceTest {
         // when & then
         assertThatThrownBy(() -> profileService.getPublicProfile(10L))
                 .isInstanceOf(ProfileException.class)
-                .hasMessage(ProfileErrorCode.PRIVATE_PROFILE_ACCESS_DENIED.getMessage());
+                .hasMessage(ProfileErrorCode.PROFILE_NOT_FOUND.getMessage());
     }
 
     // 프로필 수정 및 대표 프로필 삭제 테스트
@@ -238,6 +241,7 @@ class ProfileServiceTest {
                 .isMain(false)
                 .build();
 
+        given(memberRepository.findByIdWithLock(1L)).willReturn(Optional.of(member));
         given(profileRepository.findById(10L)).willReturn(Optional.of(mainProfile));
         given(profileRepository.findFirstByMemberOrderByCreatedAtAsc(member)).willReturn(Optional.of(subProfile));
 
