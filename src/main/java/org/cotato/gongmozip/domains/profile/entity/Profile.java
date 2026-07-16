@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AccessLevel;
@@ -23,7 +24,13 @@ import org.cotato.gongmozip.global.entity.BaseEntity;
 
 @Getter
 @Entity
-@Table(name = "profiles")
+@Table(
+        name = "profiles",
+        uniqueConstraints = {
+            @UniqueConstraint(
+                    name = "uq_member_is_main_unique",
+                    columnNames = {"member_id", "is_main_unique"})
+        })
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Builder
@@ -67,6 +74,15 @@ public class Profile extends BaseEntity {
     @Column(name = "is_main", nullable = false)
     private boolean isMain;
 
+    /**
+     * DB 유니크 제약을 위한 보조 컬럼.
+     * isMain=true 이면 true, isMain=false 이면 null.
+     * RDB의 Unique 인덱스는 NULL 값을 중복으로 허용하지 않으므로,
+     * 회원당 단 하나의 isMain=true 프로필만 DB 수준에서 보장됩니다.
+     */
+    @Column(name = "is_main_unique", nullable = true)
+    private Boolean isMainUnique;
+
     @Column(name = "is_public", nullable = false)
     private boolean isPublic;
 
@@ -104,6 +120,7 @@ public class Profile extends BaseEntity {
 
     public void setMain(boolean isMain) {
         this.isMain = isMain;
+        this.isMainUnique = isMain ? true : null;
     }
 
     public void setPublic(boolean isPublic) {

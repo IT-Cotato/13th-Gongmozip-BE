@@ -40,6 +40,7 @@ public class SecurityConfig {
                                 "/api/members/email/verify", // 인증코드 확인
                                 "/api/auth/login", // 로그인
                                 "/api/auth/reissue", // 토큰 재발급
+                                "/api/public/profiles/**", // 공개 프로필 조회 (비인증 허용)
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**" // swagger
                                 )
