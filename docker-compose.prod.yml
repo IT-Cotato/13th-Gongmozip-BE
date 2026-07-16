@@ -1,0 +1,47 @@
+services:
+  app:
+    image: ${DOCKERHUB_USERNAME}/gongmozip-backend:${IMAGE_TAG:-latest}
+    container_name: gongmozip-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "8080"
+    depends_on:
+      - redis
+    networks:
+      - gongmozip
+
+  redis:
+    image: redis:7-alpine
+    container_name: gongmozip-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    expose:
+      - "6379"
+    networks:
+      - gongmozip
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: gongmozip-nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    networks:
+      - gongmozip
+
+volumes:
+  redis-data:
+
+networks:
+  gongmozip:
+    driver: bridge

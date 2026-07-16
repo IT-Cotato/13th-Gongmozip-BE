@@ -13,7 +13,7 @@ on:
 
 jobs:
   build:
-    name: Build
+    name: Build and Test
     runs-on: ubuntu-latest
 
     permissions:
@@ -28,9 +28,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
 
       - name: Grant execute permission for Gradle
         run: chmod +x ./gradlew
 
-      - name: Build without tests
-        run: ./gradlew clean build -x test
+      - name: Build and test
+        run: ./gradlew clean build
