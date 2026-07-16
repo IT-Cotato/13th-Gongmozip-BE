@@ -39,10 +39,10 @@ public class CertificationController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @GetMapping
     public ResponseEntity<BaseResponse<CertificationSearchResponse>> searchCertifications(
-            @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) CertificationCategory category,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(name = "keyword", required = false) String keyword,
+            @RequestParam(name = "category", required = false) CertificationCategory category,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size) {
         CertificationSearchResponse response = profileService.searchCertifications(keyword, category, page, size);
         return BaseResponseFormatter.success(ProfileSuccessCode.CERTIFICATIONS_SEARCHED, response);
     }

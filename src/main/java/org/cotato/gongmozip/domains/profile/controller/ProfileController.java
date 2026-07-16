@@ -64,7 +64,7 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @GetMapping("/profiles/{profileId}")
     public ResponseEntity<BaseResponse<ProfileDetailResponse>> getProfileDetail(
-            @PathVariable Long profileId, @AuthenticationPrincipal CustomUserDetails userDetails) {
+            @PathVariable("profileId") Long profileId, @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
         ProfileDetailResponse response = profileService.getProfileDetail(profileId, member);
         return BaseResponseFormatter.success(ProfileSuccessCode.PROFILE_RETRIEVED, response);
@@ -74,7 +74,7 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @PatchMapping("/profiles/{profileId}")
     public ResponseEntity<BaseResponse<UpdateProfileResponse>> updateProfile(
-            @PathVariable Long profileId,
+            @PathVariable("profileId") Long profileId,
             @RequestBody @Valid UpdateProfileRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
@@ -86,7 +86,7 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @DeleteMapping("/profiles/{profileId}")
     public ResponseEntity<BaseResponse<Void>> deleteProfile(
-            @PathVariable Long profileId, @AuthenticationPrincipal CustomUserDetails userDetails) {
+            @PathVariable("profileId") Long profileId, @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
         profileService.deleteProfile(profileId, member);
         return BaseResponseFormatter.success(ProfileSuccessCode.PROFILE_DELETED);
@@ -96,7 +96,7 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @PatchMapping("/profiles/{profileId}/main")
     public ResponseEntity<BaseResponse<UpdateMainProfileResponse>> setMainProfile(
-            @PathVariable Long profileId, @AuthenticationPrincipal CustomUserDetails userDetails) {
+            @PathVariable("profileId") Long profileId, @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
         UpdateMainProfileResponse response = profileService.setMainProfile(profileId, member);
         return BaseResponseFormatter.success(ProfileSuccessCode.MAIN_PROFILE_SET, response);
@@ -106,7 +106,7 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @PatchMapping("/profiles/{profileId}/visibility")
     public ResponseEntity<BaseResponse<UpdateVisibilityResponse>> updateVisibility(
-            @PathVariable Long profileId,
+            @PathVariable("profileId") Long profileId,
             @RequestBody @Valid UpdateVisibilityRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
@@ -118,7 +118,7 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @GetMapping("/profiles/{profileId}/preview")
     public ResponseEntity<BaseResponse<ProfilePreviewResponse>> getProfilePreview(
-            @PathVariable Long profileId, @AuthenticationPrincipal CustomUserDetails userDetails) {
+            @PathVariable("profileId") Long profileId, @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
         ProfilePreviewResponse response = profileService.getProfilePreview(profileId, member);
         return BaseResponseFormatter.success(ProfileSuccessCode.PROFILE_PREVIEW_RETRIEVED, response);
@@ -127,7 +127,8 @@ public class ProfileController {
     @Operation(summary = "공개 프로필 조회")
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @GetMapping("/public/profiles/{profileId}")
-    public ResponseEntity<BaseResponse<PublicProfileResponse>> getPublicProfile(@PathVariable Long profileId) {
+    public ResponseEntity<BaseResponse<PublicProfileResponse>> getPublicProfile(
+            @PathVariable("profileId") Long profileId) {
         PublicProfileResponse response = profileService.getPublicProfile(profileId);
         return BaseResponseFormatter.success(ProfileSuccessCode.PUBLIC_PROFILE_RETRIEVED, response);
     }
@@ -138,7 +139,7 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @PostMapping("/profiles/{profileId}/projects")
     public ResponseEntity<BaseResponse<ProjectResponse>> createProject(
-            @PathVariable Long profileId,
+            @PathVariable("profileId") Long profileId,
             @RequestBody @Valid CreateProjectRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
@@ -150,10 +151,10 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @GetMapping("/profiles/{profileId}/projects")
     public ResponseEntity<BaseResponse<ProjectListResponse>> getProjects(
-            @PathVariable Long profileId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "newest") String sort,
+            @PathVariable("profileId") Long profileId,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "10") int size,
+            @RequestParam(name = "sort", defaultValue = "newest") String sort,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
         ProjectListResponse response = profileService.getProjects(profileId, page, size, sort, member);
@@ -164,8 +165,8 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @GetMapping("/profiles/{profileId}/projects/{projectId}")
     public ResponseEntity<BaseResponse<ProjectDetailResponse>> getProjectDetail(
-            @PathVariable Long profileId,
-            @PathVariable Long projectId,
+            @PathVariable("profileId") Long profileId,
+            @PathVariable("projectId") Long projectId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
         ProjectDetailResponse response = profileService.getProjectDetail(profileId, projectId, member);
@@ -176,8 +177,8 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @PatchMapping("/profiles/{profileId}/projects/{projectId}")
     public ResponseEntity<BaseResponse<ProjectResponse>> updateProject(
-            @PathVariable Long profileId,
-            @PathVariable Long projectId,
+            @PathVariable("profileId") Long profileId,
+            @PathVariable("projectId") Long projectId,
             @RequestBody @Valid UpdateProjectRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
@@ -189,8 +190,8 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @DeleteMapping("/profiles/{profileId}/projects/{projectId}")
     public ResponseEntity<BaseResponse<Void>> deleteProject(
-            @PathVariable Long profileId,
-            @PathVariable Long projectId,
+            @PathVariable("profileId") Long profileId,
+            @PathVariable("projectId") Long projectId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
         profileService.deleteProject(profileId, projectId, member);
@@ -203,7 +204,7 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @PostMapping("/profiles/{profileId}/awards")
     public ResponseEntity<BaseResponse<AwardResponse>> createAward(
-            @PathVariable Long profileId,
+            @PathVariable("profileId") Long profileId,
             @RequestBody @Valid CreateAwardRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
@@ -215,10 +216,10 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @GetMapping("/profiles/{profileId}/awards")
     public ResponseEntity<BaseResponse<AwardListResponse>> getAwards(
-            @PathVariable Long profileId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "newest") String sort,
+            @PathVariable("profileId") Long profileId,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "10") int size,
+            @RequestParam(name = "sort", defaultValue = "newest") String sort,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
         AwardListResponse response = profileService.getAwards(profileId, page, size, sort, member);
@@ -229,8 +230,8 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @GetMapping("/profiles/{profileId}/awards/{awardId}")
     public ResponseEntity<BaseResponse<AwardResponse>> getAwardDetail(
-            @PathVariable Long profileId,
-            @PathVariable Long awardId,
+            @PathVariable("profileId") Long profileId,
+            @PathVariable("awardId") Long awardId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
         AwardResponse response = profileService.getAwardDetail(profileId, awardId, member);
@@ -241,8 +242,8 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @PatchMapping("/profiles/{profileId}/awards/{awardId}")
     public ResponseEntity<BaseResponse<AwardResponse>> updateAward(
-            @PathVariable Long profileId,
-            @PathVariable Long awardId,
+            @PathVariable("profileId") Long profileId,
+            @PathVariable("awardId") Long awardId,
             @RequestBody @Valid UpdateAwardRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
@@ -254,8 +255,8 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @DeleteMapping("/profiles/{profileId}/awards/{awardId}")
     public ResponseEntity<BaseResponse<Void>> deleteAward(
-            @PathVariable Long profileId,
-            @PathVariable Long awardId,
+            @PathVariable("profileId") Long profileId,
+            @PathVariable("awardId") Long awardId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
         profileService.deleteAward(profileId, awardId, member);
@@ -268,7 +269,7 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @PostMapping("/profiles/{profileId}/certifications")
     public ResponseEntity<BaseResponse<ProfileCertificationResponse>> createProfileCertification(
-            @PathVariable Long profileId,
+            @PathVariable("profileId") Long profileId,
             @RequestBody @Valid CreateCertificationRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
@@ -280,11 +281,11 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @GetMapping("/profiles/{profileId}/certifications")
     public ResponseEntity<BaseResponse<ProfileCertificationListResponse>> getProfileCertifications(
-            @PathVariable Long profileId,
-            @RequestParam(required = false) CertificationCategory category,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "newest") String sort,
+            @PathVariable("profileId") Long profileId,
+            @RequestParam(name = "category", required = false) CertificationCategory category,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "10") int size,
+            @RequestParam(name = "sort", defaultValue = "newest") String sort,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
         ProfileCertificationListResponse response =
@@ -296,8 +297,8 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @GetMapping("/profiles/{profileId}/certifications/{certificationId}")
     public ResponseEntity<BaseResponse<ProfileCertificationResponse>> getProfileCertificationDetail(
-            @PathVariable Long profileId,
-            @PathVariable Long certificationId,
+            @PathVariable("profileId") Long profileId,
+            @PathVariable("certificationId") Long certificationId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
         ProfileCertificationResponse response =
@@ -309,8 +310,8 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @PatchMapping("/profiles/{profileId}/certifications/{certificationId}")
     public ResponseEntity<BaseResponse<ProfileCertificationResponse>> updateProfileCertification(
-            @PathVariable Long profileId,
-            @PathVariable Long certificationId,
+            @PathVariable("profileId") Long profileId,
+            @PathVariable("certificationId") Long certificationId,
             @RequestBody @Valid UpdateCertificationRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
@@ -323,8 +324,8 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @DeleteMapping("/profiles/{profileId}/certifications/{certificationId}")
     public ResponseEntity<BaseResponse<Void>> deleteProfileCertification(
-            @PathVariable Long profileId,
-            @PathVariable Long certificationId,
+            @PathVariable("profileId") Long profileId,
+            @PathVariable("certificationId") Long certificationId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
         profileService.deleteProfileCertification(profileId, certificationId, member);
