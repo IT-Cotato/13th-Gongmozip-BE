@@ -57,6 +57,14 @@ tasks.named('compileJava') {
     dependsOn 'spotlessApply'
 }
 
+tasks.named('bootJar') {
+    archiveFileName = 'app.jar'
+}
+
+tasks.named('jar') {
+    enabled = false
+}
+
 spotless {
     java {
         palantirJavaFormat('2.50.0')
