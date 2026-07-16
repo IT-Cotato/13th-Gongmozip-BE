@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: gongmozip
+
+  # 1. 데이터베이스 설정 (H2 인메모리)
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  # 2. JPA 설정
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  # 3. Redis 설정
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  # 4. 이메일 설정
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: no-reply@gongmozip.com
+    password: testpassword
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+# 5. JWT 설정
+jwt:
+  secret: testsecretkeytestsecretkeytestsecretkeytestsecretkeytestsecretkey
+  access-token-expiration: 3600000
+  refresh-token-expiration: 1209600000
