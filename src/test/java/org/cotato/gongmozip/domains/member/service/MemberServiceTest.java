@@ -14,11 +14,9 @@ import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVe
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.SignUpRequest;
 import org.cotato.gongmozip.domains.member.entity.Member;
-import org.cotato.gongmozip.domains.member.entity.MemberProfile;
 import org.cotato.gongmozip.domains.member.enums.Gender;
 import org.cotato.gongmozip.domains.member.exception.MemberException;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
-import org.cotato.gongmozip.domains.member.repository.MemberProfileRepository;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.global.exception.CustomException;
 import org.cotato.gongmozip.global.redis.RedisUtil;
@@ -41,9 +39,6 @@ class MemberServiceTest {
 
     @Mock
     private MemberRepository memberRepository;
-
-    @Mock
-    private MemberProfileRepository memberProfileRepository;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -234,7 +229,6 @@ class MemberServiceTest {
 
         // then
         then(memberRepository).should().saveAndFlush(any(Member.class));
-        then(memberProfileRepository).should().save(any(MemberProfile.class));
         then(redisUtil).should().delete("email:verified:" + TEST_EMAIL);
     }
 
