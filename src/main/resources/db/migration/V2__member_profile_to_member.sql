@@ -11,5 +11,4 @@ WHERE EXISTS (
     SELECT 1 FROM member_profiles mp WHERE mp.member_id = m.member_id
 );
 
--- 3. 기존 member_profiles 테이블 제거
-DROP TABLE member_profiles;
+-- 3. 기존 member_profiles 테이블 제거 (무중단 배포를 위해 이후 릴리즈 단계에서 제거 예정으로 이 단계에서는 제거하지 않고 보존합니다)

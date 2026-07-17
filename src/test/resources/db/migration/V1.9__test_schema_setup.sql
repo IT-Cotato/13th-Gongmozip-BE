@@ -26,19 +26,3 @@ INSERT INTO member_profiles (member_id, birth_date, gender, created_at, updated_
 SELECT member_id, '2000-01-01', 'MALE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 FROM member
 WHERE email = 'migrate_test@gongmozip.com';
-
--- 3. member 테이블에 컬럼 추가 (운영 마이그레이션과 동일)
-ALTER TABLE member
-    ADD COLUMN birth_date DATE NULL,
-    ADD COLUMN gender VARCHAR(20) NULL;
-
--- 4. 데이터 이관 실행 (운영 마이그레이션과 동일)
-UPDATE member m
-SET m.birth_date = (SELECT mp.birth_date FROM member_profiles mp WHERE mp.member_id = m.member_id),
-    m.gender = (SELECT mp.gender FROM member_profiles mp WHERE mp.member_id = m.member_id)
-WHERE EXISTS (
-    SELECT 1 FROM member_profiles mp WHERE mp.member_id = m.member_id
-);
-
--- 5. 기존 테이블 삭제 (운영 마이그레이션과 동일)
-DROP TABLE member_profiles;
