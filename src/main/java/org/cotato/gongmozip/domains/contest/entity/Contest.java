@@ -85,10 +85,6 @@ public class Contest extends BaseEntity {
     @Builder.Default
     private int viewCount = 0;
 
-    public void incrementViewCount() {
-        this.viewCount++;
-    }
-
     public void update(
             String title,
             String summary,

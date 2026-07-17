@@ -6,12 +6,17 @@ import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ContestRepository extends JpaRepository<Contest, Long> {
 
     boolean existsByTitleAndApplyEndAt(String title, LocalDateTime applyEndAt);
+
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE Contest c SET c.viewCount = c.viewCount + 1 WHERE c.contestId = :contestId")
+    void incrementViewCount(@Param("contestId") Long contestId);
 
     // 1. deadlineAsc (마감일 임박순 정렬)
     @Query(

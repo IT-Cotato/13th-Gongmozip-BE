@@ -14,6 +14,7 @@ import org.cotato.gongmozip.domains.contest.exception.codes.ContestErrorCode;
 import org.cotato.gongmozip.domains.contest.repository.ContestRepository;
 import org.cotato.gongmozip.domains.contest.repository.ContestScrapRepository;
 import org.cotato.gongmozip.domains.member.entity.Member;
+import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -28,6 +29,7 @@ public class ContestService {
 
     private final ContestRepository contestRepository;
     private final ContestScrapRepository contestScrapRepository;
+    private final MemberRepository memberRepository;
 
     @Transactional
     public ContestCreateResponse createContest(CreateContestRequest request) {
@@ -103,6 +105,7 @@ public class ContestService {
 
         // TODO: 진행 중인 프로젝트 또는 팀에서 사용 중인 공모전인지 여부 검증 (추후 프로젝트/팀 도메인 연동 시 409 Conflict 처리 추가)
 
+        contestScrapRepository.deleteAllByContest(contest);
         contestRepository.delete(contest);
     }
 
@@ -112,8 +115,13 @@ public class ContestService {
                 .findById(contestId)
                 .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_NOT_FOUND));
 
-        contest.incrementViewCount();
-        return ContestConverter.toContestDetailResponse(contest, LocalDateTime.now());
+        contestRepository.incrementViewCount(contestId);
+
+        Contest updatedContest = contestRepository
+                .findById(contestId)
+                .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_NOT_FOUND));
+
+        return ContestConverter.toContestDetailResponse(updatedContest, LocalDateTime.now());
     }
 
     public ContestListResponse getContests(
@@ -146,6 +154,7 @@ public class ContestService {
             if (!statusUpper.equals("UPCOMING") && !statusUpper.equals("OPEN") && !statusUpper.equals("CLOSED")) {
                 throw new ContestException(ContestErrorCode.INVALID_CONTEST_INPUT);
             }
+            statusStr = statusUpper;
         }
 
         Pageable pageable = PageRequest.of(pageNum, pageSize);
@@ -167,10 +176,15 @@ public class ContestService {
     }
 
     @Transactional
-    public ScrapResponse scrapContest(Long contestId, Member member) {
+    public ScrapResponse scrapContest(Long contestId, Long memberId) {
         Contest contest = contestRepository
                 .findById(contestId)
                 .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_NOT_FOUND));
+
+        Member member = memberRepository
+                .findById(memberId)
+                .orElseThrow(() -> new org.cotato.gongmozip.domains.member.exception.MemberException(
+                        org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode.MEMBER_NOT_FOUND));
 
         if (contestScrapRepository.existsByMemberAndContest(member, contest)) {
             throw new ContestException(ContestErrorCode.ALREADY_SCRAPPED);
@@ -184,10 +198,15 @@ public class ContestService {
     }
 
     @Transactional
-    public void unscrapContest(Long contestId, Member member) {
+    public void unscrapContest(Long contestId, Long memberId) {
         Contest contest = contestRepository
                 .findById(contestId)
                 .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_NOT_FOUND));
+
+        Member member = memberRepository
+                .findById(memberId)
+                .orElseThrow(() -> new org.cotato.gongmozip.domains.member.exception.MemberException(
+                        org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode.MEMBER_NOT_FOUND));
 
         ContestScrap scrap = contestScrapRepository
                 .findByMemberAndContest(member, contest)
@@ -196,10 +215,15 @@ public class ContestService {
         contestScrapRepository.delete(scrap);
     }
 
-    public ScrapStatusResponse getScrapStatus(Long contestId, Member member) {
+    public ScrapStatusResponse getScrapStatus(Long contestId, Long memberId) {
         Contest contest = contestRepository
                 .findById(contestId)
                 .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_NOT_FOUND));
+
+        Member member = memberRepository
+                .findById(memberId)
+                .orElseThrow(() -> new org.cotato.gongmozip.domains.member.exception.MemberException(
+                        org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode.MEMBER_NOT_FOUND));
 
         return contestScrapRepository
                 .findByMemberAndContest(member, contest)
