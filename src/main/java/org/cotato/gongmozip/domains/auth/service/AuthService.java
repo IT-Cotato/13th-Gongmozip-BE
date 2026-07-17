@@ -38,7 +38,8 @@ public class AuthService {
     // 로그인 메서드
     public LoginResult login(LoginRequest request) {
         // 이메일이 존재하지 않는 경우
-        Member member = memberRepository.findByEmail(request.email())
+        Member member = memberRepository
+                .findByEmail(request.email())
                 .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
 
         // 비밀번호 틀린 경우
@@ -51,7 +52,11 @@ public class AuthService {
         String refreshToken = jwtProvider.generateRefreshToken(member.getMemberId(), member.getEmail());
 
         // refresh 토큰만 redis에 저장
-        redisUtil.set(REFRESH_TOKEN_PREFIX + member.getMemberId(), refreshToken, refreshTokenExpiration, TimeUnit.MILLISECONDS);
+        redisUtil.set(
+                REFRESH_TOKEN_PREFIX + member.getMemberId(),
+                refreshToken,
+                refreshTokenExpiration,
+                TimeUnit.MILLISECONDS);
 
         return new LoginResult(accessToken, refreshToken);
     }

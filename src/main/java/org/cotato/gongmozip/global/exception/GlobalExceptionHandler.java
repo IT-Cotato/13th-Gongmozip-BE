@@ -4,6 +4,8 @@ import jakarta.validation.ConstraintViolationException;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.cotato.gongmozip.global.response.BaseResponse;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -67,6 +69,20 @@ public class GlobalExceptionHandler {
         log.warn("[MethodNotSupported] method={}", e.getMethod());
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
                 .body(BaseResponse.error(GlobalErrorCode.METHOD_NOT_ALLOWED));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<BaseResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException e) {
+        log.warn("[DataIntegrityViolation] message={}", e.getMostSpecificCause().getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(BaseResponse.error(GlobalErrorCode.DATA_INTEGRITY_CONFLICT));
+    }
+
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<BaseResponse<Void>> handleLockConflict(PessimisticLockingFailureException e) {
+        log.warn("[LockConflict] message={}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(BaseResponse.error(GlobalErrorCode.RESOURCE_LOCK_CONFLICT));
     }
 
     // 위 핸들러에서 잡히지 않은 모든 예외의 최후 방어선. 반드시 마지막에 위치해야 한다.

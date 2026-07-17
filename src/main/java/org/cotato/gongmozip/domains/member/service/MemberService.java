@@ -9,10 +9,8 @@ import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVe
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.SignUpRequest;
 import org.cotato.gongmozip.domains.member.dto.response.MemberAuthResponse.SignUpResponse;
 import org.cotato.gongmozip.domains.member.entity.Member;
-import org.cotato.gongmozip.domains.member.entity.MemberProfile;
 import org.cotato.gongmozip.domains.member.exception.MemberException;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
-import org.cotato.gongmozip.domains.member.repository.MemberProfileRepository;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.global.exception.CustomException;
 import org.cotato.gongmozip.global.redis.RedisUtil;
@@ -43,7 +41,6 @@ public class MemberService {
     private String mailUsername;
 
     private final MemberRepository memberRepository;
-    private final MemberProfileRepository memberProfileRepository;
     private final PasswordEncoder passwordEncoder;
     private final JavaMailSender mailSender;
     private final RedisUtil redisUtil;
@@ -108,9 +105,6 @@ public class MemberService {
         try {
             Member member = MemberConverter.toMember(request, passwordEncoder.encode(request.password()));
             memberRepository.saveAndFlush(member);
-
-            MemberProfile memberProfile = MemberConverter.toMemberProfile(request, member);
-            memberProfileRepository.save(memberProfile);
 
             redisUtil.delete(VERIFIED_PREFIX + request.email());
 

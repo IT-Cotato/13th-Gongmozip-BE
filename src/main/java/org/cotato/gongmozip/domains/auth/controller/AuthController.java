@@ -44,11 +44,12 @@ public class AuthController {
     private final AuthService authService;
 
     @Operation(summary = "이메일 로그인")
-    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = {AuthErrorCode.class, MemberErrorCode.class})
+    @CustomErrorCodes(
+            commonErrorCodes = GlobalErrorCode.class,
+            domainErrorCodes = {AuthErrorCode.class, MemberErrorCode.class})
     @PostMapping("/login")
     public ResponseEntity<BaseResponse<LoginResponse>> login(
-            @RequestBody @Valid LoginRequest request,
-            HttpServletResponse response) {
+            @RequestBody @Valid LoginRequest request, HttpServletResponse response) {
 
         LoginResult result = authService.login(request);
 

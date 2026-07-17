@@ -8,8 +8,10 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.*;
+import org.cotato.gongmozip.domains.member.enums.Gender;
 import org.cotato.gongmozip.domains.member.enums.MemberStatus;
 import org.cotato.gongmozip.global.entity.BaseEntity;
 
@@ -38,4 +40,11 @@ public class Member extends BaseEntity {
 
     @Column(name = "email_verified_at")
     private LocalDateTime emailVerifiedAt;
+
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender", length = 20)
+    private Gender gender;
 }

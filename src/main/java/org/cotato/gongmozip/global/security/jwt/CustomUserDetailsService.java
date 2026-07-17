@@ -20,7 +20,8 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Transactional(readOnly = true)
     // security에서 로그인 처리 시 사용하는 메서드
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        return memberRepository.findByEmail(email)
+        return memberRepository
+                .findByEmail(email)
                 .map(CustomUserDetails::new)
                 .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
     }

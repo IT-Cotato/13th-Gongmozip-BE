@@ -19,8 +19,9 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
-    public void commence(HttpServletRequest request, HttpServletResponse response,
-            AuthenticationException authException) throws IOException {
+    public void commence(
+            HttpServletRequest request, HttpServletResponse response, AuthenticationException authException)
+            throws IOException {
         log.warn("[AuthenticationEntryPoint] 인증 실패: {}", authException.getMessage());
 
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED); // 401 상태코드 설정
