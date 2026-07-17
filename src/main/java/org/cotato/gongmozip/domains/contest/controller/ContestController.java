@@ -10,9 +10,6 @@ import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.*;
 import org.cotato.gongmozip.domains.contest.exception.codes.ContestErrorCode;
 import org.cotato.gongmozip.domains.contest.exception.codes.ContestSuccessCode;
 import org.cotato.gongmozip.domains.contest.service.ContestService;
-import org.cotato.gongmozip.domains.member.entity.Member;
-import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
-import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.global.exception.GlobalErrorCode;
 import org.cotato.gongmozip.global.response.BaseResponse;
 import org.cotato.gongmozip.global.response.BaseResponseFormatter;
@@ -29,14 +26,6 @@ import org.springframework.web.bind.annotation.*;
 public class ContestController {
 
     private final ContestService contestService;
-    private final MemberRepository memberRepository;
-
-    private Member getAuthenticatedMember(CustomUserDetails userDetails) {
-        return memberRepository
-                .findById(userDetails.getMemberId())
-                .orElseThrow(() -> new org.cotato.gongmozip.domains.member.exception.MemberException(
-                        MemberErrorCode.MEMBER_NOT_FOUND));
-    }
 
     @Operation(summary = "관리자용 공모전 등록")
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ContestErrorCode.class)
@@ -92,8 +81,7 @@ public class ContestController {
     @PostMapping("/contests/{contestId}/scraps")
     public ResponseEntity<BaseResponse<ScrapResponse>> scrapContest(
             @PathVariable("contestId") Long contestId, @AuthenticationPrincipal CustomUserDetails userDetails) {
-        Member member = getAuthenticatedMember(userDetails);
-        ScrapResponse response = contestService.scrapContest(contestId, member);
+        ScrapResponse response = contestService.scrapContest(contestId, userDetails.getMemberId());
         return BaseResponseFormatter.success(ContestSuccessCode.CONTEST_SCRAPPED, response);
     }
 
@@ -102,8 +90,7 @@ public class ContestController {
     @DeleteMapping("/contests/{contestId}/scraps")
     public ResponseEntity<BaseResponse<Void>> unscrapContest(
             @PathVariable("contestId") Long contestId, @AuthenticationPrincipal CustomUserDetails userDetails) {
-        Member member = getAuthenticatedMember(userDetails);
-        contestService.unscrapContest(contestId, member);
+        contestService.unscrapContest(contestId, userDetails.getMemberId());
         return BaseResponseFormatter.success(ContestSuccessCode.CONTEST_UNSCRAPPED);
     }
 
@@ -112,8 +99,7 @@ public class ContestController {
     @GetMapping("/contests/{contestId}/scrap-status")
     public ResponseEntity<BaseResponse<ScrapStatusResponse>> getScrapStatus(
             @PathVariable("contestId") Long contestId, @AuthenticationPrincipal CustomUserDetails userDetails) {
-        Member member = getAuthenticatedMember(userDetails);
-        ScrapStatusResponse response = contestService.getScrapStatus(contestId, member);
+        ScrapStatusResponse response = contestService.getScrapStatus(contestId, userDetails.getMemberId());
         return BaseResponseFormatter.success(ContestSuccessCode.SCRAP_STATUS_RETRIEVED, response);
     }
 
@@ -122,9 +108,7 @@ public class ContestController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ContestErrorCode.class)
     @GetMapping("/contests/{contestId}/share-preview")
     public ResponseEntity<BaseResponse<SharePreviewResponse>> getSharePreview(
-            @PathVariable("contestId") Long contestId, @AuthenticationPrincipal CustomUserDetails userDetails) {
-        // 인증된 유저만 호출하도록 설정
-        getAuthenticatedMember(userDetails);
+            @PathVariable("contestId") Long contestId) {
         SharePreviewResponse response = contestService.getSharePreview(contestId);
         return BaseResponseFormatter.success(ContestSuccessCode.SHARE_PREVIEW_RETRIEVED, response);
     }
