@@ -5,6 +5,7 @@ import org.cotato.gongmozip.global.security.jwt.JwtAuthenticationEntryPoint;
 import org.cotato.gongmozip.global.security.jwt.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -44,6 +45,12 @@ public class SecurityConfig {
                                 "/v3/api-docs/**" // swagger
                                 )
                         .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/contests")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/contests/*")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/contests/*")
+                        .hasRole("ADMIN")
                         .anyRequest()
                         .authenticated())
                 // 인증 실패 시 401 응답 처리

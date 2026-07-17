@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.*;
 import org.cotato.gongmozip.domains.member.enums.Gender;
+import org.cotato.gongmozip.domains.member.enums.MemberRole;
 import org.cotato.gongmozip.domains.member.enums.MemberStatus;
 import org.cotato.gongmozip.global.entity.BaseEntity;
 
@@ -37,6 +38,11 @@ public class Member extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
     private MemberStatus status;
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", nullable = false, length = 30)
+    private MemberRole role = MemberRole.USER;
 
     @Column(name = "email_verified_at")
     private LocalDateTime emailVerifiedAt;
