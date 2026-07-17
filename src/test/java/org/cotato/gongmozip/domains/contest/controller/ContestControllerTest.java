@@ -10,7 +10,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.CreateContestRequest;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.*;
 import org.cotato.gongmozip.domains.contest.service.ContestService;
@@ -238,8 +237,7 @@ class ContestControllerTest {
 
         ScrapResponse scrapResponse = new ScrapResponse(1L, true, LocalDateTime.now());
 
-        given(memberRepository.findById(3L)).willReturn(Optional.of(user));
-        given(contestService.scrapContest(1L, user)).willReturn(scrapResponse);
+        given(contestService.scrapContest(1L, 3L)).willReturn(scrapResponse);
 
         // when & then
         mockMvc.perform(post("/api/contests/{contestId}/scraps", 1L).with(user(userDetails)))

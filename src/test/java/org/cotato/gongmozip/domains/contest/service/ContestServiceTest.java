@@ -20,6 +20,7 @@ import org.cotato.gongmozip.domains.contest.exception.codes.ContestErrorCode;
 import org.cotato.gongmozip.domains.contest.repository.ContestRepository;
 import org.cotato.gongmozip.domains.contest.repository.ContestScrapRepository;
 import org.cotato.gongmozip.domains.member.entity.Member;
+import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,9 @@ class ContestServiceTest {
 
     @Mock
     private ContestScrapRepository contestScrapRepository;
+
+    @Mock
+    private MemberRepository memberRepository;
 
     @InjectMocks
     private ContestService contestService;
@@ -160,7 +164,7 @@ class ContestServiceTest {
     @Test
     void 공모전_상세_조회시_조회수가_증가한다() {
         // given
-        Contest contest = Contest.builder()
+        Contest contestBefore = Contest.builder()
                 .contestId(1L)
                 .title("제목")
                 .description("내용")
@@ -169,14 +173,25 @@ class ContestServiceTest {
                 .applyEndAt(LocalDateTime.now().plusDays(5))
                 .viewCount(0)
                 .build();
-        given(contestRepository.findById(1L)).willReturn(Optional.of(contest));
+        Contest contestAfter = Contest.builder()
+                .contestId(1L)
+                .title("제목")
+                .description("내용")
+                .category(InterestCategory.IT_AI_TECH)
+                .status(ContestStatus.OPEN)
+                .applyEndAt(LocalDateTime.now().plusDays(5))
+                .viewCount(1)
+                .build();
+        given(contestRepository.findById(1L))
+                .willReturn(Optional.of(contestBefore))
+                .willReturn(Optional.of(contestAfter));
 
         // when
         ContestDetailResponse response = contestService.getContestDetail(1L);
 
         // then
         assertThat(response.viewCount()).isEqualTo(1);
-        assertThat(contest.getViewCount()).isEqualTo(1);
+        then(contestRepository).should(times(1)).incrementViewCount(1L);
     }
 
     @DisplayName("공모전 목록 조회 시 페이징과 정렬 기준이 올바르게 전달된다.")
@@ -204,11 +219,12 @@ class ContestServiceTest {
                 Member.builder().memberId(1L).email("user@gongmozip.com").build();
         Contest contest = Contest.builder().contestId(1L).title("공모전").build();
         given(contestRepository.findById(1L)).willReturn(Optional.of(contest));
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(contestScrapRepository.existsByMemberAndContest(member, contest)).willReturn(false);
         given(contestScrapRepository.save(any(ContestScrap.class))).willAnswer(inv -> inv.getArgument(0));
 
         // when
-        ScrapResponse response = contestService.scrapContest(1L, member);
+        ScrapResponse response = contestService.scrapContest(1L, 1L);
 
         // then
         assertThat(response.contestId()).isEqualTo(1L);
@@ -224,10 +240,11 @@ class ContestServiceTest {
                 Member.builder().memberId(1L).email("user@gongmozip.com").build();
         Contest contest = Contest.builder().contestId(1L).title("공모전").build();
         given(contestRepository.findById(1L)).willReturn(Optional.of(contest));
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(contestScrapRepository.existsByMemberAndContest(member, contest)).willReturn(true);
 
         // when & then
-        assertThatThrownBy(() -> contestService.scrapContest(1L, member))
+        assertThatThrownBy(() -> contestService.scrapContest(1L, 1L))
                 .isInstanceOf(ContestException.class)
                 .hasMessage(ContestErrorCode.ALREADY_SCRAPPED.getMessage());
     }
@@ -245,10 +262,11 @@ class ContestServiceTest {
                 .contest(contest)
                 .build();
         given(contestRepository.findById(1L)).willReturn(Optional.of(contest));
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
         given(contestScrapRepository.findByMemberAndContest(member, contest)).willReturn(Optional.of(scrap));
 
         // when
-        contestService.unscrapContest(1L, member);
+        contestService.unscrapContest(1L, 1L);
 
         // then
         then(contestScrapRepository).should().delete(scrap);
