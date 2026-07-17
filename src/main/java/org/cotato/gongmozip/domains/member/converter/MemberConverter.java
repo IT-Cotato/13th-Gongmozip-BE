@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.SignUpRequest;
 import org.cotato.gongmozip.domains.member.dto.response.MemberAuthResponse.SignUpResponse;
 import org.cotato.gongmozip.domains.member.entity.Member;
+import org.cotato.gongmozip.domains.member.enums.MemberRole;
 import org.cotato.gongmozip.domains.member.enums.MemberStatus;
 
 public class MemberConverter {
@@ -14,6 +15,7 @@ public class MemberConverter {
                 .email(request.email())
                 .password(encodedPassword)
                 .status(MemberStatus.ACTIVE)
+                .role(MemberRole.USER)
                 .emailVerifiedAt(LocalDateTime.now())
                 .birthDate(request.birthDate())
                 .gender(request.gender())
