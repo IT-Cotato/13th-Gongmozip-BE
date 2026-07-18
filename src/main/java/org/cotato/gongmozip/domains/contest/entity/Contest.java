@@ -12,7 +12,13 @@ import org.cotato.gongmozip.global.entity.BaseEntity;
 
 @Getter
 @Entity
-@Table(name = "contest")
+@Table(
+        name = "contest",
+        uniqueConstraints = {
+            @UniqueConstraint(
+                    name = "uq_contest_title_apply_end_at",
+                    columnNames = {"title", "apply_end_at"})
+        })
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Builder

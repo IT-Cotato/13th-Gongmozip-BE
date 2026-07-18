@@ -271,4 +271,58 @@ class ContestServiceTest {
         // then
         then(contestScrapRepository).should().delete(scrap);
     }
+
+    @DisplayName("페이지 크기가 100을 초과하면 예외가 발생한다.")
+    @Test
+    void 페이지_크기_초과시_예외가_발생한다() {
+        // when & then
+        assertThatThrownBy(() -> contestService.getContests(null, null, null, "deadlineAsc", 0, 101))
+                .isInstanceOf(ContestException.class)
+                .hasMessage(ContestErrorCode.INVALID_CONTEST_INPUT.getMessage());
+    }
+
+    @DisplayName("최대 팀 원 수가 1 미만이면 등록 시 예외가 발생한다.")
+    @Test
+    void 최대_팀원_수_1_미만시_등록_예외가_발생한다() {
+        // given
+        CreateContestRequest request = new CreateContestRequest(
+                "2026 미래도시 공모전",
+                "요약",
+                "상세 내용",
+                "IT_AI_TECH",
+                "OPEN",
+                "진흥원",
+                LocalDateTime.now(),
+                LocalDateTime.now().plusDays(30),
+                null,
+                "대학생",
+                "대상 500만원",
+                "서울",
+                "http://thumb.url",
+                List.of("http://detail1.url"),
+                "http://source.url",
+                true,
+                1,
+                0 // 최대 팀원 수 0
+                );
+
+        // when & then
+        assertThatThrownBy(() -> contestService.createContest(request))
+                .isInstanceOf(ContestException.class)
+                .hasMessage(ContestErrorCode.INVALID_CONTEST_INPUT.getMessage());
+    }
+
+    @DisplayName("마감일이 지난 공모전의 남은 일수는 0으로 클램핑된다.")
+    @Test
+    void 마감일이_지난_공모전_남은_일수는_0으로_클램핑된다() {
+        // given
+        LocalDateTime pastApplyEndAt = LocalDateTime.now().minusDays(5);
+
+        // when
+        int daysRemaining = org.cotato.gongmozip.domains.contest.converter.ContestConverter.calculateDaysRemaining(
+                pastApplyEndAt, LocalDateTime.now());
+
+        // then
+        assertThat(daysRemaining).isEqualTo(0);
+    }
 }

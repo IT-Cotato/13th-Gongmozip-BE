@@ -31,6 +31,8 @@ public class ContestService {
     private final ContestScrapRepository contestScrapRepository;
     private final MemberRepository memberRepository;
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     @Transactional
     public ContestCreateResponse createContest(CreateContestRequest request) {
         validateContestInput(
@@ -45,9 +47,13 @@ public class ContestService {
             throw new ContestException(ContestErrorCode.DUPLICATE_CONTEST);
         }
 
-        Contest contest = ContestConverter.toContest(request);
-        Contest saved = contestRepository.save(contest);
-        return ContestConverter.toContestCreateResponse(saved);
+        try {
+            Contest contest = ContestConverter.toContest(request);
+            Contest saved = contestRepository.save(contest);
+            return ContestConverter.toContestCreateResponse(saved);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            throw new ContestException(ContestErrorCode.DUPLICATE_CONTEST);
+        }
     }
 
     @Transactional
@@ -57,6 +63,7 @@ public class ContestService {
                 .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_NOT_FOUND));
 
         // 업데이트될 값 기준으로 유효성 검증 수행
+        String title = request.title() != null ? request.title() : contest.getTitle();
         Boolean isTeam =
                 request.isTeamParticipation() != null ? request.isTeamParticipation() : contest.isTeamParticipation();
         Integer minTeam = request.minTeamSize() != null ? request.minTeamSize() : contest.getMinTeamSize();
@@ -65,6 +72,12 @@ public class ContestService {
         LocalDateTime endAt = request.applyEndAt() != null ? request.applyEndAt() : contest.getApplyEndAt();
 
         validateContestInput(isTeam, minTeam, maxTeam, startAt, endAt);
+
+        // 수정 경로에서도 제목/종료일 변경 시 중복 검증
+        if ((request.title() != null || request.applyEndAt() != null)
+                && contestRepository.existsByTitleAndApplyEndAtAndContestIdNot(title, endAt, contestId)) {
+            throw new ContestException(ContestErrorCode.DUPLICATE_CONTEST);
+        }
 
         InterestCategory category = null;
         if (request.category() != null) {
@@ -129,7 +142,7 @@ public class ContestService {
         int pageNum = page != null ? page : 0;
         int pageSize = size != null ? size : 20;
 
-        if (pageNum < 0 || pageSize < 1) {
+        if (pageNum < 0 || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
             throw new ContestException(ContestErrorCode.INVALID_CONTEST_INPUT);
         }
 
@@ -243,6 +256,9 @@ public class ContestService {
             boolean isTeam, Integer minTeam, Integer maxTeam, LocalDateTime startAt, LocalDateTime endAt) {
         if (isTeam) {
             if (minTeam != null && minTeam < 1) {
+                throw new ContestException(ContestErrorCode.INVALID_CONTEST_INPUT);
+            }
+            if (maxTeam != null && maxTeam < 1) {
                 throw new ContestException(ContestErrorCode.INVALID_CONTEST_INPUT);
             }
             if (minTeam != null && maxTeam != null && minTeam > maxTeam) {
