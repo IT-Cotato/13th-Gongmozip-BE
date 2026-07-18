@@ -19,6 +19,14 @@ public interface ContestScrapRepository extends JpaRepository<ContestScrap, Long
 
     Page<ContestScrap> findAllByMember(Member member, Pageable pageable);
 
+    @org.springframework.data.jpa.repository.Query(
+            value = "SELECT cs FROM ContestScrap cs JOIN FETCH cs.contest WHERE cs.member = :member",
+            countQuery = "SELECT COUNT(cs) FROM ContestScrap cs WHERE cs.member = :member")
+    Page<ContestScrap> findAllByMemberWithContest(
+            @org.springframework.data.repository.query.Param("member") Member member, Pageable pageable);
+
+    int countByMember(Member member);
+
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.data.jpa.repository.Query("DELETE FROM ContestScrap cs WHERE cs.contest = :contest")
     void deleteAllByContest(@org.springframework.data.repository.query.Param("contest") Contest contest);
