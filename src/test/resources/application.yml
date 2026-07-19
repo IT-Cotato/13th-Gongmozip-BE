@@ -42,8 +42,24 @@ spring:
           starttls:
             enable: true
 
-# 5. JWT 설정
+  # 5. OAuth2 소셜 로그인 설정
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: test-google-client-id
+            client-secret: test-google-client-secret
+          kakao:
+            client-id: test-kakao-client-id
+            client-secret: test-kakao-client-secret
+
+# 6. JWT 설정
 jwt:
   secret: testsecretkeytestsecretkeytestsecretkeytestsecretkeytestsecretkey
   access-token-expiration: 3600000
   refresh-token-expiration: 1209600000
+
+# 7. OAuth2 리다이렉트 URL
+oauth2:
+  redirect-url: http://localhost:3000

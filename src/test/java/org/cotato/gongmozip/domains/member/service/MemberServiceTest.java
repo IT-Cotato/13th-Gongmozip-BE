@@ -17,6 +17,7 @@ import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.enums.Gender;
 import org.cotato.gongmozip.domains.member.exception.MemberException;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
+import org.cotato.gongmozip.domains.auth.repository.AuthAccountRepository;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.global.exception.CustomException;
 import org.cotato.gongmozip.global.redis.RedisUtil;
@@ -39,6 +40,9 @@ class MemberServiceTest {
 
     @Mock
     private MemberRepository memberRepository;
+
+    @Mock
+    private AuthAccountRepository authAccountRepository;
 
     @Mock
     private PasswordEncoder passwordEncoder;
