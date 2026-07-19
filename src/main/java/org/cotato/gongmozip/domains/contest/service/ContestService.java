@@ -3,8 +3,7 @@ package org.cotato.gongmozip.domains.contest.service;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.contest.converter.ContestConverter;
-import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.CreateContestRequest;
-import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.UpdateContestRequest;
+import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.SaveContestRequest;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.*;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.entity.ContestScrap;
@@ -34,7 +33,7 @@ public class ContestService {
     private static final int MAX_PAGE_SIZE = 100;
 
     @Transactional
-    public ContestCreateResponse createContest(CreateContestRequest request) {
+    public ContestCreateResponse createContest(SaveContestRequest request) {
         validateContestInput(
                 request.isTeamParticipation(),
                 request.minTeamSize(),
@@ -57,7 +56,7 @@ public class ContestService {
     }
 
     @Transactional
-    public ContestUpdateResponse updateContest(Long contestId, UpdateContestRequest request) {
+    public ContestUpdateResponse updateContest(Long contestId, SaveContestRequest request) {
         Contest contest = contestRepository
                 .findById(contestId)
                 .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_NOT_FOUND));
@@ -98,10 +97,12 @@ public class ContestService {
                 request.hostName(),
                 request.applyStartAt(),
                 request.applyEndAt(),
+                request.announcementAt(),
                 request.eligibilityText(),
                 request.prizeText(),
                 request.locationText(),
                 request.thumbnailUrl(),
+                request.detailImageUrls(),
                 request.sourceUrl(),
                 request.isTeamParticipation(),
                 request.minTeamSize(),
@@ -124,17 +125,16 @@ public class ContestService {
 
     @Transactional
     public ContestDetailResponse getContestDetail(Long contestId) {
+        int updatedRows = contestRepository.incrementViewCount(contestId);
+        if (updatedRows == 0) {
+            throw new ContestException(ContestErrorCode.CONTEST_NOT_FOUND);
+        }
+
         Contest contest = contestRepository
                 .findById(contestId)
                 .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_NOT_FOUND));
 
-        contestRepository.incrementViewCount(contestId);
-
-        Contest updatedContest = contestRepository
-                .findById(contestId)
-                .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_NOT_FOUND));
-
-        return ContestConverter.toContestDetailResponse(updatedContest, LocalDateTime.now());
+        return ContestConverter.toContestDetailResponse(contest, LocalDateTime.now());
     }
 
     public ContestListResponse getContests(

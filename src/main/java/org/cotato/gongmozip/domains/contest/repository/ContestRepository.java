@@ -18,7 +18,7 @@ public interface ContestRepository extends JpaRepository<Contest, Long> {
 
     @Modifying(clearAutomatically = true)
     @Query("UPDATE Contest c SET c.viewCount = c.viewCount + 1 WHERE c.contestId = :contestId")
-    void incrementViewCount(@Param("contestId") Long contestId);
+    int incrementViewCount(@Param("contestId") Long contestId);
 
     // 1. deadlineAsc (마감일 임박순 정렬)
     @Query(

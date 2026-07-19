@@ -10,7 +10,7 @@ import static org.mockito.Mockito.times;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.CreateContestRequest;
+import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.SaveContestRequest;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.*;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.entity.ContestScrap;
@@ -52,7 +52,7 @@ class ContestServiceTest {
     @Test
     void 유효한_입력으로_공모전을_등록하면_성공한다() {
         // given
-        CreateContestRequest request = new CreateContestRequest(
+        SaveContestRequest request = new SaveContestRequest(
                 "2026 미래도시 공모전",
                 "요약",
                 "상세 내용",
@@ -89,7 +89,7 @@ class ContestServiceTest {
     @Test
     void 중복_공모전_등록시_예외가_발생한다() {
         // given
-        CreateContestRequest request = new CreateContestRequest(
+        SaveContestRequest request = new SaveContestRequest(
                 "2026 미래도시 공모전",
                 "요약",
                 "상세 내용",
@@ -121,7 +121,7 @@ class ContestServiceTest {
     @Test
     void 팀_참여_인원_조건_오류시_등록_예외가_발생한다() {
         // given
-        CreateContestRequest request = new CreateContestRequest(
+        SaveContestRequest request = new SaveContestRequest(
                 "2026 미래도시 공모전",
                 "요약",
                 "상세 내용",
@@ -152,7 +152,7 @@ class ContestServiceTest {
     @Test
     void 존재하지_않는_공모전_상세_조회시_예외가_발생한다() {
         // given
-        given(contestRepository.findById(1L)).willReturn(Optional.empty());
+        given(contestRepository.incrementViewCount(1L)).willReturn(0);
 
         // when & then
         assertThatThrownBy(() -> contestService.getContestDetail(1L))
@@ -164,15 +164,6 @@ class ContestServiceTest {
     @Test
     void 공모전_상세_조회시_조회수가_증가한다() {
         // given
-        Contest contestBefore = Contest.builder()
-                .contestId(1L)
-                .title("제목")
-                .description("내용")
-                .category(InterestCategory.IT_AI_TECH)
-                .status(ContestStatus.OPEN)
-                .applyEndAt(LocalDateTime.now().plusDays(5))
-                .viewCount(0)
-                .build();
         Contest contestAfter = Contest.builder()
                 .contestId(1L)
                 .title("제목")
@@ -182,9 +173,8 @@ class ContestServiceTest {
                 .applyEndAt(LocalDateTime.now().plusDays(5))
                 .viewCount(1)
                 .build();
-        given(contestRepository.findById(1L))
-                .willReturn(Optional.of(contestBefore))
-                .willReturn(Optional.of(contestAfter));
+        given(contestRepository.incrementViewCount(1L)).willReturn(1);
+        given(contestRepository.findById(1L)).willReturn(Optional.of(contestAfter));
 
         // when
         ContestDetailResponse response = contestService.getContestDetail(1L);

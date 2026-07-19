@@ -10,7 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.List;
-import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.CreateContestRequest;
+import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.SaveContestRequest;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.*;
 import org.cotato.gongmozip.domains.contest.service.ContestService;
 import org.cotato.gongmozip.domains.member.entity.Member;
@@ -53,7 +53,7 @@ class ContestControllerTest {
                 .build();
         CustomUserDetails userDetails = new CustomUserDetails(admin);
 
-        CreateContestRequest request = new CreateContestRequest(
+        SaveContestRequest request = new SaveContestRequest(
                 "2026 공모전",
                 "요약",
                 "설명",
@@ -76,7 +76,7 @@ class ContestControllerTest {
         ContestCreateResponse response = new ContestCreateResponse(
                 1L, "2026 공모전", "IT_AI_TECH", "OPEN", LocalDateTime.now().plusDays(10), LocalDateTime.now());
 
-        given(contestService.createContest(any(CreateContestRequest.class))).willReturn(response);
+        given(contestService.createContest(any(SaveContestRequest.class))).willReturn(response);
 
         // when & then
         mockMvc.perform(post("/api/contests")
@@ -99,7 +99,7 @@ class ContestControllerTest {
                 .build();
         CustomUserDetails userDetails = new CustomUserDetails(user);
 
-        CreateContestRequest request = new CreateContestRequest(
+        SaveContestRequest request = new SaveContestRequest(
                 "2026 공모전",
                 "요약",
                 "설명",

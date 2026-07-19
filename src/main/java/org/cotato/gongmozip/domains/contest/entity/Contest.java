@@ -100,10 +100,12 @@ public class Contest extends BaseEntity {
             String hostName,
             LocalDateTime applyStartAt,
             LocalDateTime applyEndAt,
+            LocalDateTime announcementAt,
             String eligibilityText,
             String prizeText,
             String locationText,
             String thumbnailUrl,
+            List<String> detailImageUrls,
             String sourceUrl,
             Boolean isTeamParticipation,
             Integer minTeamSize,
@@ -116,10 +118,12 @@ public class Contest extends BaseEntity {
         if (hostName != null) this.hostName = hostName;
         if (applyStartAt != null) this.applyStartAt = applyStartAt;
         if (applyEndAt != null) this.applyEndAt = applyEndAt;
+        if (announcementAt != null) this.announcementAt = announcementAt;
         if (eligibilityText != null) this.eligibilityText = eligibilityText;
         if (prizeText != null) this.prizeText = prizeText;
         if (locationText != null) this.locationText = locationText;
         if (thumbnailUrl != null) this.thumbnailUrl = thumbnailUrl;
+        if (detailImageUrls != null) this.detailImageUrls = detailImageUrls;
         if (sourceUrl != null) this.sourceUrl = sourceUrl;
         if (isTeamParticipation != null) this.isTeamParticipation = isTeamParticipation;
         if (minTeamSize != null) this.minTeamSize = minTeamSize;

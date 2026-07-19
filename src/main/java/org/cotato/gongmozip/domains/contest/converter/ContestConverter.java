@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
-import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.CreateContestRequest;
+import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.SaveContestRequest;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.*;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.entity.ContestScrap;
@@ -79,7 +79,7 @@ public final class ContestConverter {
         return Math.max(0, days);
     }
 
-    public static Contest toContest(CreateContestRequest request) {
+    public static Contest toContest(SaveContestRequest request) {
         List<String> detailUrls = request.detailImageUrls() != null ? request.detailImageUrls() : new ArrayList<>();
         return Contest.builder()
                 .title(request.title())
