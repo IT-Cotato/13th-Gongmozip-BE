@@ -3,8 +3,7 @@ package org.cotato.gongmozip.domains.contest.service;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.contest.converter.ContestConverter;
-import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.CreateContestRequest;
-import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.UpdateContestRequest;
+import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.SaveContestRequest;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.*;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.entity.ContestScrap;
@@ -32,7 +31,7 @@ public class ContestService {
     private final MemberRepository memberRepository;
 
     @Transactional
-    public ContestCreateResponse createContest(CreateContestRequest request) {
+    public ContestCreateResponse createContest(SaveContestRequest request) {
         validateContestInput(
                 request.isTeamParticipation(),
                 request.minTeamSize(),
@@ -51,7 +50,7 @@ public class ContestService {
     }
 
     @Transactional
-    public ContestUpdateResponse updateContest(Long contestId, UpdateContestRequest request) {
+    public ContestUpdateResponse updateContest(Long contestId, SaveContestRequest request) {
         Contest contest = contestRepository
                 .findById(contestId)
                 .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_NOT_FOUND));
@@ -85,10 +84,12 @@ public class ContestService {
                 request.hostName(),
                 request.applyStartAt(),
                 request.applyEndAt(),
+                request.announcementAt(),
                 request.eligibilityText(),
                 request.prizeText(),
                 request.locationText(),
                 request.thumbnailUrl(),
+                request.detailImageUrls(),
                 request.sourceUrl(),
                 request.isTeamParticipation(),
                 request.minTeamSize(),

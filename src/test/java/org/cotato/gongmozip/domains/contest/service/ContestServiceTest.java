@@ -10,7 +10,7 @@ import static org.mockito.Mockito.times;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.CreateContestRequest;
+import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.SaveContestRequest;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.*;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.entity.ContestScrap;
@@ -52,7 +52,7 @@ class ContestServiceTest {
     @Test
     void 유효한_입력으로_공모전을_등록하면_성공한다() {
         // given
-        CreateContestRequest request = new CreateContestRequest(
+        SaveContestRequest request = new SaveContestRequest(
                 "2026 미래도시 공모전",
                 "요약",
                 "상세 내용",
@@ -89,7 +89,7 @@ class ContestServiceTest {
     @Test
     void 중복_공모전_등록시_예외가_발생한다() {
         // given
-        CreateContestRequest request = new CreateContestRequest(
+        SaveContestRequest request = new SaveContestRequest(
                 "2026 미래도시 공모전",
                 "요약",
                 "상세 내용",
@@ -121,7 +121,7 @@ class ContestServiceTest {
     @Test
     void 팀_참여_인원_조건_오류시_등록_예외가_발생한다() {
         // given
-        CreateContestRequest request = new CreateContestRequest(
+        SaveContestRequest request = new SaveContestRequest(
                 "2026 미래도시 공모전",
                 "요약",
                 "상세 내용",

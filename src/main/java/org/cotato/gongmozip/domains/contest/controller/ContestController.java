@@ -4,8 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.CreateContestRequest;
-import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.UpdateContestRequest;
+import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.SaveContestRequest;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.*;
 import org.cotato.gongmozip.domains.contest.exception.codes.ContestErrorCode;
 import org.cotato.gongmozip.domains.contest.exception.codes.ContestSuccessCode;
@@ -31,7 +30,7 @@ public class ContestController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ContestErrorCode.class)
     @PostMapping("/contests")
     public ResponseEntity<BaseResponse<ContestCreateResponse>> createContest(
-            @RequestBody @Valid CreateContestRequest request) {
+            @RequestBody @Valid SaveContestRequest request) {
         ContestCreateResponse response = contestService.createContest(request);
         return BaseResponseFormatter.success(ContestSuccessCode.CONTEST_CREATED, response);
     }
@@ -40,7 +39,7 @@ public class ContestController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ContestErrorCode.class)
     @PatchMapping("/contests/{contestId}")
     public ResponseEntity<BaseResponse<ContestUpdateResponse>> updateContest(
-            @PathVariable("contestId") Long contestId, @RequestBody @Valid UpdateContestRequest request) {
+            @PathVariable("contestId") Long contestId, @RequestBody @Valid SaveContestRequest request) {
         ContestUpdateResponse response = contestService.updateContest(contestId, request);
         return BaseResponseFormatter.success(ContestSuccessCode.CONTEST_UPDATED, response);
     }
