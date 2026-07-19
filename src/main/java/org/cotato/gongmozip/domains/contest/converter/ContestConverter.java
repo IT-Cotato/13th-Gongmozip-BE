@@ -71,11 +71,12 @@ public final class ContestConverter {
         return contest.getStatus().name();
     }
 
-    // 남은 일수 계산 (마감 여부에 따른 일수 판단)
+    // 남은 일수 계산 (마감 여부에 따른 일수 판단, 음수는 0으로 클램핑)
     public static int calculateDaysRemaining(LocalDateTime applyEndAt, LocalDateTime now) {
         LocalDate endDate = applyEndAt.toLocalDate();
         LocalDate currentDate = now.toLocalDate();
-        return (int) ChronoUnit.DAYS.between(currentDate, endDate);
+        int days = (int) ChronoUnit.DAYS.between(currentDate, endDate);
+        return Math.max(0, days);
     }
 
     public static Contest toContest(SaveContestRequest request) {

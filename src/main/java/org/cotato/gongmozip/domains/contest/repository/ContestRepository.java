@@ -14,6 +14,8 @@ public interface ContestRepository extends JpaRepository<Contest, Long> {
 
     boolean existsByTitleAndApplyEndAt(String title, LocalDateTime applyEndAt);
 
+    boolean existsByTitleAndApplyEndAtAndContestIdNot(String title, LocalDateTime applyEndAt, Long contestId);
+
     @Modifying(clearAutomatically = true)
     @Query("UPDATE Contest c SET c.viewCount = c.viewCount + 1 WHERE c.contestId = :contestId")
     int incrementViewCount(@Param("contestId") Long contestId);
@@ -78,7 +80,7 @@ public interface ContestRepository extends JpaRepository<Contest, Long> {
                             + "     (:status = 'CLOSED' AND (c.status = 'CLOSED' OR c.applyEndAt < :now)) OR "
                             + "     (:status = 'OPEN' AND c.status = 'OPEN' AND c.applyEndAt >= :now) OR "
                             + "     (:status = 'UPCOMING' AND c.status = 'UPCOMING' AND c.applyEndAt >= :now)) "
-                            + "GROUP BY c.contestId, c.title, c.summary, c.description, c.category, c.status, c.hostName, c.applyStartAt, c.applyEndAt, c.announcementAt, c.eligibilityText, c.prizeText, c.locationText, c.thumbnailUrl, c.sourceUrl, c.isTeamParticipation, c.minTeamSize, c.maxTeamSize, c.viewCount, c.createdAt, c.updatedAt "
+                            + "GROUP BY c.contestId, c.title, c.summary, c.description, c.category, c.status, c.hostName, c.applyStartAt, c.applyEndAt, c.announcementAt, c.eligibilityText, c.prizeText, c.locationText, c.thumbnailUrl, c.detailImageUrls, c.sourceUrl, c.isTeamParticipation, c.minTeamSize, c.maxTeamSize, c.viewCount, c.createdAt, c.updatedAt "
                             + "ORDER BY CASE WHEN (c.status = 'CLOSED' OR c.applyEndAt < :now) THEN 1 ELSE 0 END ASC, COUNT(cs) DESC, c.createdAt DESC",
             countQuery = "SELECT COUNT(c) FROM Contest c "
                     + "WHERE (:keyword IS NULL OR c.title LIKE %:keyword% OR c.description LIKE %:keyword%) "
