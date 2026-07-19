@@ -275,7 +275,7 @@ class ContestServiceTest {
     @Test
     void 최대_팀원_수_1_미만시_등록_예외가_발생한다() {
         // given
-        CreateContestRequest request = new CreateContestRequest(
+        SaveContestRequest request = new SaveContestRequest(
                 "2026 미래도시 공모전",
                 "요약",
                 "상세 내용",
