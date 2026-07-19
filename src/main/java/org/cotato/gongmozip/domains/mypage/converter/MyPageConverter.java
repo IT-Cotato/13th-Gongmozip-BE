@@ -44,14 +44,17 @@ public class MyPageConverter {
                 scrapContestCount);
     }
 
+    // TODO: 프로젝트 도메인 구현 후 진행 중인 프로젝트 연동 및 매핑 로직 추가 필요
     public static OngoingProjectsResponse toOngoingProjectsResponse(int page, int size) {
         return new OngoingProjectsResponse(Collections.emptyList(), page, size, 0L, 0);
     }
 
+    // TODO: 프로젝트 도메인 구현 후 완료된 프로젝트 연동 및 매핑 로직 추가 필요
     public static CompletedProjectsResponse toCompletedProjectsResponse(int page, int size) {
         return new CompletedProjectsResponse(Collections.emptyList(), page, size, 0L, 0);
     }
 
+    // TODO: 협업 후기/리뷰 도메인 구현 후 리뷰 통계 연동 및 매핑 로직 추가 필요
     public static ReviewStatisticsResponse toReviewStatisticsResponse() {
         return new ReviewStatisticsResponse(0, Collections.emptyList());
     }
