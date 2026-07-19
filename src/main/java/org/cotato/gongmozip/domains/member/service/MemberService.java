@@ -3,6 +3,8 @@ package org.cotato.gongmozip.domains.member.service;
 import java.security.SecureRandom;
 import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.domains.auth.converter.AuthAccountConverter;
+import org.cotato.gongmozip.domains.auth.repository.AuthAccountRepository;
 import org.cotato.gongmozip.domains.member.converter.MemberConverter;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyConfirmRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyRequest;
@@ -41,6 +43,7 @@ public class MemberService {
     private String mailUsername;
 
     private final MemberRepository memberRepository;
+    private final AuthAccountRepository authAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final JavaMailSender mailSender;
     private final RedisUtil redisUtil;
@@ -105,6 +108,8 @@ public class MemberService {
         try {
             Member member = MemberConverter.toMember(request, passwordEncoder.encode(request.password()));
             memberRepository.saveAndFlush(member);
+
+            authAccountRepository.save(AuthAccountConverter.toEmailAuthAccount(member));
 
             redisUtil.delete(VERIFIED_PREFIX + request.email());
 
