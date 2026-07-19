@@ -112,17 +112,16 @@ public class ContestService {
 
     @Transactional
     public ContestDetailResponse getContestDetail(Long contestId) {
+        int updatedRows = contestRepository.incrementViewCount(contestId);
+        if (updatedRows == 0) {
+            throw new ContestException(ContestErrorCode.CONTEST_NOT_FOUND);
+        }
+
         Contest contest = contestRepository
                 .findById(contestId)
                 .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_NOT_FOUND));
 
-        contestRepository.incrementViewCount(contestId);
-
-        Contest updatedContest = contestRepository
-                .findById(contestId)
-                .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_NOT_FOUND));
-
-        return ContestConverter.toContestDetailResponse(updatedContest, LocalDateTime.now());
+        return ContestConverter.toContestDetailResponse(contest, LocalDateTime.now());
     }
 
     public ContestListResponse getContests(

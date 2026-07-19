@@ -2,7 +2,6 @@ package org.cotato.gongmozip.domains.contest.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.contest.dto.request.ContestRequest.SaveContestRequest;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.*;
@@ -14,8 +13,10 @@ import org.cotato.gongmozip.global.response.BaseResponse;
 import org.cotato.gongmozip.global.response.BaseResponseFormatter;
 import org.cotato.gongmozip.global.security.jwt.CustomUserDetails;
 import org.cotato.gongmozip.global.swagger.CustomErrorCodes;
+import org.cotato.gongmozip.global.validation.ValidationGroup;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Contest", description = "공모전 및 스크랩 관련 API")
@@ -30,7 +31,7 @@ public class ContestController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ContestErrorCode.class)
     @PostMapping("/contests")
     public ResponseEntity<BaseResponse<ContestCreateResponse>> createContest(
-            @RequestBody @Valid SaveContestRequest request) {
+            @RequestBody @Validated(ValidationGroup.OnCreate.class) SaveContestRequest request) {
         ContestCreateResponse response = contestService.createContest(request);
         return BaseResponseFormatter.success(ContestSuccessCode.CONTEST_CREATED, response);
     }
@@ -39,7 +40,7 @@ public class ContestController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ContestErrorCode.class)
     @PatchMapping("/contests/{contestId}")
     public ResponseEntity<BaseResponse<ContestUpdateResponse>> updateContest(
-            @PathVariable("contestId") Long contestId, @RequestBody @Valid SaveContestRequest request) {
+            @PathVariable("contestId") Long contestId, @RequestBody @Validated SaveContestRequest request) {
         ContestUpdateResponse response = contestService.updateContest(contestId, request);
         return BaseResponseFormatter.success(ContestSuccessCode.CONTEST_UPDATED, response);
     }
