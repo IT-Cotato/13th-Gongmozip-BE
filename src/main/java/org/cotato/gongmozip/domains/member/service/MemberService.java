@@ -8,6 +8,7 @@ import org.cotato.gongmozip.domains.auth.repository.AuthAccountRepository;
 import org.cotato.gongmozip.domains.member.converter.MemberConverter;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyConfirmRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyRequest;
+import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.RegisterRequiredInfoRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.SignUpRequest;
 import org.cotato.gongmozip.domains.member.dto.response.MemberAuthResponse.SignUpResponse;
 import org.cotato.gongmozip.domains.member.entity.Member;
@@ -117,6 +118,14 @@ public class MemberService {
         } catch (DataIntegrityViolationException e) {
             throw new MemberException(MemberErrorCode.DUPLICATE_EMAIL);
         }
+    }
+
+    @Transactional
+    public void registerRequiredInfo(RegisterRequiredInfoRequest request, Long memberId) {
+        Member member = memberRepository
+                .findById(memberId)
+                .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
+        member.registerRequiredInfo(request.gender(), request.birthDate());
     }
 
     // 인증 코드 생성 메서드

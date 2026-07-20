@@ -13,6 +13,9 @@ public enum MemberSuccessCode implements BaseSuccessCode {
     EMAIL_VERIFY_CODE_SENT(HttpStatus.OK, "MEMBER_200_1", "인증코드가 발송되었습니다."),
     EMAIL_VERIFY_SUCCESS(HttpStatus.OK, "MEMBER_200_2", "이메일 인증에 성공하였습니다."),
 
+    // 200
+    REQUIRED_INFO_REGISTERED(HttpStatus.OK, "MEMBER_200_3", "필수 정보가 등록되었습니다."),
+
     // 201
     SIGN_UP_SUCCESS(HttpStatus.CREATED, "MEMBER_201_1", "회원가입에 성공하였습니다.");
 
