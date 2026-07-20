@@ -30,15 +30,17 @@ public class KakaoOAuth2Response implements OAuth2Response {
     @Override
     public String getEmail() {
         if (kakaoAccount == null) {
-            throw new OAuth2AuthenticationException(
-                new OAuth2Error(AuthErrorCode.KAKAO_ACCOUNT_NOT_FOUND.getCode(),
-                    AuthErrorCode.KAKAO_ACCOUNT_NOT_FOUND.getMessage(), null));
+            throw new OAuth2AuthenticationException(new OAuth2Error(
+                    AuthErrorCode.KAKAO_ACCOUNT_NOT_FOUND.getCode(),
+                    AuthErrorCode.KAKAO_ACCOUNT_NOT_FOUND.getMessage(),
+                    null));
         }
         Object email = kakaoAccount.get("email");
         if (email == null) {
-            throw new OAuth2AuthenticationException(
-                new OAuth2Error(AuthErrorCode.KAKAO_EMAIL_NOT_PROVIDED.getCode(),
-                    AuthErrorCode.KAKAO_EMAIL_NOT_PROVIDED.getMessage(), null));
+            throw new OAuth2AuthenticationException(new OAuth2Error(
+                    AuthErrorCode.KAKAO_EMAIL_NOT_PROVIDED.getCode(),
+                    AuthErrorCode.KAKAO_EMAIL_NOT_PROVIDED.getMessage(),
+                    null));
         }
         return email.toString();
     }

@@ -10,6 +10,7 @@ import static org.mockito.BDDMockito.willThrow;
 
 import java.time.LocalDate;
 import java.util.concurrent.TimeUnit;
+import org.cotato.gongmozip.domains.auth.repository.AuthAccountRepository;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyConfirmRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.SignUpRequest;
@@ -17,7 +18,6 @@ import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.enums.Gender;
 import org.cotato.gongmozip.domains.member.exception.MemberException;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
-import org.cotato.gongmozip.domains.auth.repository.AuthAccountRepository;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.global.exception.CustomException;
 import org.cotato.gongmozip.global.redis.RedisUtil;

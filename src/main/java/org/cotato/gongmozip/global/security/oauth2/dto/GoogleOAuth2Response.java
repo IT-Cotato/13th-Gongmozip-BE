@@ -28,9 +28,10 @@ public class GoogleOAuth2Response implements OAuth2Response {
     public String getEmail() {
         Object email = attributes.get("email");
         if (email == null) {
-            throw new OAuth2AuthenticationException(
-                new OAuth2Error(AuthErrorCode.GOOGLE_EMAIL_NOT_PROVIDED.getCode(),
-                    AuthErrorCode.GOOGLE_EMAIL_NOT_PROVIDED.getMessage(), null));
+            throw new OAuth2AuthenticationException(new OAuth2Error(
+                    AuthErrorCode.GOOGLE_EMAIL_NOT_PROVIDED.getCode(),
+                    AuthErrorCode.GOOGLE_EMAIL_NOT_PROVIDED.getMessage(),
+                    null));
         }
         return email.toString();
     }

@@ -7,9 +7,6 @@ import org.cotato.gongmozip.domains.member.entity.Member;
 public class AuthAccountConverter {
 
     public static AuthAccount toEmailAuthAccount(Member member) {
-        return AuthAccount.builder()
-                .member(member)
-                .provider(AuthProvider.EMAIL)
-                .build();
+        return AuthAccount.builder().member(member).provider(AuthProvider.EMAIL).build();
     }
 }
