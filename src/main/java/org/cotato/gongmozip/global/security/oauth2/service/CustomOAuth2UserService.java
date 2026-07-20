@@ -44,7 +44,10 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         // 기존 소셜 계정이 있으면 해당 멤버 반환, 없으면 신규 가입 또는 기존 멤버에 소셜 계정 연동
         return authAccountRepository
                 .findByProviderAndProviderMemberId(provider, providerMemberId)
-                .map(authAccount -> new CustomOAuth2User(authAccount.getMember(), provider))
+                .map(authAccount -> {
+                    Member member = authAccount.getMember();
+                    return new CustomOAuth2User(member, provider, isRequiredInfoMissing(member));
+                })
                 .orElseGet(() -> registerOrLink(email, provider, providerMemberId));
     }
 
@@ -66,7 +69,11 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 .providerMemberId(providerMemberId)
                 .build());
 
-        return new CustomOAuth2User(member, provider);
+        return new CustomOAuth2User(member, provider, isRequiredInfoMissing(member));
+    }
+
+    private boolean isRequiredInfoMissing(Member member) {
+        return member.getGender() == null || member.getBirthDate() == null;
     }
 
     // 소셜 제공자 식별자(registrationId)에 따라 응답 파싱 구현체 선택

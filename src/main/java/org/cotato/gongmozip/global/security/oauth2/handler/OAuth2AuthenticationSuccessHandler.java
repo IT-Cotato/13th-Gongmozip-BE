@@ -73,7 +73,8 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         response.addHeader(HttpHeaders.SET_COOKIE, accessCookie.toString());
         response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
 
-        // 프론트엔드로 리다이렉트
-        getRedirectStrategy().sendRedirect(request, response, redirectUrl);
+        // 필수 정보(성별/생년월일) 미입력 회원은 입력 화면으로 안내
+        String targetUrl = oAuth2User.isNewMember() ? redirectUrl + "?isNewMember=true" : redirectUrl;
+        getRedirectStrategy().sendRedirect(request, response, targetUrl);
     }
 }

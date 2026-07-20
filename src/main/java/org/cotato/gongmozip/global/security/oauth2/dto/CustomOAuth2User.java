@@ -16,13 +16,15 @@ public class CustomOAuth2User implements OAuth2User {
     private final String email;
     private final MemberRole role;
     private final AuthProvider provider;
+    private final boolean isNewMember;
 
     // @Transactional 종료 후 getAuthorities() 호출 시 LAZY 프록시 초기화 실패를 막기 위해 생성자 안에서 값을 미리 추출
-    public CustomOAuth2User(Member member, AuthProvider provider) {
+    public CustomOAuth2User(Member member, AuthProvider provider, boolean isNewMember) {
         this.memberId = member.getMemberId();
         this.email = member.getEmail();
         this.role = member.getRole();
         this.provider = provider;
+        this.isNewMember = isNewMember;
     }
 
     @Override
@@ -50,5 +52,9 @@ public class CustomOAuth2User implements OAuth2User {
 
     public AuthProvider getProvider() {
         return provider;
+    }
+
+    public boolean isNewMember() {
+        return isNewMember;
     }
 }
