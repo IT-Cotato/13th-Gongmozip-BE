@@ -23,7 +23,12 @@ import org.cotato.gongmozip.global.entity.BaseEntity;
 
 @Getter
 @Entity
-@Table(name = "auth_accounts", uniqueConstraints = @UniqueConstraint(columnNames = {"member_id", "provider"}))
+@Table(
+        name = "auth_accounts",
+        uniqueConstraints = {
+            @UniqueConstraint(columnNames = {"member_id", "provider"}),
+            @UniqueConstraint(columnNames = {"provider", "provider_member_id"})
+        })
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Builder

@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS auth_accounts (
         UNIQUE (member_id, provider)
 );
 
-CREATE INDEX idx_auth_accounts_provider_member_id
+CREATE UNIQUE INDEX uq_auth_accounts_provider_member_id
     ON auth_accounts (provider, provider_member_id);
 
 INSERT INTO auth_accounts (member_id, provider, provider_member_id, created_at, updated_at)
