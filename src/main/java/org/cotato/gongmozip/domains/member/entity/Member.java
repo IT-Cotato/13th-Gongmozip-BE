@@ -53,4 +53,9 @@ public class Member extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "gender", length = 20)
     private Gender gender;
+
+    public void registerRequiredInfo(Gender gender, LocalDate birthDate) {
+        this.gender = gender;
+        this.birthDate = birthDate;
+    }
 }

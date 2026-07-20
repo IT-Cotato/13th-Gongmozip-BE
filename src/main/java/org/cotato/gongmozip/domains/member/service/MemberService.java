@@ -3,9 +3,12 @@ package org.cotato.gongmozip.domains.member.service;
 import java.security.SecureRandom;
 import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.domains.auth.converter.AuthAccountConverter;
+import org.cotato.gongmozip.domains.auth.repository.AuthAccountRepository;
 import org.cotato.gongmozip.domains.member.converter.MemberConverter;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyConfirmRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyRequest;
+import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.RegisterRequiredInfoRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.SignUpRequest;
 import org.cotato.gongmozip.domains.member.dto.response.MemberAuthResponse.SignUpResponse;
 import org.cotato.gongmozip.domains.member.entity.Member;
@@ -41,6 +44,7 @@ public class MemberService {
     private String mailUsername;
 
     private final MemberRepository memberRepository;
+    private final AuthAccountRepository authAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final JavaMailSender mailSender;
     private final RedisUtil redisUtil;
@@ -106,12 +110,22 @@ public class MemberService {
             Member member = MemberConverter.toMember(request, passwordEncoder.encode(request.password()));
             memberRepository.saveAndFlush(member);
 
+            authAccountRepository.save(AuthAccountConverter.toEmailAuthAccount(member));
+
             redisUtil.delete(VERIFIED_PREFIX + request.email());
 
             return MemberConverter.toSignUpResponse(member);
         } catch (DataIntegrityViolationException e) {
             throw new MemberException(MemberErrorCode.DUPLICATE_EMAIL);
         }
+    }
+
+    @Transactional
+    public void registerRequiredInfo(RegisterRequiredInfoRequest request, Long memberId) {
+        Member member = memberRepository
+                .findById(memberId)
+                .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
+        member.registerRequiredInfo(request.gender(), request.birthDate());
     }
 
     // 인증 코드 생성 메서드

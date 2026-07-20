@@ -31,7 +31,35 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
-  # 4. 이메일 설정 (Gmail SMTP)
+  # 4. OAuth2 소셜 로그인 설정
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            redirect-uri: "{baseUrl}/login/oauth2/code/google"
+            scope:
+              - profile
+              - email
+          kakao:
+            client-id: ${KAKAO_CLIENT_ID}
+            client-secret: ${KAKAO_CLIENT_SECRET}
+            redirect-uri: "{baseUrl}/login/oauth2/code/kakao"
+            authorization-grant-type: authorization_code
+            client-authentication-method: client_secret_post
+            scope:
+              - profile_nickname
+              - account_email
+        provider:
+          kakao:
+            authorization-uri: https://kauth.kakao.com/oauth/authorize
+            token-uri: https://kauth.kakao.com/oauth/token
+            user-info-uri: https://kapi.kakao.com/v2/user/me
+            user-name-attribute: id
+
+  # 5. 이메일 설정 (Gmail SMTP)
   mail:
     host: smtp.gmail.com
     port: 587
@@ -50,8 +78,12 @@ spring:
           timeout: 5000
           writetimeout: 5000
 
-# 5. JWT 설정
+# 6. JWT 설정
 jwt:
   secret: ${JWT_SECRET}
   access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:3600000}      # 기본값: 1시간
   refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:1209600000}  # 기본값: 14일
+
+# 7. OAuth2 소셜 로그인 리다이렉트 URL
+oauth2:
+  redirect-url: ${OAUTH2_REDIRECT_URL} # 테스트용 스웨거 서버

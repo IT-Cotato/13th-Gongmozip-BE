@@ -20,4 +20,7 @@ public class MemberAuthRequest {
             @NotBlank String password,
             @NotNull Gender gender,
             @NotNull LocalDate birthDate) {}
+
+    // 소셜 회원 필수 정보(성별/생년월일) 등록 요청
+    public record RegisterRequiredInfoRequest(@NotNull Gender gender, @NotNull LocalDate birthDate) {}
 }

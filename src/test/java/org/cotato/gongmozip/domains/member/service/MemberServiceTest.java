@@ -10,6 +10,7 @@ import static org.mockito.BDDMockito.willThrow;
 
 import java.time.LocalDate;
 import java.util.concurrent.TimeUnit;
+import org.cotato.gongmozip.domains.auth.repository.AuthAccountRepository;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyConfirmRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.SignUpRequest;
@@ -39,6 +40,9 @@ class MemberServiceTest {
 
     @Mock
     private MemberRepository memberRepository;
+
+    @Mock
+    private AuthAccountRepository authAccountRepository;
 
     @Mock
     private PasswordEncoder passwordEncoder;

@@ -3,6 +3,9 @@ package org.cotato.gongmozip.global.config;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.global.security.jwt.JwtAuthenticationEntryPoint;
 import org.cotato.gongmozip.global.security.jwt.JwtAuthenticationFilter;
+import org.cotato.gongmozip.global.security.oauth2.handler.OAuth2AuthenticationFailureHandler;
+import org.cotato.gongmozip.global.security.oauth2.handler.OAuth2AuthenticationSuccessHandler;
+import org.cotato.gongmozip.global.security.oauth2.service.CustomOAuth2UserService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -22,6 +25,9 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    private final CustomOAuth2UserService customOAuth2UserService;
+    private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
+    private final OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -41,6 +47,8 @@ public class SecurityConfig {
                                 "/api/members/email/verify", // 인증코드 확인
                                 "/api/auth/login", // 로그인
                                 "/api/auth/reissue", // 토큰 재발급
+                                "/login/oauth2/**",
+                                "/oauth2/**", // 소셜 로그인
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**" // swagger
                                 )
@@ -53,6 +61,11 @@ public class SecurityConfig {
                         .hasRole("ADMIN")
                         .anyRequest()
                         .authenticated())
+                // 소셜 로그인
+                .oauth2Login(
+                        oauth2 -> oauth2.userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
+                                .successHandler(oAuth2AuthenticationSuccessHandler)
+                                .failureHandler(oAuth2AuthenticationFailureHandler))
                 // 인증 실패 시 401 응답 처리
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 // JWT 필터를 UsernamePasswordAuthenticationFilter 앞에 등록
