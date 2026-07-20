@@ -2,6 +2,9 @@ package org.cotato.gongmozip.global.security.oauth2.dto;
 
 import java.util.Map;
 import org.cotato.gongmozip.domains.auth.enums.AuthProvider;
+import org.cotato.gongmozip.domains.auth.exception.codes.AuthErrorCode;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
 
 public class KakaoOAuth2Response implements OAuth2Response {
 
@@ -26,6 +29,17 @@ public class KakaoOAuth2Response implements OAuth2Response {
 
     @Override
     public String getEmail() {
-        return kakaoAccount.get("email").toString();
+        if (kakaoAccount == null) {
+            throw new OAuth2AuthenticationException(
+                new OAuth2Error(AuthErrorCode.KAKAO_ACCOUNT_NOT_FOUND.getCode(),
+                    AuthErrorCode.KAKAO_ACCOUNT_NOT_FOUND.getMessage(), null));
+        }
+        Object email = kakaoAccount.get("email");
+        if (email == null) {
+            throw new OAuth2AuthenticationException(
+                new OAuth2Error(AuthErrorCode.KAKAO_EMAIL_NOT_PROVIDED.getCode(),
+                    AuthErrorCode.KAKAO_EMAIL_NOT_PROVIDED.getMessage(), null));
+        }
+        return email.toString();
     }
 }
