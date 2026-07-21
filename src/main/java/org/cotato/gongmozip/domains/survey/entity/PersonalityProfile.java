@@ -10,7 +10,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import lombok.AccessLevel;
@@ -39,11 +38,6 @@ public class PersonalityProfile extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "member_id", nullable = false)
     private Member member;
-
-    // 현재 유효한 프로필은 surveySubmission.status = SUBMITTED 인 것
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "survey_submission_id", nullable = false)
-    private SurveySubmission surveySubmission;
 
     // 희망 공모전 분야 (IT_AI_TECH, MARKETING_AD_BRANDING 등)
     @Enumerated(EnumType.STRING)

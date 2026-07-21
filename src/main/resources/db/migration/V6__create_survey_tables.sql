@@ -63,7 +63,6 @@ CREATE TABLE personality_profiles
 (
     profile_id                BIGINT AUTO_INCREMENT PRIMARY KEY,
     member_id                 BIGINT         NOT NULL,
-    survey_submission_id      BIGINT         NOT NULL,
     contest_category          VARCHAR(50)    NOT NULL,
     skill_score               DECIMAL(5, 2)  NOT NULL,
     skill_group               INT            NOT NULL,
@@ -81,7 +80,5 @@ CREATE TABLE personality_profiles
     created_at                TIMESTAMP      NOT NULL,
     updated_at                TIMESTAMP      NOT NULL,
     CONSTRAINT fk_personality_profiles_member
-        FOREIGN KEY (member_id) REFERENCES member (member_id),
-    CONSTRAINT fk_personality_profiles_submission
-        FOREIGN KEY (survey_submission_id) REFERENCES survey_submissions (survey_submission_id)
+        FOREIGN KEY (member_id) REFERENCES member (member_id)
 );
