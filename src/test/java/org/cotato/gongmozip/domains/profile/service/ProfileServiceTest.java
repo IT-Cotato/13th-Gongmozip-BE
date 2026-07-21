@@ -73,7 +73,6 @@ class ProfileServiceTest {
                 "러너", "학교", 3, "소프트웨어", "경영", 4.0, 4.5, List.of(InterestCategory.IT_AI_TECH), true);
         given(memberRepository.findByIdWithLock(1L)).willReturn(Optional.of(member));
         given(profileRepository.existsByNickname("러너")).willReturn(false);
-        given(profileRepository.countByMember(member)).willReturn(0);
 
         // when
         CreateProfileResponse response = profileService.createProfile(request, member);
@@ -83,21 +82,25 @@ class ProfileServiceTest {
         then(profileRepository).should().save(any(Profile.class));
     }
 
-    @DisplayName("두 번째 프로필 생성 시 기존 대표 프로필(isMain = true)이 유지된다.")
+    @DisplayName("두 번째 프로필 생성 시 새로 생성된 프로필이 대표 프로필(isMain = true)로 자동 설정된다.")
     @Test
-    void 두_번째_프로필_생성_시_기존_대표_프로필이_유지된다() {
+    void 두_번째_프로필_생성_시_새로_생성된_프로필이_대표_프로필로_설정된다() {
         // given
         CreateProfileRequest request = new CreateProfileRequest(
                 "러너2", "학교", 3, "소프트웨어", "경영", 4.0, 4.5, List.of(InterestCategory.IT_AI_TECH), true);
+        Profile currentMain =
+                Profile.builder().profileId(10L).member(member).isMain(true).build();
+
         given(memberRepository.findByIdWithLock(1L)).willReturn(Optional.of(member));
         given(profileRepository.existsByNickname("러너2")).willReturn(false);
-        given(profileRepository.countByMember(member)).willReturn(1);
+        given(profileRepository.findByMemberAndIsMainTrue(member)).willReturn(Optional.of(currentMain));
 
         // when
         CreateProfileResponse response = profileService.createProfile(request, member);
 
         // then
-        assertThat(response.isMain()).isFalse();
+        assertThat(response.isMain()).isTrue();
+        assertThat(currentMain.isMain()).isFalse();
         then(profileRepository).should().save(any(Profile.class));
     }
 

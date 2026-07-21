@@ -50,11 +50,14 @@ public class ProfileService {
             throw new ProfileException(ProfileErrorCode.DUPLICATE_NICKNAME);
         }
 
-        // 회원의 기존 프로필 개수 확인
-        int existingCount = profileRepository.countByMember(member);
-        boolean isMain = (existingCount == 0); // 첫 프로필은 자동으로 대표 프로필 설정
+        // 기존 대표 프로필이 있다면 해제
+        profileRepository.findByMemberAndIsMainTrue(member).ifPresent(p -> {
+            p.setMain(false);
+            profileRepository.flush();
+        });
 
-        Profile profile = ProfileConverter.toProfile(request, member, isMain);
+        // 가장 최근에 입력한 프로필을 대표 프로필(isMain = true)로 자동 설정
+        Profile profile = ProfileConverter.toProfile(request, member, true);
         profileRepository.save(profile);
 
         return ProfileConverter.toCreateProfileResponse(profile);
