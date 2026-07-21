@@ -7,5 +7,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface PersonalityProfileRepository extends JpaRepository<PersonalityProfile, Long> {
 
-    Optional<PersonalityProfile> findTopByMemberOrderByCreatedAtDesc(Member member);
+    Optional<PersonalityProfile> findTopByMemberOrderByProfileIdDesc(Member member);
 }
