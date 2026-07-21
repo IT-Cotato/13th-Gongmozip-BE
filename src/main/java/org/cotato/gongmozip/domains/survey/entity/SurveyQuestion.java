@@ -42,8 +42,9 @@ public class SurveyQuestion extends BaseEntity {
     @Column(name = "question_type", nullable = false, length = 30)
     private QuestionType questionType;
 
+    @Builder.Default
     @Column(name = "is_required", nullable = false)
-    private boolean isRequired;
+    private boolean isRequired = true;
 
     // true이면 점수 계산 시 역채점 적용 (score_weight가 역방향으로 설정된 선택지 사용)
     @Column(name = "is_reverse_scored", nullable = false)

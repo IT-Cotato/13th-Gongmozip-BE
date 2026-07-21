@@ -53,8 +53,9 @@ public class PersonalityProfile extends BaseEntity {
     private int skillGroup;
 
     // 협업 희망 거리 (단위: m, 최대 500m)
+    @Builder.Default
     @Column(name = "collaboration_distance", nullable = false)
-    private int collaborationDistance;
+    private int collaborationDistance = 100;
 
     // HEXACO 우호성 점수 (문항 3개 평균)
     @Column(name = "agreeableness_score", nullable = false, precision = 5, scale = 2)

@@ -53,6 +53,7 @@ public class SurveyOption extends BaseEntity {
     @Column(name = "score_weight", precision = 12, scale = 2)
     private BigDecimal scoreWeight;
 
+    @Builder.Default
     @Column(name = "is_other_option", nullable = false)
-    private boolean isOtherOption;
+    private boolean isOtherOption = false;
 }

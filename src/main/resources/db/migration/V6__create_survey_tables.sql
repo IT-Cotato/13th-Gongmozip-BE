@@ -66,7 +66,7 @@ CREATE TABLE personality_profiles
     contest_category          VARCHAR(50)    NOT NULL,
     skill_score               DECIMAL(5, 2)  NOT NULL,
     skill_group               INT            NOT NULL,
-    collaboration_distance    INT            NOT NULL COMMENT '협업 희망 거리 (단위: m)',
+    collaboration_distance    INT            NOT NULL DEFAULT 100 COMMENT '협업 희망 거리 (단위: m)',
     agreeableness_score       DECIMAL(5, 2)  NOT NULL,
     conscientiousness_score   DECIMAL(5, 2)  NOT NULL,
     honesty_humility_score    DECIMAL(5, 2)  NOT NULL,
