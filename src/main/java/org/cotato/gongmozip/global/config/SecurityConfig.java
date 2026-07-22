@@ -65,6 +65,8 @@ public class SecurityConfig {
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/contests/*")
                         .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/admin/uploads/presigned-url")
+                        .hasRole("ADMIN")
                         .anyRequest()
                         .authenticated())
                 // 소셜 로그인
