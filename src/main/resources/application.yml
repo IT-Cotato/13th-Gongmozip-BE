@@ -93,7 +93,6 @@ cloud:
   aws:
     region: ${AWS_REGION:ap-northeast-2}
     s3:
-      bucket: ${AWS_S3_BUCKET:gongmozip-contest-images}
+      bucket: ${AWS_S3_BUCKET}
     cloudfront:
-      domain: ${AWS_CLOUDFRONT_DOMAIN:https://d123456abcdef.cloudfront.net}
-
+      domain: ${AWS_CLOUDFRONT_DOMAIN}
