@@ -87,3 +87,13 @@ jwt:
 # 7. OAuth2 소셜 로그인 리다이렉트 URL
 oauth2:
   redirect-url: ${OAUTH2_REDIRECT_URL} # 테스트용 스웨거 서버
+
+# 8. AWS S3 설정
+cloud:
+  aws:
+    region: ${AWS_REGION:ap-northeast-2}
+    s3:
+      bucket: ${AWS_S3_BUCKET:gongmozip-contest-images}
+    cloudfront:
+      domain: ${AWS_CLOUDFRONT_DOMAIN:https://d123456abcdef.cloudfront.net}
+

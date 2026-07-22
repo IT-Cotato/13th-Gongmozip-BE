@@ -78,3 +78,12 @@ jwt:
 # 7. OAuth2 리다이렉트 URL
 oauth2:
   redirect-url: http://localhost:3000
+
+# 8. AWS S3 설정
+cloud:
+  aws:
+    region: ap-northeast-2
+    s3:
+      bucket: gongmozip-contest-images
+    cloudfront:
+      domain: https://d123456abcdef.cloudfront.net
