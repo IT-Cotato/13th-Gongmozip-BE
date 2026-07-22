@@ -1,7 +1,7 @@
 package org.cotato.gongmozip.domains.upload.controller;
 
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -49,7 +49,7 @@ class AdminUploadControllerTest {
         GetPresignedUrlRequest request = new GetPresignedUrlRequest("poster.png", "image/png");
         GetPresignedUrlResponse response = new GetPresignedUrlResponse("http://presigned-url", "http://image-url");
 
-        given(s3Service.getPresignedUrlForUpload(anyString(), anyString())).willReturn(response);
+        given(s3Service.getPresignedUrlForUpload("poster.png", "image/png")).willReturn(response);
 
         // when & then
         mockMvc.perform(post("/api/admin/uploads/presigned-url")
@@ -59,6 +59,8 @@ class AdminUploadControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.uploadUrl").value("http://presigned-url"))
                 .andExpect(jsonPath("$.data.imageUrl").value("http://image-url"));
+
+        verify(s3Service).getPresignedUrlForUpload("poster.png", "image/png");
     }
 
     @DisplayName("일반 권한을 가진 사용자가 Presigned URL 발급 요청 시 403 Forbidden 에러가 발생한다.")

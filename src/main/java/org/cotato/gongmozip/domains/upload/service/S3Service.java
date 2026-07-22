@@ -1,6 +1,7 @@
 package org.cotato.gongmozip.domains.upload.service;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.upload.dto.response.GetPresignedUrlResponse;
@@ -17,6 +18,13 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 @RequiredArgsConstructor
 public class S3Service {
 
+    private static final Map<String, String> ALLOWED_IMAGE_TYPES = Map.of(
+            "jpg", "image/jpeg",
+            "jpeg", "image/jpeg",
+            "png", "image/png",
+            "gif", "image/gif",
+            "webp", "image/webp");
+
     private final S3Presigner s3Presigner;
 
     @Value("${cloud.aws.s3.bucket}")
@@ -29,7 +37,7 @@ public class S3Service {
     private String cloudFrontDomain;
 
     public GetPresignedUrlResponse getPresignedUrlForUpload(String fileName, String contentType) {
-        validateImageFile(fileName, contentType);
+        String canonicalMimeType = validateAndGetCanonicalMimeType(fileName, contentType);
 
         String uniqueFileName = generateUniqueFileName(fileName);
         String objectKey = "contests/posters/" + uniqueFileName;
@@ -37,7 +45,7 @@ public class S3Service {
         PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                 .bucket(bucketName)
                 .key(objectKey)
-                .contentType(contentType)
+                .contentType(canonicalMimeType)
                 .build();
 
         PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
@@ -57,19 +65,19 @@ public class S3Service {
         return new GetPresignedUrlResponse(uploadUrl, imageUrl);
     }
 
-    private void validateImageFile(String fileName, String contentType) {
-        if (contentType == null || !contentType.startsWith("image/")) {
+    private String validateAndGetCanonicalMimeType(String fileName, String contentType) {
+        String extension = getFileExtension(fileName).toLowerCase();
+
+        String canonicalMimeType = ALLOWED_IMAGE_TYPES.get(extension);
+        if (canonicalMimeType == null) {
             throw new UploadException(UploadErrorCode.INVALID_FILE_TYPE);
         }
 
-        String extension = getFileExtension(fileName).toLowerCase();
-        if (!extension.equals("jpg")
-                && !extension.equals("jpeg")
-                && !extension.equals("png")
-                && !extension.equals("gif")
-                && !extension.equals("webp")) {
+        if (!canonicalMimeType.equalsIgnoreCase(contentType)) {
             throw new UploadException(UploadErrorCode.INVALID_FILE_TYPE);
         }
+
+        return canonicalMimeType;
     }
 
     private String getFileExtension(String fileName) {
@@ -80,8 +88,8 @@ public class S3Service {
         return fileName.substring(dotIndex + 1);
     }
 
-    private String generateUniqueFileName(String originalFileName) {
-        String cleanName = originalFileName.replaceAll("\\s+", "_");
-        return UUID.randomUUID() + "_" + cleanName;
+    private String generateUniqueFileName(String fileName) {
+        String extension = getFileExtension(fileName).toLowerCase();
+        return UUID.randomUUID() + "." + extension;
     }
 }
