@@ -58,6 +58,7 @@ class S3ServiceTest {
         assertThat(response.imageUrl())
                 .startsWith("https://test.cloudfront.net/contests/posters/")
                 .endsWith(".png");
+        assertThat(response.contentType()).isEqualTo("image/png");
     }
 
     @DisplayName("허용되지 않은 확장자(예: svg)로 요청 시 예외가 발생한다.")

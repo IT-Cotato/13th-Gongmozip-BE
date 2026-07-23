@@ -47,7 +47,8 @@ class AdminUploadControllerTest {
         CustomUserDetails userDetails = new CustomUserDetails(admin);
 
         GetPresignedUrlRequest request = new GetPresignedUrlRequest("poster.png", "image/png");
-        GetPresignedUrlResponse response = new GetPresignedUrlResponse("http://presigned-url", "http://image-url");
+        GetPresignedUrlResponse response =
+                new GetPresignedUrlResponse("http://presigned-url", "http://image-url", "image/png");
 
         given(s3Service.getPresignedUrlForUpload("poster.png", "image/png")).willReturn(response);
 
@@ -58,7 +59,8 @@ class AdminUploadControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.uploadUrl").value("http://presigned-url"))
-                .andExpect(jsonPath("$.data.imageUrl").value("http://image-url"));
+                .andExpect(jsonPath("$.data.imageUrl").value("http://image-url"))
+                .andExpect(jsonPath("$.data.contentType").value("image/png"));
 
         verify(s3Service).getPresignedUrlForUpload("poster.png", "image/png");
     }

@@ -62,7 +62,7 @@ public class S3Service {
                 : cloudFrontDomain;
         String imageUrl = baseDomain + "/" + objectKey;
 
-        return new GetPresignedUrlResponse(uploadUrl, imageUrl);
+        return new GetPresignedUrlResponse(uploadUrl, imageUrl, canonicalMimeType);
     }
 
     private String validateAndGetCanonicalMimeType(String fileName, String contentType) {
