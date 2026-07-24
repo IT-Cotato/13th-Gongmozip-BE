@@ -1,6 +1,8 @@
 -- 1. member 테이블에 컬럼 추가
 ALTER TABLE member
-    ADD COLUMN birth_date DATE NULL,
+    ADD COLUMN birth_date DATE NULL;
+
+ALTER TABLE member
     ADD COLUMN gender VARCHAR(20) NULL;
 
 -- 2. 기존 member_profiles 데이터 이관 (MySQL & H2 범용 서브쿼리 문법)
