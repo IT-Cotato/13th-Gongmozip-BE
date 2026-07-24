@@ -25,8 +25,7 @@ CREATE TABLE IF NOT EXISTS contest (
     max_team_size INT NULL,
     view_count INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL,
-    CONSTRAINT uq_contest_title_apply_end_at UNIQUE (title, apply_end_at)
+    updated_at TIMESTAMP NOT NULL
 );
 
 -- 3. contest_scrap 테이블 생성
