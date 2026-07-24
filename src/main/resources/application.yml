@@ -12,18 +12,12 @@ spring:
   # 2. JPA 설정 (Hibernate)
   jpa:
     hibernate:
-      ddl-auto: update # 테이블 자동 업데이트 (데이터 유지)
+      ddl-auto: validate # 테이블 자동 업데이트 (데이터 유지)
     show-sql: false
     open-in-view: false      # OSIV 비활성화
     properties:
       hibernate:
         format_sql: true     # SQL 예쁘게 출력
-
-  flyway:
-    enabled: true
-    baseline-on-migrate: true
-    baseline-version: 0
-    locations: classpath:db/migration
 
   # 3. Redis 설정
   data:
