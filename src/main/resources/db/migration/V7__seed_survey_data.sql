@@ -59,200 +59,296 @@ VALUES
 -- LEADER_PREFERENCE (3개)
 -- score_weight: 유효 리더 수 L 계산에 직접 사용
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'LEADER_PREFERENCE');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'LEADER_PREFERENCE_YES',     '리더 원합니다',         'YES',     1, 1.00, false, NOW(), NOW()),
-    (@q, 'LEADER_PREFERENCE_NEUTRAL', '상관없어요',            'NEUTRAL', 2, 0.50, false, NOW(), NOW()),
-    (@q, 'LEADER_PREFERENCE_NO',      '리더를 원하지 않아요',  'NO',      3, 0.00, false, NOW(), NOW());
+SELECT question_id, 'LEADER_PREFERENCE_YES', '리더 원합니다', 'YES', 1, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'LEADER_PREFERENCE'
+UNION ALL
+SELECT question_id, 'LEADER_PREFERENCE_NEUTRAL', '상관없어요', 'NEUTRAL', 2, 0.50, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'LEADER_PREFERENCE'
+UNION ALL
+SELECT question_id, 'LEADER_PREFERENCE_NO', '리더를 원하지 않아요', 'NO', 3, 0.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'LEADER_PREFERENCE';
 
 -- -----------------------------------------------------
 -- GOAL_PREFERENCE (3개)
 -- score_weight: 팀 내 분산 계산에 사용 (1 / 3 / 5)
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'GOAL_PREFERENCE');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'GOAL_PREFERENCE_OPT_1', '수상보다는 새로운 경험, 네트워킹, 나의 성장이 최우선', '1', 1, 1.00, false, NOW(), NOW()),
-    (@q, 'GOAL_PREFERENCE_OPT_3', '수상도 중요하지만, 그 과정에서의 배움도 중요',         '3', 2, 3.00, false, NOW(), NOW()),
-    (@q, 'GOAL_PREFERENCE_OPT_5', '무조건 수상! 결과물 완성도와 스펙이 최우선',           '5', 3, 5.00, false, NOW(), NOW());
+SELECT question_id, 'GOAL_PREFERENCE_OPT_1', '수상보다는 새로운 경험, 네트워킹, 나의 성장이 최우선', '1', 1, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'GOAL_PREFERENCE'
+UNION ALL
+SELECT question_id, 'GOAL_PREFERENCE_OPT_3', '수상도 중요하지만, 그 과정에서의 배움도 중요', '3', 2, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'GOAL_PREFERENCE'
+UNION ALL
+SELECT question_id, 'GOAL_PREFERENCE_OPT_5', '무조건 수상! 결과물 완성도와 스펙이 최우선', '5', 3, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'GOAL_PREFERENCE';
 
 -- -----------------------------------------------------
 -- WORK_STYLE (3개)
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'WORK_STYLE');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'WORK_STYLE_OPT_1', '필요할 때마다 모여서 유연하게 대처하며 협업',            '1', 1, 1.00, false, NOW(), NOW()),
-    (@q, 'WORK_STYLE_OPT_3', '큰 틀만 잡고 상황에 따라 유동적으로 분담',              '3', 2, 3.00, false, NOW(), NOW()),
-    (@q, 'WORK_STYLE_OPT_5', '철저한 사전 기획, 명확한 역할 분담, 꼼꼼한 마일스톤 관리', '5', 3, 5.00, false, NOW(), NOW());
+SELECT question_id, 'WORK_STYLE_OPT_1', '필요할 때마다 모여서 유연하게 대처하며 협업', '1', 1, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'WORK_STYLE'
+UNION ALL
+SELECT question_id, 'WORK_STYLE_OPT_3', '큰 틀만 잡고 상황에 따라 유동적으로 분담', '3', 2, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'WORK_STYLE'
+UNION ALL
+SELECT question_id, 'WORK_STYLE_OPT_5', '철저한 사전 기획, 명확한 역할 분담, 꼼꼼한 마일스톤 관리', '5', 3, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'WORK_STYLE';
 
 -- -----------------------------------------------------
 -- COMMUNICATION_STYLE (3개)
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'COMMUNICATION_STYLE');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'COMMUNICATION_STYLE_OPT_1', '텍스트/온라인(비대면) 위주의 빠르고 효율적인 소통',        '1', 1, 1.00, false, NOW(), NOW()),
-    (@q, 'COMMUNICATION_STYLE_OPT_3', '평소엔 온라인, 중요한 의사결정은 대면',                   '3', 2, 3.00, false, NOW(), NOW()),
-    (@q, 'COMMUNICATION_STYLE_OPT_5', '자주 만나서 아이디어를 나누는 대면 위주의 밀도 있는 소통', '5', 3, 5.00, false, NOW(), NOW());
+SELECT question_id, 'COMMUNICATION_STYLE_OPT_1', '텍스트/온라인(비대면) 위주의 빠르고 효율적인 소통', '1', 1, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'COMMUNICATION_STYLE'
+UNION ALL
+SELECT question_id, 'COMMUNICATION_STYLE_OPT_3', '평소엔 온라인, 중요한 의사결정은 대면', '3', 2, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'COMMUNICATION_STYLE'
+UNION ALL
+SELECT question_id, 'COMMUNICATION_STYLE_OPT_5', '자주 만나서 아이디어를 나누는 대면 위주의 밀도 있는 소통', '5', 3, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'COMMUNICATION_STYLE';
 
 -- -----------------------------------------------------
 -- AGREEABLENESS_1 — 정방향 (score_weight: 1→1, 5→5)
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'AGREEABLENESS_1');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'AGREEABLENESS_1_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()),
-    (@q, 'AGREEABLENESS_1_OPT_2', '그렇지 않다',      '2', 2, 2.00, false, NOW(), NOW()),
-    (@q, 'AGREEABLENESS_1_OPT_3', '보통이다',         '3', 3, 3.00, false, NOW(), NOW()),
-    (@q, 'AGREEABLENESS_1_OPT_4', '그렇다',           '4', 4, 4.00, false, NOW(), NOW()),
-    (@q, 'AGREEABLENESS_1_OPT_5', '매우 그렇다',      '5', 5, 5.00, false, NOW(), NOW());
+SELECT question_id, 'AGREEABLENESS_1_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_1'
+UNION ALL
+SELECT question_id, 'AGREEABLENESS_1_OPT_2', '그렇지 않다', '2', 2, 2.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_1'
+UNION ALL
+SELECT question_id, 'AGREEABLENESS_1_OPT_3', '보통이다', '3', 3, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_1'
+UNION ALL
+SELECT question_id, 'AGREEABLENESS_1_OPT_4', '그렇다', '4', 4, 4.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_1'
+UNION ALL
+SELECT question_id, 'AGREEABLENESS_1_OPT_5', '매우 그렇다', '5', 5, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_1';
 
 -- -----------------------------------------------------
 -- AGREEABLENESS_2 — 정방향
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'AGREEABLENESS_2');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'AGREEABLENESS_2_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()),
-    (@q, 'AGREEABLENESS_2_OPT_2', '그렇지 않다',      '2', 2, 2.00, false, NOW(), NOW()),
-    (@q, 'AGREEABLENESS_2_OPT_3', '보통이다',         '3', 3, 3.00, false, NOW(), NOW()),
-    (@q, 'AGREEABLENESS_2_OPT_4', '그렇다',           '4', 4, 4.00, false, NOW(), NOW()),
-    (@q, 'AGREEABLENESS_2_OPT_5', '매우 그렇다',      '5', 5, 5.00, false, NOW(), NOW());
+SELECT question_id, 'AGREEABLENESS_2_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_2'
+UNION ALL
+SELECT question_id, 'AGREEABLENESS_2_OPT_2', '그렇지 않다', '2', 2, 2.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_2'
+UNION ALL
+SELECT question_id, 'AGREEABLENESS_2_OPT_3', '보통이다', '3', 3, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_2'
+UNION ALL
+SELECT question_id, 'AGREEABLENESS_2_OPT_4', '그렇다', '4', 4, 4.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_2'
+UNION ALL
+SELECT question_id, 'AGREEABLENESS_2_OPT_5', '매우 그렇다', '5', 5, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_2';
 
 -- -----------------------------------------------------
 -- AGREEABLENESS_3 — 역채점 (score_weight: 1→5, 5→1)
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'AGREEABLENESS_3');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'AGREEABLENESS_3_OPT_1', '전혀 그렇지 않다', '1', 1, 5.00, false, NOW(), NOW()),
-    (@q, 'AGREEABLENESS_3_OPT_2', '그렇지 않다',      '2', 2, 4.00, false, NOW(), NOW()),
-    (@q, 'AGREEABLENESS_3_OPT_3', '보통이다',         '3', 3, 3.00, false, NOW(), NOW()),
-    (@q, 'AGREEABLENESS_3_OPT_4', '그렇다',           '4', 4, 2.00, false, NOW(), NOW()),
-    (@q, 'AGREEABLENESS_3_OPT_5', '매우 그렇다',      '5', 5, 1.00, false, NOW(), NOW());
+SELECT question_id, 'AGREEABLENESS_3_OPT_1', '전혀 그렇지 않다', '1', 1, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_3'
+UNION ALL
+SELECT question_id, 'AGREEABLENESS_3_OPT_2', '그렇지 않다', '2', 2, 4.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_3'
+UNION ALL
+SELECT question_id, 'AGREEABLENESS_3_OPT_3', '보통이다', '3', 3, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_3'
+UNION ALL
+SELECT question_id, 'AGREEABLENESS_3_OPT_4', '그렇다', '4', 4, 2.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_3'
+UNION ALL
+SELECT question_id, 'AGREEABLENESS_3_OPT_5', '매우 그렇다', '5', 5, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'AGREEABLENESS_3';
 
 -- -----------------------------------------------------
 -- CONSCIENTIOUSNESS_1 — 정방향
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_1');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'CONSCIENTIOUSNESS_1_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()),
-    (@q, 'CONSCIENTIOUSNESS_1_OPT_2', '그렇지 않다',      '2', 2, 2.00, false, NOW(), NOW()),
-    (@q, 'CONSCIENTIOUSNESS_1_OPT_3', '보통이다',         '3', 3, 3.00, false, NOW(), NOW()),
-    (@q, 'CONSCIENTIOUSNESS_1_OPT_4', '그렇다',           '4', 4, 4.00, false, NOW(), NOW()),
-    (@q, 'CONSCIENTIOUSNESS_1_OPT_5', '매우 그렇다',      '5', 5, 5.00, false, NOW(), NOW());
+SELECT question_id, 'CONSCIENTIOUSNESS_1_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_1'
+UNION ALL
+SELECT question_id, 'CONSCIENTIOUSNESS_1_OPT_2', '그렇지 않다', '2', 2, 2.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_1'
+UNION ALL
+SELECT question_id, 'CONSCIENTIOUSNESS_1_OPT_3', '보통이다', '3', 3, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_1'
+UNION ALL
+SELECT question_id, 'CONSCIENTIOUSNESS_1_OPT_4', '그렇다', '4', 4, 4.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_1'
+UNION ALL
+SELECT question_id, 'CONSCIENTIOUSNESS_1_OPT_5', '매우 그렇다', '5', 5, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_1';
 
 -- -----------------------------------------------------
 -- CONSCIENTIOUSNESS_2 — 정방향
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_2');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'CONSCIENTIOUSNESS_2_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()),
-    (@q, 'CONSCIENTIOUSNESS_2_OPT_2', '그렇지 않다',      '2', 2, 2.00, false, NOW(), NOW()),
-    (@q, 'CONSCIENTIOUSNESS_2_OPT_3', '보통이다',         '3', 3, 3.00, false, NOW(), NOW()),
-    (@q, 'CONSCIENTIOUSNESS_2_OPT_4', '그렇다',           '4', 4, 4.00, false, NOW(), NOW()),
-    (@q, 'CONSCIENTIOUSNESS_2_OPT_5', '매우 그렇다',      '5', 5, 5.00, false, NOW(), NOW());
+SELECT question_id, 'CONSCIENTIOUSNESS_2_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_2'
+UNION ALL
+SELECT question_id, 'CONSCIENTIOUSNESS_2_OPT_2', '그렇지 않다', '2', 2, 2.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_2'
+UNION ALL
+SELECT question_id, 'CONSCIENTIOUSNESS_2_OPT_3', '보통이다', '3', 3, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_2'
+UNION ALL
+SELECT question_id, 'CONSCIENTIOUSNESS_2_OPT_4', '그렇다', '4', 4, 4.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_2'
+UNION ALL
+SELECT question_id, 'CONSCIENTIOUSNESS_2_OPT_5', '매우 그렇다', '5', 5, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_2';
 
 -- -----------------------------------------------------
 -- CONSCIENTIOUSNESS_3 — 역채점
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_3');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'CONSCIENTIOUSNESS_3_OPT_1', '전혀 그렇지 않다', '1', 1, 5.00, false, NOW(), NOW()),
-    (@q, 'CONSCIENTIOUSNESS_3_OPT_2', '그렇지 않다',      '2', 2, 4.00, false, NOW(), NOW()),
-    (@q, 'CONSCIENTIOUSNESS_3_OPT_3', '보통이다',         '3', 3, 3.00, false, NOW(), NOW()),
-    (@q, 'CONSCIENTIOUSNESS_3_OPT_4', '그렇다',           '4', 4, 2.00, false, NOW(), NOW()),
-    (@q, 'CONSCIENTIOUSNESS_3_OPT_5', '매우 그렇다',      '5', 5, 1.00, false, NOW(), NOW());
+SELECT question_id, 'CONSCIENTIOUSNESS_3_OPT_1', '전혀 그렇지 않다', '1', 1, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_3'
+UNION ALL
+SELECT question_id, 'CONSCIENTIOUSNESS_3_OPT_2', '그렇지 않다', '2', 2, 4.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_3'
+UNION ALL
+SELECT question_id, 'CONSCIENTIOUSNESS_3_OPT_3', '보통이다', '3', 3, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_3'
+UNION ALL
+SELECT question_id, 'CONSCIENTIOUSNESS_3_OPT_4', '그렇다', '4', 4, 2.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_3'
+UNION ALL
+SELECT question_id, 'CONSCIENTIOUSNESS_3_OPT_5', '매우 그렇다', '5', 5, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'CONSCIENTIOUSNESS_3';
 
 -- -----------------------------------------------------
 -- HONESTY_HUMILITY_1 — 정방향
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_1');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'HONESTY_HUMILITY_1_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()),
-    (@q, 'HONESTY_HUMILITY_1_OPT_2', '그렇지 않다',      '2', 2, 2.00, false, NOW(), NOW()),
-    (@q, 'HONESTY_HUMILITY_1_OPT_3', '보통이다',         '3', 3, 3.00, false, NOW(), NOW()),
-    (@q, 'HONESTY_HUMILITY_1_OPT_4', '그렇다',           '4', 4, 4.00, false, NOW(), NOW()),
-    (@q, 'HONESTY_HUMILITY_1_OPT_5', '매우 그렇다',      '5', 5, 5.00, false, NOW(), NOW());
+SELECT question_id, 'HONESTY_HUMILITY_1_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_1'
+UNION ALL
+SELECT question_id, 'HONESTY_HUMILITY_1_OPT_2', '그렇지 않다', '2', 2, 2.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_1'
+UNION ALL
+SELECT question_id, 'HONESTY_HUMILITY_1_OPT_3', '보통이다', '3', 3, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_1'
+UNION ALL
+SELECT question_id, 'HONESTY_HUMILITY_1_OPT_4', '그렇다', '4', 4, 4.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_1'
+UNION ALL
+SELECT question_id, 'HONESTY_HUMILITY_1_OPT_5', '매우 그렇다', '5', 5, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_1';
 
 -- -----------------------------------------------------
 -- HONESTY_HUMILITY_2 — 역채점
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_2');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'HONESTY_HUMILITY_2_OPT_1', '전혀 그렇지 않다', '1', 1, 5.00, false, NOW(), NOW()),
-    (@q, 'HONESTY_HUMILITY_2_OPT_2', '그렇지 않다',      '2', 2, 4.00, false, NOW(), NOW()),
-    (@q, 'HONESTY_HUMILITY_2_OPT_3', '보통이다',         '3', 3, 3.00, false, NOW(), NOW()),
-    (@q, 'HONESTY_HUMILITY_2_OPT_4', '그렇다',           '4', 4, 2.00, false, NOW(), NOW()),
-    (@q, 'HONESTY_HUMILITY_2_OPT_5', '매우 그렇다',      '5', 5, 1.00, false, NOW(), NOW());
+SELECT question_id, 'HONESTY_HUMILITY_2_OPT_1', '전혀 그렇지 않다', '1', 1, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_2'
+UNION ALL
+SELECT question_id, 'HONESTY_HUMILITY_2_OPT_2', '그렇지 않다', '2', 2, 4.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_2'
+UNION ALL
+SELECT question_id, 'HONESTY_HUMILITY_2_OPT_3', '보통이다', '3', 3, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_2'
+UNION ALL
+SELECT question_id, 'HONESTY_HUMILITY_2_OPT_4', '그렇다', '4', 4, 2.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_2'
+UNION ALL
+SELECT question_id, 'HONESTY_HUMILITY_2_OPT_5', '매우 그렇다', '5', 5, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_2';
 
 -- -----------------------------------------------------
 -- HONESTY_HUMILITY_3 — 역채점
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_3');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'HONESTY_HUMILITY_3_OPT_1', '전혀 그렇지 않다', '1', 1, 5.00, false, NOW(), NOW()),
-    (@q, 'HONESTY_HUMILITY_3_OPT_2', '그렇지 않다',      '2', 2, 4.00, false, NOW(), NOW()),
-    (@q, 'HONESTY_HUMILITY_3_OPT_3', '보통이다',         '3', 3, 3.00, false, NOW(), NOW()),
-    (@q, 'HONESTY_HUMILITY_3_OPT_4', '그렇다',           '4', 4, 2.00, false, NOW(), NOW()),
-    (@q, 'HONESTY_HUMILITY_3_OPT_5', '매우 그렇다',      '5', 5, 1.00, false, NOW(), NOW());
+SELECT question_id, 'HONESTY_HUMILITY_3_OPT_1', '전혀 그렇지 않다', '1', 1, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_3'
+UNION ALL
+SELECT question_id, 'HONESTY_HUMILITY_3_OPT_2', '그렇지 않다', '2', 2, 4.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_3'
+UNION ALL
+SELECT question_id, 'HONESTY_HUMILITY_3_OPT_3', '보통이다', '3', 3, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_3'
+UNION ALL
+SELECT question_id, 'HONESTY_HUMILITY_3_OPT_4', '그렇다', '4', 4, 2.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_3'
+UNION ALL
+SELECT question_id, 'HONESTY_HUMILITY_3_OPT_5', '매우 그렇다', '5', 5, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'HONESTY_HUMILITY_3';
 
 -- -----------------------------------------------------
 -- EXTROVERSION_1 — 정방향
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'EXTROVERSION_1');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'EXTROVERSION_1_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()),
-    (@q, 'EXTROVERSION_1_OPT_2', '그렇지 않다',      '2', 2, 2.00, false, NOW(), NOW()),
-    (@q, 'EXTROVERSION_1_OPT_3', '보통이다',         '3', 3, 3.00, false, NOW(), NOW()),
-    (@q, 'EXTROVERSION_1_OPT_4', '그렇다',           '4', 4, 4.00, false, NOW(), NOW()),
-    (@q, 'EXTROVERSION_1_OPT_5', '매우 그렇다',      '5', 5, 5.00, false, NOW(), NOW());
+SELECT question_id, 'EXTROVERSION_1_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_1'
+UNION ALL
+SELECT question_id, 'EXTROVERSION_1_OPT_2', '그렇지 않다', '2', 2, 2.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_1'
+UNION ALL
+SELECT question_id, 'EXTROVERSION_1_OPT_3', '보통이다', '3', 3, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_1'
+UNION ALL
+SELECT question_id, 'EXTROVERSION_1_OPT_4', '그렇다', '4', 4, 4.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_1'
+UNION ALL
+SELECT question_id, 'EXTROVERSION_1_OPT_5', '매우 그렇다', '5', 5, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_1';
 
 -- -----------------------------------------------------
 -- EXTROVERSION_2 — 정방향
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'EXTROVERSION_2');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'EXTROVERSION_2_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()),
-    (@q, 'EXTROVERSION_2_OPT_2', '그렇지 않다',      '2', 2, 2.00, false, NOW(), NOW()),
-    (@q, 'EXTROVERSION_2_OPT_3', '보통이다',         '3', 3, 3.00, false, NOW(), NOW()),
-    (@q, 'EXTROVERSION_2_OPT_4', '그렇다',           '4', 4, 4.00, false, NOW(), NOW()),
-    (@q, 'EXTROVERSION_2_OPT_5', '매우 그렇다',      '5', 5, 5.00, false, NOW(), NOW());
+SELECT question_id, 'EXTROVERSION_2_OPT_1', '전혀 그렇지 않다', '1', 1, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_2'
+UNION ALL
+SELECT question_id, 'EXTROVERSION_2_OPT_2', '그렇지 않다', '2', 2, 2.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_2'
+UNION ALL
+SELECT question_id, 'EXTROVERSION_2_OPT_3', '보통이다', '3', 3, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_2'
+UNION ALL
+SELECT question_id, 'EXTROVERSION_2_OPT_4', '그렇다', '4', 4, 4.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_2'
+UNION ALL
+SELECT question_id, 'EXTROVERSION_2_OPT_5', '매우 그렇다', '5', 5, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_2';
 
 -- -----------------------------------------------------
 -- EXTROVERSION_3 — 역채점
 -- -----------------------------------------------------
-SET @q = (SELECT question_id FROM survey_questions WHERE question_key = 'EXTROVERSION_3');
 INSERT INTO survey_options (question_id, option_key, option_label, option_value, display_order, score_weight,
                              is_other_option, created_at, updated_at)
-VALUES
-    (@q, 'EXTROVERSION_3_OPT_1', '전혀 그렇지 않다', '1', 1, 5.00, false, NOW(), NOW()),
-    (@q, 'EXTROVERSION_3_OPT_2', '그렇지 않다',      '2', 2, 4.00, false, NOW(), NOW()),
-    (@q, 'EXTROVERSION_3_OPT_3', '보통이다',         '3', 3, 3.00, false, NOW(), NOW()),
-    (@q, 'EXTROVERSION_3_OPT_4', '그렇다',           '4', 4, 2.00, false, NOW(), NOW()),
-    (@q, 'EXTROVERSION_3_OPT_5', '매우 그렇다',      '5', 5, 1.00, false, NOW(), NOW());
+SELECT question_id, 'EXTROVERSION_3_OPT_1', '전혀 그렇지 않다', '1', 1, 5.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_3'
+UNION ALL
+SELECT question_id, 'EXTROVERSION_3_OPT_2', '그렇지 않다', '2', 2, 4.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_3'
+UNION ALL
+SELECT question_id, 'EXTROVERSION_3_OPT_3', '보통이다', '3', 3, 3.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_3'
+UNION ALL
+SELECT question_id, 'EXTROVERSION_3_OPT_4', '그렇다', '4', 4, 2.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_3'
+UNION ALL
+SELECT question_id, 'EXTROVERSION_3_OPT_5', '매우 그렇다', '5', 5, 1.00, false, NOW(), NOW()
+FROM survey_questions WHERE question_key = 'EXTROVERSION_3';
