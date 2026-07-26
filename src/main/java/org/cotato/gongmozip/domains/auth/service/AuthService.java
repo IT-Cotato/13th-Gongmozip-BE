@@ -6,6 +6,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.auth.dto.request.AuthRequest.LoginRequest;
@@ -122,15 +123,13 @@ public class AuthService {
 
     // 비밀번호 재설정 인증 코드 전송 메서드
     public void sendPasswordResetCode(PasswordResetCodeRequest request) {
-        // 이메일이 존재하지 않는 경우
-        Member member = memberRepository
-                .findByEmail(request.email())
-                .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
-
-        // 이메일 로그인 계정이 아닌 경우
-        if (!authAccountRepository.existsByMemberAndProvider(member, AuthProvider.EMAIL)) {
-            throw new AuthException(AuthErrorCode.PASSWORD_RESET_UNAVAILABLE);
+        // 미가입 이메일이나 소셜 전용 계정은 계정 존재 여부를 노출하지 않기 위해 조용히 반환
+        Optional<Member> memberOpt = memberRepository.findByEmail(request.email());
+        if (memberOpt.isEmpty() || !authAccountRepository.existsByMemberAndProvider(memberOpt.get(), AuthProvider.EMAIL)) {
+            return;
         }
+
+        Member member = memberOpt.get();
 
         // 쿨다운이 남아 있으면 재발송 거부
         String cooldownKey = PASSWORD_RESET_COOLDOWN_PREFIX + member.getMemberId();
@@ -152,15 +151,13 @@ public class AuthService {
 
     // 비밀번호 재설정 인증 코드 확인 메서드
     public PasswordResetVerifyResponse verifyPasswordResetCode(PasswordResetCodeVerifyRequest request) {
-        // 이메일이 존재하지 않는 경우
-        Member member = memberRepository
-                .findByEmail(request.email())
-                .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
-
-        // 이메일 로그인 계정이 아닌 경우
-        if (!authAccountRepository.existsByMemberAndProvider(member, AuthProvider.EMAIL)) {
-            throw new AuthException(AuthErrorCode.PASSWORD_RESET_UNAVAILABLE);
+        // 미가입 이메일이나 소셜 전용 계정은 코드를 발급한 적 없는 경우와 동일하게 처리
+        Optional<Member> memberOpt = memberRepository.findByEmail(request.email());
+        if (memberOpt.isEmpty() || !authAccountRepository.existsByMemberAndProvider(memberOpt.get(), AuthProvider.EMAIL)) {
+            throw new AuthException(AuthErrorCode.PASSWORD_RESET_CODE_NOT_ISSUED);
         }
+
+        Member member = memberOpt.get();
 
         // 공통 이메일 인증 결과를 auth 도메인 예외로 변환
         EmailVerificationResult result =
