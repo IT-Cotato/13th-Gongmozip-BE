@@ -251,7 +251,15 @@ public class SurveyService {
 
     // 질문 키로 해당 답변의 점수를 반환한다
     private BigDecimal scoreOf(String key, Map<String, Long> keyToId, Map<Long, SurveyOption> answerMap) {
-        return answerMap.get(keyToId.get(key)).getScoreWeight();
+        Long questionId = keyToId.get(key);
+        if (questionId == null) {
+            throw new SurveyException(SurveyErrorCode.QUESTION_NOT_FOUND);
+        }
+        SurveyOption option = answerMap.get(questionId);
+        if (option == null) {
+            throw new SurveyException(SurveyErrorCode.MISSING_REQUIRED_ANSWER);
+        }
+        return option.getScoreWeight();
     }
 
     // 3문항 평균 (소수점 둘째 자리 반올림)
