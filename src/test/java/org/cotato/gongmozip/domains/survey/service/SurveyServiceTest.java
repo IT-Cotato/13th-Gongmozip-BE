@@ -190,6 +190,21 @@ class SurveyServiceTest {
         then(surveySubmissionRepository).shouldHaveNoInteractions();
     }
 
+    @DisplayName("점수 계산에 필요한 질문 키가 없으면 제출할 수 없다")
+    @Test
+    void submitSurvey_rejectsMissingScoreQuestionKey() {
+        SurveyFixture fixture = surveyFixture("3");
+        fixture.questions().removeLast();
+        fixture.options().removeLast();
+        SubmitSurveyRequest request =
+                new SubmitSurveyRequest(fixture.request().answers().subList(0, QUESTION_KEYS.size() - 1));
+        stubQuestions(fixture);
+        given(surveySubmissionRepository.save(any(SurveySubmission.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        assertSurveyError(request, SurveyErrorCode.QUESTION_NOT_FOUND);
+    }
+
     @DisplayName("존재하지 않는 질문 ID가 포함되면 제출할 수 없다")
     @Test
     void submitSurvey_rejectsUnknownQuestion() {

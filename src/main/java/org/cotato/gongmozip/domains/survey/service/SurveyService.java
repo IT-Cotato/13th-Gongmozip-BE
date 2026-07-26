@@ -45,6 +45,22 @@ public class SurveyService {
     // 캐릭터 유형 결정 임계값: 만점(15점)의 절반 초과 기준
     private static final BigDecimal CHARACTER_THRESHOLD = new BigDecimal("8");
     private static final int RETAKE_INTERVAL_MONTHS = 3;
+    private static final Set<String> REQUIRED_SCORE_QUESTION_KEYS = Set.of(
+            "AGREEABLENESS_1",
+            "AGREEABLENESS_2",
+            "AGREEABLENESS_3",
+            "CONSCIENTIOUSNESS_1",
+            "CONSCIENTIOUSNESS_2",
+            "CONSCIENTIOUSNESS_3",
+            "HONESTY_HUMILITY_1",
+            "HONESTY_HUMILITY_2",
+            "HONESTY_HUMILITY_3",
+            "EXTROVERSION_1",
+            "EXTROVERSION_2",
+            "EXTROVERSION_3",
+            "GOAL_PREFERENCE",
+            "WORK_STYLE",
+            "COMMUNICATION_STYLE");
 
     private final SurveyQuestionRepository surveyQuestionRepository;
     private final SurveyOptionRepository surveyOptionRepository;
@@ -178,6 +194,10 @@ public class SurveyService {
     // 답변 기반으로 HEXACO 점수와 팀 성향 점수를 계산해 submission에 기록한다
     private void calculateAndRecordScores(
             SurveySubmission submission, Map<Long, SurveyOption> answerMap, Map<String, Long> keyToId) {
+
+        if (!keyToId.keySet().containsAll(REQUIRED_SCORE_QUESTION_KEYS)) {
+            throw new SurveyException(SurveyErrorCode.QUESTION_NOT_FOUND);
+        }
 
         // HEXACO 4개 요인: 각 3문항 평균
         BigDecimal agreeableness = avg(
