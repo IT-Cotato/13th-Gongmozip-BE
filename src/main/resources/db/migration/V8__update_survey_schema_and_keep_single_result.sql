@@ -236,6 +236,22 @@ ALTER TABLE personality_profiles
 ALTER TABLE matching_applications
     RENAME COLUMN profile_id TO matching_application_id;
 
+-- 모든 점수 데이터가 채워진 뒤 NOT NULL 제약을 적용한다.
+ALTER TABLE survey_submissions
+    MODIFY COLUMN agreeableness_score      DECIMAL(5, 2) NOT NULL,
+    MODIFY COLUMN conscientiousness_score  DECIMAL(5, 2) NOT NULL,
+    MODIFY COLUMN honesty_humility_score   DECIMAL(5, 2) NOT NULL,
+    MODIFY COLUMN extroversion_score       DECIMAL(5, 2) NOT NULL,
+    MODIFY COLUMN goal_preference_score    DECIMAL(5, 2) NOT NULL,
+    MODIFY COLUMN work_style_score         DECIMAL(5, 2) NOT NULL,
+    MODIFY COLUMN communication_style_score DECIMAL(5, 2) NOT NULL,
+    MODIFY COLUMN extroversion_2_score     DECIMAL(5, 2) NOT NULL,
+    MODIFY COLUMN extroversion_3_score     DECIMAL(5, 2) NOT NULL,
+    MODIFY COLUMN extroversion_type        VARCHAR(1)    NOT NULL,
+    MODIFY COLUMN character_type           VARCHAR(50)   NOT NULL,
+    MODIFY COLUMN character_x_score        DECIMAL(5, 2) NOT NULL,
+    MODIFY COLUMN character_y_score        DECIMAL(5, 2) NOT NULL;
+
 -- 애플리케이션의 단일 제출 및 문항별 단일 답변 규칙을 DB 제약으로도 보장한다.
 ALTER TABLE survey_submissions
     ADD CONSTRAINT uq_survey_submissions_member UNIQUE (member_id);
