@@ -33,6 +33,7 @@ import org.cotato.gongmozip.domains.survey.repository.SurveyAnswerRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyOptionRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyQuestionRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveySubmissionRepository;
+import org.cotato.gongmozip.domains.survey.vo.SurveyScoreSnapshot;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -199,20 +200,22 @@ public class SurveyService {
         // Y축: 소통방식 + 외향성2 + 외향성3 (만점 15)
         BigDecimal yScore = communicationStyle.add(extroversion2).add(extroversion3);
 
-        submission.recordScores(
-                agreeableness,
-                conscientiousness,
-                honestyHumility,
-                extroversion,
-                goalPreference,
-                workStyle,
-                communicationStyle,
-                extroversion2,
-                extroversion3,
-                resolveExtroversionType(extroversion),
-                resolveCharacterType(xScore, yScore),
-                xScore,
-                yScore);
+        SurveyScoreSnapshot snapshot = SurveyScoreSnapshot.builder()
+                .agreeablenessScore(agreeableness)
+                .conscientiousnessScore(conscientiousness)
+                .honestyHumilityScore(honestyHumility)
+                .extroversionScore(extroversion)
+                .goalPreferenceScore(goalPreference)
+                .workStyleScore(workStyle)
+                .communicationStyleScore(communicationStyle)
+                .extroversion2Score(extroversion2)
+                .extroversion3Score(extroversion3)
+                .extroversionType(resolveExtroversionType(extroversion))
+                .characterType(resolveCharacterType(xScore, yScore))
+                .characterXScore(xScore)
+                .characterYScore(yScore)
+                .build();
+        submission.recordScores(snapshot);
     }
 
     // 질문 키로 해당 답변의 점수를 반환한다

@@ -31,6 +31,7 @@ import org.cotato.gongmozip.domains.survey.repository.SurveyAnswerRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyOptionRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyQuestionRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveySubmissionRepository;
+import org.cotato.gongmozip.domains.survey.vo.SurveyScoreSnapshot;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -234,7 +235,17 @@ class SurveyServiceTest {
 
         assertThat(response.characterType()).isEqualTo(CharacterType.FREE_RUNNER);
         assertThat(response.extroversionType()).isEqualTo(ExtroversionType.I);
-        assertThat(response.characterXScore()).isEqualByComparingTo("3");
+        assertThat(response.characterXScore()).isEqualByComparingTo("5.3");
+        assertThat(response.characterYScore()).isEqualByComparingTo("7.2");
+        assertThat(response.agreeablenessScore()).isEqualByComparingTo("1.1");
+        assertThat(response.conscientiousnessScore()).isEqualByComparingTo("1.2");
+        assertThat(response.honestyHumilityScore()).isEqualByComparingTo("1.3");
+        assertThat(response.extroversionScore()).isEqualByComparingTo("1.4");
+        assertThat(response.goalPreferenceScore()).isEqualByComparingTo("2.1");
+        assertThat(response.workStyleScore()).isEqualByComparingTo("2.2");
+        assertThat(response.communicationStyleScore()).isEqualByComparingTo("2.3");
+        assertThat(submission.getExtroversion2Score()).isEqualByComparingTo("2.4");
+        assertThat(submission.getExtroversion3Score()).isEqualByComparingTo("2.5");
         assertThat(response.axes()).hasSize(3);
     }
 
@@ -309,26 +320,27 @@ class SurveyServiceTest {
     }
 
     private SurveySubmission submittedSubmissionWithScores() {
-        BigDecimal oldScore = new BigDecimal("1");
         SurveySubmission submission = SurveySubmission.builder()
                 .surveySubmissionId(10L)
                 .member(member)
                 .status(SubmissionStatus.SUBMITTED)
                 .build();
-        submission.recordScores(
-                oldScore,
-                oldScore,
-                oldScore,
-                oldScore,
-                oldScore,
-                oldScore,
-                oldScore,
-                oldScore,
-                oldScore,
-                ExtroversionType.I,
-                CharacterType.FREE_RUNNER,
-                new BigDecimal("3"),
-                new BigDecimal("3"));
+        SurveyScoreSnapshot snapshot = SurveyScoreSnapshot.builder()
+                .agreeablenessScore(new BigDecimal("1.1"))
+                .conscientiousnessScore(new BigDecimal("1.2"))
+                .honestyHumilityScore(new BigDecimal("1.3"))
+                .extroversionScore(new BigDecimal("1.4"))
+                .goalPreferenceScore(new BigDecimal("2.1"))
+                .workStyleScore(new BigDecimal("2.2"))
+                .communicationStyleScore(new BigDecimal("2.3"))
+                .extroversion2Score(new BigDecimal("2.4"))
+                .extroversion3Score(new BigDecimal("2.5"))
+                .extroversionType(ExtroversionType.I)
+                .characterType(CharacterType.FREE_RUNNER)
+                .characterXScore(new BigDecimal("5.3"))
+                .characterYScore(new BigDecimal("7.2"))
+                .build();
+        submission.recordScores(snapshot);
         return submission;
     }
 

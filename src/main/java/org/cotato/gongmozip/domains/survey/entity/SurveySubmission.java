@@ -22,6 +22,7 @@ import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.survey.enums.CharacterType;
 import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
 import org.cotato.gongmozip.domains.survey.enums.SubmissionStatus;
+import org.cotato.gongmozip.domains.survey.vo.SurveyScoreSnapshot;
 import org.cotato.gongmozip.global.entity.BaseEntity;
 
 @Getter
@@ -108,32 +109,19 @@ public class SurveySubmission extends BaseEntity {
         this.submittedAt = LocalDateTime.now();
     }
 
-    public void recordScores(
-            BigDecimal agreeablenessScore,
-            BigDecimal conscientiousnessScore,
-            BigDecimal honestyHumilityScore,
-            BigDecimal extroversionScore,
-            BigDecimal goalPreferenceScore,
-            BigDecimal workStyleScore,
-            BigDecimal communicationStyleScore,
-            BigDecimal extroversion2Score,
-            BigDecimal extroversion3Score,
-            ExtroversionType extroversionType,
-            CharacterType characterType,
-            BigDecimal characterXScore,
-            BigDecimal characterYScore) {
-        this.agreeablenessScore = agreeablenessScore;
-        this.conscientiousnessScore = conscientiousnessScore;
-        this.honestyHumilityScore = honestyHumilityScore;
-        this.extroversionScore = extroversionScore;
-        this.goalPreferenceScore = goalPreferenceScore;
-        this.workStyleScore = workStyleScore;
-        this.communicationStyleScore = communicationStyleScore;
-        this.extroversion2Score = extroversion2Score;
-        this.extroversion3Score = extroversion3Score;
-        this.extroversionType = extroversionType;
-        this.characterType = characterType;
-        this.characterXScore = characterXScore;
-        this.characterYScore = characterYScore;
+    public void recordScores(SurveyScoreSnapshot snapshot) {
+        this.agreeablenessScore = snapshot.agreeablenessScore();
+        this.conscientiousnessScore = snapshot.conscientiousnessScore();
+        this.honestyHumilityScore = snapshot.honestyHumilityScore();
+        this.extroversionScore = snapshot.extroversionScore();
+        this.goalPreferenceScore = snapshot.goalPreferenceScore();
+        this.workStyleScore = snapshot.workStyleScore();
+        this.communicationStyleScore = snapshot.communicationStyleScore();
+        this.extroversion2Score = snapshot.extroversion2Score();
+        this.extroversion3Score = snapshot.extroversion3Score();
+        this.extroversionType = snapshot.extroversionType();
+        this.characterType = snapshot.characterType();
+        this.characterXScore = snapshot.characterXScore();
+        this.characterYScore = snapshot.characterYScore();
     }
 }
