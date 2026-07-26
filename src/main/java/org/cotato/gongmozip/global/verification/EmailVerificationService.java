@@ -64,13 +64,6 @@ public class EmailVerificationService {
 
     // 이메일 인증 코드 확인 메서드
     public EmailVerificationResult verifyCode(Purpose purpose, String email, String code) {
-        // 인증 실패 횟수가 최대 횟수에 도달한 경우
-        String failKey = failKey(purpose, email);
-        String failCount = redisUtil.get(failKey);
-        if (failCount != null && Integer.parseInt(failCount) >= MAX_VERIFY_ATTEMPTS) {
-            return EmailVerificationResult.TOO_MANY_ATTEMPTS;
-        }
-
         // redis에 저장된 인증 코드 조회
         String codeKey = codeKey(purpose, email);
         String storedCode = redisUtil.get(codeKey);
@@ -82,13 +75,16 @@ public class EmailVerificationService {
                     : EmailVerificationResult.CODE_NOT_ISSUED;
         }
 
-        // 코드가 일치하지 않으면 실패 횟수 증가
+        // 코드가 일치하지 않으면 실패 횟수를 원자적으로 증가 후 반환값으로 잠금 여부 판단
         if (!storedCode.equals(code)) {
-            redisUtil.incrementWithTtl(failKey, CODE_TTL_MINUTES, TimeUnit.MINUTES);
-            return EmailVerificationResult.INVALID_CODE;
+            long failCount = redisUtil.incrementWithTtl(failKey(purpose, email), CODE_TTL_MINUTES, TimeUnit.MINUTES);
+            return failCount >= MAX_VERIFY_ATTEMPTS
+                    ? EmailVerificationResult.TOO_MANY_ATTEMPTS
+                    : EmailVerificationResult.INVALID_CODE;
         }
 
         // 인증 성공 시 코드, 발급 이력, 실패 횟수 삭제
+        String failKey = failKey(purpose, email);
         redisUtil.delete(codeKey);
         redisUtil.delete(issuedKey(purpose, email));
         redisUtil.delete(failKey);
