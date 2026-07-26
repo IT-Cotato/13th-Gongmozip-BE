@@ -202,6 +202,10 @@ WHERE EXISTS (
     WHERE ss.member_id = personality_profiles.member_id
 );
 
+-- 설문 제출 이력이 없는 프로필은 점수가 NULL로 남으므로 NOT NULL 제약 전에 정리한다.
+DELETE FROM personality_profiles
+WHERE member_id NOT IN (SELECT member_id FROM survey_submissions);
+
 ALTER TABLE personality_profiles
     MODIFY COLUMN extroversion_2_score DECIMAL(5, 2) NOT NULL;
 
@@ -235,6 +239,17 @@ ALTER TABLE personality_profiles
 
 ALTER TABLE matching_applications
     RENAME COLUMN profile_id TO matching_application_id;
+
+-- 점수가 채워지지 않은 제출 이력은 NOT NULL 제약 전에 정리한다.
+DELETE FROM survey_answers
+WHERE submission_id IN (
+    SELECT survey_submission_id
+    FROM survey_submissions
+    WHERE agreeableness_score IS NULL
+);
+
+DELETE FROM survey_submissions
+WHERE agreeableness_score IS NULL;
 
 -- 모든 점수 데이터가 채워진 뒤 NOT NULL 제약을 적용한다.
 ALTER TABLE survey_submissions
