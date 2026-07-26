@@ -12,13 +12,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.cotato.gongmozip.domains.member.entity.Member;
-import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.survey.dto.request.SurveyRequest.AnswerRequest;
 import org.cotato.gongmozip.domains.survey.dto.request.SurveyRequest.SubmitSurveyRequest;
 import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.QuestionListResponse;
 import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.SurveyResultResponse;
 import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.SurveyStatusResponse;
-import org.cotato.gongmozip.domains.survey.entity.PersonalityProfile;
 import org.cotato.gongmozip.domains.survey.entity.SurveyOption;
 import org.cotato.gongmozip.domains.survey.entity.SurveyQuestion;
 import org.cotato.gongmozip.domains.survey.entity.SurveySubmission;
@@ -28,7 +26,6 @@ import org.cotato.gongmozip.domains.survey.enums.QuestionType;
 import org.cotato.gongmozip.domains.survey.enums.SubmissionStatus;
 import org.cotato.gongmozip.domains.survey.exception.SurveyException;
 import org.cotato.gongmozip.domains.survey.exception.codes.SurveyErrorCode;
-import org.cotato.gongmozip.domains.survey.repository.PersonalityProfileRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyAnswerRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyOptionRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyQuestionRepository;
@@ -76,9 +73,6 @@ class SurveyServiceTest {
     @Mock
     private SurveyAnswerRepository surveyAnswerRepository;
 
-    @Mock
-    private PersonalityProfileRepository personalityProfileRepository;
-
     @InjectMocks
     private SurveyService surveyService;
 
@@ -121,7 +115,7 @@ class SurveyServiceTest {
         assertThat(response.status()).isEqualTo("SUBMITTED");
     }
 
-    @DisplayName("최초 설문 제출 시 제출, 답변, 성향 프로필을 생성한다")
+    @DisplayName("최초 설문 제출 시 제출과 답변을 생성하고 점수를 submission에 기록한다")
     @Test
     void submitSurvey_createsSurveyData() {
         SurveyFixture fixture = surveyFixture("5");
@@ -129,19 +123,15 @@ class SurveyServiceTest {
         given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.empty());
         given(surveySubmissionRepository.save(any(SurveySubmission.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
-        given(personalityProfileRepository.findTopByMemberOrderByProfileIdDesc(member))
-                .willReturn(Optional.empty());
 
         SurveyResultResponse response = surveyService.submitSurvey(member, fixture.request());
 
         ArgumentCaptor<SurveySubmission> submissionCaptor = ArgumentCaptor.forClass(SurveySubmission.class);
-        ArgumentCaptor<PersonalityProfile> profileCaptor = ArgumentCaptor.forClass(PersonalityProfile.class);
         then(surveySubmissionRepository).should().save(submissionCaptor.capture());
         then(surveyAnswerRepository).should().saveAll(any());
-        then(personalityProfileRepository).should().save(profileCaptor.capture());
         assertThat(submissionCaptor.getValue().getStatus()).isEqualTo(SubmissionStatus.SUBMITTED);
         assertThat(submissionCaptor.getValue().getSubmittedAt()).isNotNull();
-        assertThat(profileCaptor.getValue().getMember()).isSameAs(member);
+        assertThat(submissionCaptor.getValue().getAgreeablenessScore()).isEqualByComparingTo("5.00");
         assertThat(response.characterType()).isEqualTo(CharacterType.LEAD_RUNNER);
         assertThat(response.extroversionType()).isEqualTo(ExtroversionType.E);
         assertThat(response.agreeablenessScore()).isEqualByComparingTo("5.00");
@@ -150,16 +140,13 @@ class SurveyServiceTest {
         assertThat(response.axes()).hasSize(3);
     }
 
-    @DisplayName("재설문하면 기존 제출과 성향 프로필을 재사용하고 답변과 점수만 교체한다")
+    @DisplayName("재설문하면 기존 제출을 재사용하고 답변과 점수만 교체한다")
     @Test
-    void resubmit_reusesSubmissionAndPersonalityProfile() {
+    void resubmit_reusesSubmissionAndUpdatesScores() {
         SurveyFixture fixture = surveyFixture("5");
         stubQuestions(fixture);
         SurveySubmission submission = submission();
-        PersonalityProfile profile = existingProfile();
         given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.of(submission));
-        given(personalityProfileRepository.findTopByMemberOrderByProfileIdDesc(member))
-                .willReturn(Optional.of(profile));
 
         surveyService.submitSurvey(member, fixture.request());
 
@@ -167,14 +154,9 @@ class SurveyServiceTest {
         then(surveyAnswerRepository).should().deleteAllBySubmission(submission);
         then(surveyAnswerRepository).should().flush();
         then(surveyAnswerRepository).should().saveAll(any());
-        then(personalityProfileRepository).should().save(profile);
-        assertThat(profile.getProfileId()).isEqualTo(20L);
-        assertThat(profile.getAgreeablenessScore()).isEqualByComparingTo("5.00");
-        assertThat(profile.getContestCategory()).isEqualTo(InterestCategory.IT_AI_TECH);
-        assertThat(profile.getSkillScore()).isEqualByComparingTo("77.50");
-        assertThat(profile.getCollaborationDistance()).isEqualTo(300);
         assertThat(submission.getStatus()).isEqualTo(SubmissionStatus.SUBMITTED);
         assertThat(submission.getSubmittedAt()).isNotNull();
+        assertThat(submission.getAgreeablenessScore()).isEqualByComparingTo("5.00");
     }
 
     @DisplayName("필수 질문의 답변이 누락되면 제출할 수 없다")
@@ -229,9 +211,8 @@ class SurveyServiceTest {
     @DisplayName("저장된 성향 결과를 조회한다")
     @Test
     void getResult_returnsStoredProfile() {
-        PersonalityProfile profile = existingProfile();
-        given(personalityProfileRepository.findTopByMemberOrderByProfileIdDesc(member))
-                .willReturn(Optional.of(profile));
+        SurveySubmission submission = submittedSubmissionWithScores();
+        given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.of(submission));
 
         SurveyResultResponse response = surveyService.getResult(member);
 
@@ -244,8 +225,7 @@ class SurveyServiceTest {
     @DisplayName("저장된 성향 결과가 없으면 예외가 발생한다")
     @Test
     void getResult_throwsWhenProfileDoesNotExist() {
-        given(personalityProfileRepository.findTopByMemberOrderByProfileIdDesc(member))
-                .willReturn(Optional.empty());
+        given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> surveyService.getResult(member))
                 .isInstanceOf(SurveyException.class)
@@ -307,29 +287,28 @@ class SurveyServiceTest {
                 .build();
     }
 
-    private PersonalityProfile existingProfile() {
+    private SurveySubmission submittedSubmissionWithScores() {
         BigDecimal oldScore = new BigDecimal("1");
-        return PersonalityProfile.builder()
-                .profileId(20L)
+        SurveySubmission submission = SurveySubmission.builder()
+                .surveySubmissionId(10L)
                 .member(member)
-                .contestCategory(InterestCategory.IT_AI_TECH)
-                .skillScore(new BigDecimal("77.50"))
-                .skillGroup(3)
-                .collaborationDistance(300)
-                .agreeablenessScore(oldScore)
-                .conscientiousnessScore(oldScore)
-                .honestyHumilityScore(oldScore)
-                .extroversionScore(oldScore)
-                .goalPreferenceScore(oldScore)
-                .workStyleScore(oldScore)
-                .communicationStyleScore(oldScore)
-                .extroversion2Score(oldScore)
-                .extroversion3Score(oldScore)
-                .extroversionType(ExtroversionType.I)
-                .characterType(CharacterType.FREE_RUNNER)
-                .characterXScore(new BigDecimal("3"))
-                .characterYScore(new BigDecimal("3"))
+                .status(SubmissionStatus.SUBMITTED)
                 .build();
+        submission.recordScores(
+                oldScore,
+                oldScore,
+                oldScore,
+                oldScore,
+                oldScore,
+                oldScore,
+                oldScore,
+                oldScore,
+                oldScore,
+                ExtroversionType.I,
+                CharacterType.FREE_RUNNER,
+                new BigDecimal("3"),
+                new BigDecimal("3"));
+        return submission;
     }
 
     private record SurveyFixture(

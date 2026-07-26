@@ -11,12 +11,11 @@ import org.cotato.gongmozip.domains.member.enums.MemberStatus;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.survey.dto.request.SurveyRequest.AnswerRequest;
 import org.cotato.gongmozip.domains.survey.dto.request.SurveyRequest.SubmitSurveyRequest;
-import org.cotato.gongmozip.domains.survey.entity.PersonalityProfile;
 import org.cotato.gongmozip.domains.survey.entity.SurveyOption;
 import org.cotato.gongmozip.domains.survey.entity.SurveyQuestion;
 import org.cotato.gongmozip.domains.survey.entity.SurveySubmission;
 import org.cotato.gongmozip.domains.survey.enums.QuestionType;
-import org.cotato.gongmozip.domains.survey.repository.PersonalityProfileRepository;
+import org.cotato.gongmozip.domains.survey.repository.MatchingApplicationRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyAnswerRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyOptionRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyQuestionRepository;
@@ -67,12 +66,12 @@ class SurveyServiceIntegrationTest {
     private SurveyAnswerRepository surveyAnswerRepository;
 
     @Autowired
-    private PersonalityProfileRepository personalityProfileRepository;
+    private MatchingApplicationRepository matchingApplicationRepository;
 
     @Autowired
     private EntityManager entityManager;
 
-    @DisplayName("재설문해도 회원별 제출과 성향 결과는 하나만 유지되고 답변은 교체된다")
+    @DisplayName("재설문해도 회원별 제출은 하나만 유지되고 답변과 점수는 교체된다")
     @Test
     void resubmit_replacesAnswersAndUpdatesExistingRows() {
         surveyOptionRepository.deleteAllInBatch();
@@ -89,13 +88,10 @@ class SurveyServiceIntegrationTest {
 
         SurveySubmission firstSubmission =
                 surveySubmissionRepository.findByMember(member).orElseThrow();
-        PersonalityProfile firstProfile = personalityProfileRepository
-                .findTopByMemberOrderByProfileIdDesc(member)
-                .orElseThrow();
         Long submissionId = firstSubmission.getSurveySubmissionId();
-        Long profileId = firstProfile.getProfileId();
         assertThat(surveyAnswerRepository.findBySubmission(firstSubmission)).hasSize(15);
-        assertThat(firstProfile.getAgreeablenessScore()).isEqualByComparingTo("1.00");
+        assertThat(firstSubmission.getAgreeablenessScore()).isEqualByComparingTo("1.00");
+        assertThat(matchingApplicationRepository.count()).isZero();
 
         surveyService.submitSurvey(member, requests.highScoreRequest());
         entityManager.flush();
@@ -104,19 +100,16 @@ class SurveyServiceIntegrationTest {
         Member persistedMember = memberRepository.findById(member.getMemberId()).orElseThrow();
         SurveySubmission updatedSubmission =
                 surveySubmissionRepository.findByMember(persistedMember).orElseThrow();
-        PersonalityProfile updatedProfile = personalityProfileRepository
-                .findTopByMemberOrderByProfileIdDesc(persistedMember)
-                .orElseThrow();
 
         assertThat(updatedSubmission.getSurveySubmissionId()).isEqualTo(submissionId);
-        assertThat(updatedProfile.getProfileId()).isEqualTo(profileId);
         assertThat(surveyAnswerRepository.findBySubmission(updatedSubmission))
                 .hasSize(15)
                 .allSatisfy(answer ->
                         assertThat(answer.getSelectedOption().getScoreWeight()).isEqualByComparingTo("5"));
-        assertThat(updatedProfile.getAgreeablenessScore()).isEqualByComparingTo("5.00");
-        assertThat(updatedProfile.getCharacterXScore()).isEqualByComparingTo("15");
-        assertThat(updatedProfile.getCharacterYScore()).isEqualByComparingTo("15");
+        assertThat(updatedSubmission.getAgreeablenessScore()).isEqualByComparingTo("5.00");
+        assertThat(updatedSubmission.getCharacterXScore()).isEqualByComparingTo("15");
+        assertThat(updatedSubmission.getCharacterYScore()).isEqualByComparingTo("15");
+        assertThat(matchingApplicationRepository.count()).isZero();
     }
 
     private SurveyRequests saveSurveyQuestionsAndOptions() {
