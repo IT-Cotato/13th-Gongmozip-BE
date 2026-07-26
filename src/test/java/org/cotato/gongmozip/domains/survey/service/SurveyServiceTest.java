@@ -199,10 +199,9 @@ class SurveyServiceTest {
         SubmitSurveyRequest request =
                 new SubmitSurveyRequest(fixture.request().answers().subList(0, QUESTION_KEYS.size() - 1));
         stubQuestions(fixture);
-        given(surveySubmissionRepository.save(any(SurveySubmission.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
 
         assertSurveyError(request, SurveyErrorCode.QUESTION_NOT_FOUND);
+        then(surveySubmissionRepository).should(never()).save(any(SurveySubmission.class));
     }
 
     @DisplayName("존재하지 않는 질문 ID가 포함되면 제출할 수 없다")
