@@ -126,6 +126,23 @@ class SurveyControllerTest {
                 .andExpect(jsonPath("$.code").value("COMMON_400_1"));
     }
 
+    @DisplayName("직전 제출 후 3개월 이내에 재응시하면 안내 메시지와 409 응답을 반환한다")
+    @Test
+    void submitSurvey_rejectsRetakeWithinThreeMonths() throws Exception {
+        SubmitSurveyRequest request = new SubmitSurveyRequest(List.of(new AnswerRequest(1L, 10L)));
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(surveyService.submitSurvey(any(Member.class), any(SubmitSurveyRequest.class)))
+                .willThrow(new SurveyException(SurveyErrorCode.RETAKE_NOT_ALLOWED));
+
+        mockMvc.perform(post("/api/survey/submit")
+                        .with(user(userDetails))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SURVEY_006"))
+                .andExpect(jsonPath("$.message").value("협업 유형 검사는 3개월에 한 번만 재응시할 수 있습니다."));
+    }
+
     @DisplayName("설문 결과가 없으면 404 응답을 반환한다")
     @Test
     void getResult_returnsNotFoundWhenSurveyWasNotSubmitted() throws Exception {

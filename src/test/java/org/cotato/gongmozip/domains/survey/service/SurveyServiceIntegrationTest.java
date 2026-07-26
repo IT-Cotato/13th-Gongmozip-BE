@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import org.cotato.gongmozip.domains.member.entity.Member;
@@ -71,7 +72,7 @@ class SurveyServiceIntegrationTest {
     @Autowired
     private EntityManager entityManager;
 
-    @DisplayName("재설문해도 회원별 제출은 하나만 유지되고 답변과 점수는 교체된다")
+    @DisplayName("3개월 후 재설문해도 회원별 제출은 하나만 유지되고 답변과 점수는 교체된다")
     @Test
     void resubmit_replacesAnswersAndUpdatesExistingRows() {
         surveyOptionRepository.deleteAllInBatch();
@@ -93,7 +94,17 @@ class SurveyServiceIntegrationTest {
         assertThat(firstSubmission.getAgreeablenessScore()).isEqualByComparingTo("1.00");
         assertThat(matchingApplicationRepository.count()).isZero();
 
-        surveyService.submitSurvey(member, requests.highScoreRequest());
+        entityManager
+                .createNativeQuery(
+                        "UPDATE survey_submissions SET submitted_at = :submittedAt WHERE survey_submission_id = :submissionId")
+                .setParameter("submittedAt", LocalDateTime.now().minusMonths(3).minusDays(1))
+                .setParameter("submissionId", submissionId)
+                .executeUpdate();
+        entityManager.clear();
+
+        Member memberAfterThreeMonths =
+                memberRepository.findById(member.getMemberId()).orElseThrow();
+        surveyService.submitSurvey(memberAfterThreeMonths, requests.highScoreRequest());
         entityManager.flush();
         entityManager.clear();
 

@@ -2,11 +2,13 @@ package org.cotato.gongmozip.domains.survey.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +43,7 @@ public class SurveyService {
 
     // 캐릭터 유형 결정 임계값: 만점(15점)의 절반 초과 기준
     private static final BigDecimal CHARACTER_THRESHOLD = new BigDecimal("8");
+    private static final int RETAKE_INTERVAL_MONTHS = 3;
 
     private final SurveyQuestionRepository surveyQuestionRepository;
     private final SurveyOptionRepository surveyOptionRepository;
@@ -111,15 +114,16 @@ public class SurveyService {
         }
 
         // 회원별 submission 하나를 재사용하고, 재검사 시 기존 답변을 교체한다
-        SurveySubmission submission = surveySubmissionRepository
-                .findByMember(member)
-                .orElseGet(() -> {
-                    SurveySubmission newSubmission = SurveySubmission.builder()
-                            .member(member)
-                            .status(SubmissionStatus.IN_PROGRESS)
-                            .build();
-                    return surveySubmissionRepository.save(newSubmission);
-                });
+        Optional<SurveySubmission> existingSubmission = surveySubmissionRepository.findByMember(member);
+        existingSubmission.ifPresent(this::validateRetakeInterval);
+
+        SurveySubmission submission = existingSubmission.orElseGet(() -> {
+            SurveySubmission newSubmission = SurveySubmission.builder()
+                    .member(member)
+                    .status(SubmissionStatus.IN_PROGRESS)
+                    .build();
+            return surveySubmissionRepository.save(newSubmission);
+        });
         surveyAnswerRepository.deleteAllBySubmission(submission);
         surveyAnswerRepository.flush(); // unique 제약 위반 방지를 위해 삭제를 먼저 DB에 반영
 
@@ -137,6 +141,17 @@ public class SurveyService {
         calculateAndRecordScores(submission, answerMap, keyToId);
 
         return SurveyConverter.toResultResponse(submission);
+    }
+
+    private void validateRetakeInterval(SurveySubmission submission) {
+        if (submission.getStatus() != SubmissionStatus.SUBMITTED || submission.getSubmittedAt() == null) {
+            return;
+        }
+
+        LocalDateTime nextRetakeAt = submission.getSubmittedAt().plusMonths(RETAKE_INTERVAL_MONTHS);
+        if (nextRetakeAt.isAfter(LocalDateTime.now())) {
+            throw new SurveyException(SurveyErrorCode.RETAKE_NOT_ALLOWED);
+        }
     }
 
     // 가장 최근 제출한 설문 결과 조회

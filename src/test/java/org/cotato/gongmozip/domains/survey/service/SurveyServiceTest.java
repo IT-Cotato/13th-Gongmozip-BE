@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -140,12 +141,12 @@ class SurveyServiceTest {
         assertThat(response.axes()).hasSize(3);
     }
 
-    @DisplayName("재설문하면 기존 제출을 재사용하고 답변과 점수만 교체한다")
+    @DisplayName("직전 제출 후 3개월이 지나면 기존 제출을 재사용하고 답변과 점수만 교체한다")
     @Test
     void resubmit_reusesSubmissionAndUpdatesScores() {
         SurveyFixture fixture = surveyFixture("5");
         stubQuestions(fixture);
-        SurveySubmission submission = submission();
+        SurveySubmission submission = submission(LocalDateTime.now().minusMonths(3));
         given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.of(submission));
 
         surveyService.submitSurvey(member, fixture.request());
@@ -157,6 +158,21 @@ class SurveyServiceTest {
         assertThat(submission.getStatus()).isEqualTo(SubmissionStatus.SUBMITTED);
         assertThat(submission.getSubmittedAt()).isNotNull();
         assertThat(submission.getAgreeablenessScore()).isEqualByComparingTo("5.00");
+    }
+
+    @DisplayName("직전 제출 후 3개월이 지나지 않으면 재응시할 수 없다")
+    @Test
+    void resubmit_rejectsRetakeWithinThreeMonths() {
+        SurveyFixture fixture = surveyFixture("5");
+        stubQuestions(fixture);
+        SurveySubmission submission =
+                submission(LocalDateTime.now().minusMonths(3).plusDays(1));
+        given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.of(submission));
+
+        assertSurveyError(fixture.request(), SurveyErrorCode.RETAKE_NOT_ALLOWED);
+
+        then(surveyAnswerRepository).shouldHaveNoInteractions();
+        then(surveySubmissionRepository).should(never()).save(any(SurveySubmission.class));
     }
 
     @DisplayName("필수 질문의 답변이 누락되면 제출할 수 없다")
@@ -280,10 +296,15 @@ class SurveyServiceTest {
     }
 
     private SurveySubmission submission() {
+        return submission(null);
+    }
+
+    private SurveySubmission submission(LocalDateTime submittedAt) {
         return SurveySubmission.builder()
                 .surveySubmissionId(10L)
                 .member(member)
                 .status(SubmissionStatus.SUBMITTED)
+                .submittedAt(submittedAt)
                 .build();
     }
 
