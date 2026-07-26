@@ -94,6 +94,7 @@ class SurveyServiceTest {
             assertThat(question.options()).hasSize(1);
             assertThat(question.options().getFirst().optionKey()).isEqualTo("RATING_3");
         });
+        then(surveyOptionRepository).should().findAllByQuestions(fixture.questions());
     }
 
     @DisplayName("제출 이력이 없으면 설문 상태는 NONE이다")
@@ -140,6 +141,7 @@ class SurveyServiceTest {
         assertThat(response.characterXScore()).isEqualByComparingTo("15");
         assertThat(response.characterYScore()).isEqualByComparingTo("15");
         assertThat(response.axes()).hasSize(3);
+        then(surveyOptionRepository).should().findAllByQuestions(fixture.questions());
     }
 
     @DisplayName("직전 제출 후 3개월이 지나면 기존 제출을 재사용하고 답변과 점수만 교체한다")
@@ -269,11 +271,7 @@ class SurveyServiceTest {
 
     private void stubQuestions(SurveyFixture fixture) {
         given(surveyQuestionRepository.findAllByOrderByDisplayOrderAsc()).willReturn(fixture.questions());
-        for (int index = 0; index < fixture.questions().size(); index++) {
-            given(surveyOptionRepository.findByQuestionOrderByDisplayOrderAsc(
-                            fixture.questions().get(index)))
-                    .willReturn(List.of(fixture.options().get(index)));
-        }
+        given(surveyOptionRepository.findAllByQuestions(fixture.questions())).willReturn(fixture.options());
     }
 
     private SurveyFixture surveyFixture(String score) {

@@ -54,9 +54,10 @@ public class SurveyService {
     // 질문 목록 조회 — 선택지와 함께 반환하며 매 요청마다 순서를 셔플한다
     public QuestionListResponse getQuestions() {
         List<SurveyQuestion> questions = surveyQuestionRepository.findAllByOrderByDisplayOrderAsc();
+        Map<Long, List<SurveyOption>> optionsByQuestionId = loadOptionsByQuestionId(questions);
         List<QuestionResponse> responses = new ArrayList<>(questions.stream()
                 .map(q -> SurveyConverter.toQuestionResponse(
-                        q, surveyOptionRepository.findByQuestionOrderByDisplayOrderAsc(q)))
+                        q, optionsByQuestionId.getOrDefault(q.getQuestionId(), List.of())))
                 .toList());
         Collections.shuffle(responses);
         return new QuestionListResponse(responses);
@@ -75,12 +76,13 @@ public class SurveyService {
     @Transactional
     public SurveyResultResponse submitSurvey(Member member, SubmitSurveyRequest request) {
         List<SurveyQuestion> questions = surveyQuestionRepository.findAllByOrderByDisplayOrderAsc();
+        Map<Long, List<SurveyOption>> optionsByQuestionId = loadOptionsByQuestionId(questions);
 
         // 선택지 전체 로드: 검증 시 N+1을 피하기 위해 먼저 맵으로 구성한다
         Map<Long, SurveyOption> optionById = new HashMap<>();
         Map<Long, Long> optionToQuestionId = new HashMap<>();
         for (SurveyQuestion q : questions) {
-            for (SurveyOption opt : surveyOptionRepository.findByQuestionOrderByDisplayOrderAsc(q)) {
+            for (SurveyOption opt : optionsByQuestionId.getOrDefault(q.getQuestionId(), List.of())) {
                 optionById.put(opt.getOptionId(), opt);
                 optionToQuestionId.put(opt.getOptionId(), q.getQuestionId());
             }
@@ -142,6 +144,15 @@ public class SurveyService {
         calculateAndRecordScores(submission, answerMap, keyToId);
 
         return SurveyConverter.toResultResponse(submission);
+    }
+
+    private Map<Long, List<SurveyOption>> loadOptionsByQuestionId(List<SurveyQuestion> questions) {
+        if (questions.isEmpty()) {
+            return Map.of();
+        }
+
+        return surveyOptionRepository.findAllByQuestions(questions).stream()
+                .collect(Collectors.groupingBy(option -> option.getQuestion().getQuestionId()));
     }
 
     private void validateRetakeInterval(SurveySubmission submission) {
