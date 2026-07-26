@@ -136,30 +136,31 @@ public class SurveyService {
         Optional<SurveySubmission> existingSubmission = surveySubmissionRepository.findByMember(member);
         existingSubmission.ifPresent(this::validateRetakeInterval);
 
-        SurveySubmission submission = existingSubmission.orElseGet(() -> {
-            SurveySubmission newSubmission = SurveySubmission.builder()
-                    .member(member)
-                    .status(SubmissionStatus.IN_PROGRESS)
-                    .build();
-            return surveySubmissionRepository.save(newSubmission);
-        });
-        surveyAnswerRepository.deleteAllBySubmission(submission);
-        surveyAnswerRepository.flush(); // unique 제약 위반 방지를 위해 삭제를 먼저 DB에 반영
-
-        // 새 답변 저장 후 제출 상태로 전환
-        List<SurveyAnswer> answers = questions.stream()
-                .filter(q -> answerMap.containsKey(q.getQuestionId()))
-                .map(q -> SurveyConverter.toSurveyAnswer(submission, q, answerMap.get(q.getQuestionId())))
-                .toList();
-        surveyAnswerRepository.saveAll(answers);
-        submission.submit();
-
-        // 점수 계산 후 submission에 기록
         Map<String, Long> keyToId = questions.stream()
                 .collect(Collectors.toMap(SurveyQuestion::getQuestionKey, SurveyQuestion::getQuestionId));
-        calculateAndRecordScores(submission, answerMap, keyToId);
 
-        return SurveyConverter.toResultResponse(submission);
+        SurveySubmission submission = existingSubmission.orElseGet(
+                () -> SurveySubmission.builder().member(member).build());
+
+        // NOT NULL 제약을 만족하도록 점수 계산과 제출 상태 전환을 DB 저장 전에 수행한다
+        calculateAndRecordScores(submission, answerMap, keyToId);
+        submission.submit();
+
+        if (existingSubmission.isPresent()) {
+            surveyAnswerRepository.deleteAllBySubmission(submission);
+            surveyAnswerRepository.flush(); // unique 제약 위반 방지를 위해 삭제를 먼저 DB에 반영
+        } else {
+            submission = surveySubmissionRepository.save(submission);
+        }
+
+        final SurveySubmission savedSubmission = submission;
+        List<SurveyAnswer> answers = questions.stream()
+                .filter(q -> answerMap.containsKey(q.getQuestionId()))
+                .map(q -> SurveyConverter.toSurveyAnswer(savedSubmission, q, answerMap.get(q.getQuestionId())))
+                .toList();
+        surveyAnswerRepository.saveAll(answers);
+
+        return SurveyConverter.toResultResponse(savedSubmission);
     }
 
     private Map<Long, List<SurveyOption>> loadOptionsByQuestionId(List<SurveyQuestion> questions) {
