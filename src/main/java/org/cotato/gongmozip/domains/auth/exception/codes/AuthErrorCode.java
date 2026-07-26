@@ -27,7 +27,8 @@ public enum AuthErrorCode implements BaseErrorCode {
 
     // 429
     TOO_MANY_PASSWORD_RESET_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "AUTH_429_1", "인증 시도 횟수를 초과했습니다. 새 인증코드를 요청해 주세요."),
-    PASSWORD_RESET_CODE_SEND_TOO_FAST(HttpStatus.TOO_MANY_REQUESTS, "AUTH_429_2", "잠시 후 다시 요청해 주세요. 인증코드는 1분 후에 재요청할 수 있습니다."),
+    PASSWORD_RESET_CODE_SEND_TOO_FAST(
+            HttpStatus.TOO_MANY_REQUESTS, "AUTH_429_2", "잠시 후 다시 요청해 주세요. 인증코드는 1분 후에 재요청할 수 있습니다."),
 
     // 500
     PASSWORD_RESET_EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "AUTH_500_1", "비밀번호 재설정 인증코드 전송에 실패했습니다.");

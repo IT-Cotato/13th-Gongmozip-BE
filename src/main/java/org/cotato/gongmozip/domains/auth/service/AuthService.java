@@ -33,6 +33,8 @@ import org.springframework.mail.MailException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
@@ -125,7 +127,8 @@ public class AuthService {
     public void sendPasswordResetCode(PasswordResetCodeRequest request) {
         // 미가입 이메일이나 소셜 전용 계정은 계정 존재 여부를 노출하지 않기 위해 조용히 반환
         Optional<Member> memberOpt = memberRepository.findByEmail(request.email());
-        if (memberOpt.isEmpty() || !authAccountRepository.existsByMemberAndProvider(memberOpt.get(), AuthProvider.EMAIL)) {
+        if (memberOpt.isEmpty()
+                || !authAccountRepository.existsByMemberAndProvider(memberOpt.get(), AuthProvider.EMAIL)) {
             return;
         }
 
@@ -153,7 +156,8 @@ public class AuthService {
     public PasswordResetVerifyResponse verifyPasswordResetCode(PasswordResetCodeVerifyRequest request) {
         // 미가입 이메일이나 소셜 전용 계정은 코드를 발급한 적 없는 경우와 동일하게 처리
         Optional<Member> memberOpt = memberRepository.findByEmail(request.email());
-        if (memberOpt.isEmpty() || !authAccountRepository.existsByMemberAndProvider(memberOpt.get(), AuthProvider.EMAIL)) {
+        if (memberOpt.isEmpty()
+                || !authAccountRepository.existsByMemberAndProvider(memberOpt.get(), AuthProvider.EMAIL)) {
             throw new AuthException(AuthErrorCode.PASSWORD_RESET_CODE_NOT_ISSUED);
         }
 
@@ -225,9 +229,14 @@ public class AuthService {
                 .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
         member.changePassword(passwordEncoder.encode(request.newPassword()));
 
-        // 비밀번호 재설정 정보와 기존 refresh 토큰 삭제
-        redisUtil.delete(memberKey);
-        redisUtil.delete(REFRESH_TOKEN_PREFIX + memberId);
+        // DB 커밋 성공 후에만 Redis 정리 (커밋 실패 시 세션이 의도치 않게 무효화되는 것을 방지)
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                redisUtil.delete(memberKey);
+                redisUtil.delete(REFRESH_TOKEN_PREFIX + memberId);
+            }
+        });
     }
 
     // 비밀번호 재설정용 랜덤 토큰 생성 메서드
