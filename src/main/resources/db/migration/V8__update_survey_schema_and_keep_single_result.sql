@@ -60,62 +60,70 @@ WHERE survey_submission_id NOT IN (
     ) latest_submissions
 );
 
--- 회원별 가장 최근 성향 결과만 남긴 후 해당 결과를 설문 제출로 옮긴다.
-DELETE FROM personality_profiles
-WHERE profile_id NOT IN (
-    SELECT profile_id
-    FROM (
-        SELECT MAX(profile_id) AS profile_id
-        FROM personality_profiles
-        GROUP BY member_id
-    ) latest_profiles
-);
-
+-- 매칭 신청 이력은 모두 유지하고, 가장 최근 신청의 성향 결과만 설문 제출로 옮긴다.
 UPDATE survey_submissions
 SET agreeableness_score = (
         SELECT pp.agreeableness_score
         FROM personality_profiles pp
         WHERE pp.member_id = survey_submissions.member_id
+        ORDER BY pp.profile_id DESC
+        LIMIT 1
     ),
     conscientiousness_score = (
         SELECT pp.conscientiousness_score
         FROM personality_profiles pp
         WHERE pp.member_id = survey_submissions.member_id
+        ORDER BY pp.profile_id DESC
+        LIMIT 1
     ),
     honesty_humility_score = (
         SELECT pp.honesty_humility_score
         FROM personality_profiles pp
         WHERE pp.member_id = survey_submissions.member_id
+        ORDER BY pp.profile_id DESC
+        LIMIT 1
     ),
     extroversion_score = (
         SELECT pp.extroversion_score
         FROM personality_profiles pp
         WHERE pp.member_id = survey_submissions.member_id
+        ORDER BY pp.profile_id DESC
+        LIMIT 1
     ),
     goal_preference_score = (
         SELECT pp.goal_preference_score
         FROM personality_profiles pp
         WHERE pp.member_id = survey_submissions.member_id
+        ORDER BY pp.profile_id DESC
+        LIMIT 1
     ),
     work_style_score = (
         SELECT pp.work_style_score
         FROM personality_profiles pp
         WHERE pp.member_id = survey_submissions.member_id
+        ORDER BY pp.profile_id DESC
+        LIMIT 1
     ),
     communication_style_score = (
         SELECT pp.communication_style_score
         FROM personality_profiles pp
         WHERE pp.member_id = survey_submissions.member_id
+        ORDER BY pp.profile_id DESC
+        LIMIT 1
     ),
     extroversion_type = (
         SELECT pp.extroversion_type
         FROM personality_profiles pp
         WHERE pp.member_id = survey_submissions.member_id
+        ORDER BY pp.profile_id DESC
+        LIMIT 1
     ),
     character_type = (
         SELECT pp.character_type
         FROM personality_profiles pp
         WHERE pp.member_id = survey_submissions.member_id
+        ORDER BY pp.profile_id DESC
+        LIMIT 1
     )
 WHERE EXISTS (
     SELECT 1
@@ -218,7 +226,7 @@ WHERE question_id = (SELECT question_id FROM survey_questions WHERE question_key
 DELETE FROM survey_questions
 WHERE question_key = 'LEADER_PREFERENCE';
 
--- 매칭 신청 테이블에는 신청 시점의 설문 점수 스냅샷을 유지하고 이름만 역할에 맞게 변경한다.
+-- 모든 매칭 신청에는 각 신청 시점의 설문 점수 스냅샷을 유지하고 이름만 역할에 맞게 변경한다.
 ALTER TABLE personality_profiles
     DROP COLUMN leader_preference_score;
 
