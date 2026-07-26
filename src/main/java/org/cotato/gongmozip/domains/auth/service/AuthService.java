@@ -41,8 +41,10 @@ public class AuthService {
     private static final String BLACKLIST_PREFIX = "blacklist:";
     private static final String PASSWORD_RESET_TOKEN_PREFIX = "password-reset:token:";
     private static final String PASSWORD_RESET_MEMBER_PREFIX = "password-reset:member:";
+    private static final String PASSWORD_RESET_COOLDOWN_PREFIX = "password-reset:cooldown:";
     private static final int PASSWORD_RESET_TOKEN_BYTES = 32;
     private static final long PASSWORD_RESET_TOKEN_TTL_MINUTES = 10;
+    private static final long PASSWORD_RESET_CODE_COOLDOWN_SECONDS = 60;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     @Value("${jwt.refresh-token-expiration}")
@@ -130,12 +132,19 @@ public class AuthService {
             throw new AuthException(AuthErrorCode.PASSWORD_RESET_UNAVAILABLE);
         }
 
+        // 쿨다운이 남아 있으면 재발송 거부
+        String cooldownKey = PASSWORD_RESET_COOLDOWN_PREFIX + member.getMemberId();
+        if (redisUtil.exists(cooldownKey)) {
+            throw new AuthException(AuthErrorCode.PASSWORD_RESET_CODE_SEND_TOO_FAST);
+        }
+
         // 이전에 발급된 비밀번호 재설정 토큰 무효화
         invalidatePasswordResetToken(member.getMemberId());
 
         // 공통 이메일 인증 서비스를 통해 인증 코드 전송
         try {
             emailVerificationService.sendCode(Purpose.PASSWORD_RESET, member.getEmail(), "[공모집] 비밀번호 재설정 인증코드");
+            redisUtil.set(cooldownKey, "true", PASSWORD_RESET_CODE_COOLDOWN_SECONDS, TimeUnit.SECONDS);
         } catch (MailException e) {
             throw new AuthException(AuthErrorCode.PASSWORD_RESET_EMAIL_SEND_FAILED);
         }
