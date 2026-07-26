@@ -2,6 +2,7 @@ package org.cotato.gongmozip.domains.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -46,6 +47,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mail.MailSendException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -291,29 +294,30 @@ class AuthServiceTest {
 
     // ========== 비밀번호 재설정 인증코드 발송 테스트 ==========
 
-    @DisplayName("가입되지 않은 이메일이면 비밀번호 재설정 인증코드를 전송할 수 없다.")
+    @DisplayName("가입되지 않은 이메일이면 계정 존재 여부를 노출하지 않는다.")
     @Test
-    void 가입되지_않은_이메일이면_비밀번호_재설정_인증코드를_전송할_수_없다() {
+    void 가입되지_않은_이메일이면_계정_존재_여부를_노출하지_않는다() {
         PasswordResetCodeRequest request = new PasswordResetCodeRequest(TEST_EMAIL);
         given(memberRepository.findByEmail(TEST_EMAIL)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.sendPasswordResetCode(request))
-                .isInstanceOf(MemberException.class)
-                .hasMessage(MemberErrorCode.MEMBER_NOT_FOUND.getMessage());
+        authService.sendPasswordResetCode(request);
+
+        then(authAccountRepository).should(never()).existsByMemberAndProvider(any(), eq(AuthProvider.EMAIL));
+        then(emailVerificationService).should(never()).sendCode(eq(Purpose.PASSWORD_RESET), anyString(), anyString());
     }
 
-    @DisplayName("소셜 로그인 전용 계정이면 비밀번호 재설정 인증코드를 전송할 수 없다.")
+    @DisplayName("소셜 로그인 전용 계정이면 계정 유형을 노출하지 않는다.")
     @Test
-    void 소셜_로그인_전용_계정이면_비밀번호_재설정_인증코드를_전송할_수_없다() {
+    void 소셜_로그인_전용_계정이면_계정_유형을_노출하지_않는다() {
         PasswordResetCodeRequest request = new PasswordResetCodeRequest(TEST_EMAIL);
         Member member = createMember();
         given(memberRepository.findByEmail(TEST_EMAIL)).willReturn(Optional.of(member));
         given(authAccountRepository.existsByMemberAndProvider(member, AuthProvider.EMAIL))
                 .willReturn(false);
 
-        assertThatThrownBy(() -> authService.sendPasswordResetCode(request))
-                .isInstanceOf(AuthException.class)
-                .hasMessage(AuthErrorCode.PASSWORD_RESET_UNAVAILABLE.getMessage());
+        authService.sendPasswordResetCode(request);
+
+        then(emailVerificationService).should(never()).sendCode(eq(Purpose.PASSWORD_RESET), anyString(), anyString());
     }
 
     @DisplayName("이메일 로그인 계정이면 비밀번호 재설정 인증코드 전송을 요청한다.")
@@ -349,9 +353,36 @@ class AuthServiceTest {
 
     // ========== 비밀번호 재설정 인증코드 확인 테스트 ==========
 
-    @DisplayName("발급된 인증코드가 없으면 코드 미발급 예외가 발생한다.")
+    @DisplayName("미가입 이메일의 인증코드를 확인하면 일반적인 코드 불일치 예외가 발생한다.")
     @Test
-    void 발급된_인증코드가_없으면_코드_미발급_예외가_발생한다() {
+    void 미가입_이메일의_인증코드를_확인하면_코드_불일치_예외가_발생한다() {
+        PasswordResetCodeVerifyRequest request = new PasswordResetCodeVerifyRequest(TEST_EMAIL, "123456");
+        given(memberRepository.findByEmail(TEST_EMAIL)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.verifyPasswordResetCode(request))
+                .isInstanceOf(AuthException.class)
+                .hasMessage(AuthErrorCode.INVALID_PASSWORD_RESET_CODE.getMessage());
+        then(emailVerificationService).should(never()).verifyCode(eq(Purpose.PASSWORD_RESET), anyString(), anyString());
+    }
+
+    @DisplayName("소셜 로그인 전용 계정의 인증코드를 확인하면 일반적인 코드 불일치 예외가 발생한다.")
+    @Test
+    void 소셜_로그인_전용_계정의_인증코드를_확인하면_코드_불일치_예외가_발생한다() {
+        PasswordResetCodeVerifyRequest request = new PasswordResetCodeVerifyRequest(TEST_EMAIL, "123456");
+        Member member = createMember();
+        given(memberRepository.findByEmail(TEST_EMAIL)).willReturn(Optional.of(member));
+        given(authAccountRepository.existsByMemberAndProvider(member, AuthProvider.EMAIL))
+                .willReturn(false);
+
+        assertThatThrownBy(() -> authService.verifyPasswordResetCode(request))
+                .isInstanceOf(AuthException.class)
+                .hasMessage(AuthErrorCode.INVALID_PASSWORD_RESET_CODE.getMessage());
+        then(emailVerificationService).should(never()).verifyCode(eq(Purpose.PASSWORD_RESET), anyString(), anyString());
+    }
+
+    @DisplayName("발급된 인증코드가 없으면 일반적인 코드 불일치 예외가 발생한다.")
+    @Test
+    void 발급된_인증코드가_없으면_코드_불일치_예외가_발생한다() {
         PasswordResetCodeVerifyRequest request = new PasswordResetCodeVerifyRequest(TEST_EMAIL, "123456");
         Member member = createMember();
         given(memberRepository.findByEmail(TEST_EMAIL)).willReturn(Optional.of(member));
@@ -362,7 +393,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.verifyPasswordResetCode(request))
                 .isInstanceOf(AuthException.class)
-                .hasMessage(AuthErrorCode.PASSWORD_RESET_CODE_NOT_ISSUED.getMessage());
+                .hasMessage(AuthErrorCode.INVALID_PASSWORD_RESET_CODE.getMessage());
     }
 
     @DisplayName("발급된 인증코드가 만료되면 코드 만료 예외가 발생한다.")
@@ -474,11 +505,21 @@ class AuthServiceTest {
         given(memberRepository.findById(TEST_MEMBER_ID)).willReturn(Optional.of(member));
         given(passwordEncoder.encode(newPassword)).willReturn(newEncodedPassword);
 
-        authService.resetPassword(request);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            authService.resetPassword(request);
 
-        assertThat(member.getPassword()).isEqualTo(newEncodedPassword);
-        then(redisUtil).should().delete("password-reset:member:" + TEST_MEMBER_ID);
-        then(redisUtil).should().delete("refresh:" + TEST_MEMBER_ID);
+            assertThat(member.getPassword()).isEqualTo(newEncodedPassword);
+            then(redisUtil).should(never()).delete("password-reset:member:" + TEST_MEMBER_ID);
+            then(redisUtil).should(never()).delete("refresh:" + TEST_MEMBER_ID);
+
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+            then(redisUtil).should().delete("password-reset:member:" + TEST_MEMBER_ID);
+            then(redisUtil).should().delete("refresh:" + TEST_MEMBER_ID);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     private String sha256(String value) throws Exception {

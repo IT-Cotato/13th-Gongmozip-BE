@@ -154,11 +154,11 @@ public class AuthService {
 
     // 비밀번호 재설정 인증 코드 확인 메서드
     public PasswordResetVerifyResponse verifyPasswordResetCode(PasswordResetCodeVerifyRequest request) {
-        // 미가입 이메일이나 소셜 전용 계정은 코드를 발급한 적 없는 경우와 동일하게 처리
+        // 미가입 이메일이나 소셜 전용 계정은 틀린 코드와 동일하게 처리해 계정 정보 노출 방지
         Optional<Member> memberOpt = memberRepository.findByEmail(request.email());
         if (memberOpt.isEmpty()
                 || !authAccountRepository.existsByMemberAndProvider(memberOpt.get(), AuthProvider.EMAIL)) {
-            throw new AuthException(AuthErrorCode.PASSWORD_RESET_CODE_NOT_ISSUED);
+            throw new AuthException(AuthErrorCode.INVALID_PASSWORD_RESET_CODE);
         }
 
         Member member = memberOpt.get();
@@ -169,7 +169,7 @@ public class AuthService {
         switch (result) {
             case INVALID_CODE -> throw new AuthException(AuthErrorCode.INVALID_PASSWORD_RESET_CODE);
             case EXPIRED_CODE -> throw new AuthException(AuthErrorCode.EXPIRED_PASSWORD_RESET_CODE);
-            case CODE_NOT_ISSUED -> throw new AuthException(AuthErrorCode.PASSWORD_RESET_CODE_NOT_ISSUED);
+            case CODE_NOT_ISSUED -> throw new AuthException(AuthErrorCode.INVALID_PASSWORD_RESET_CODE);
             case TOO_MANY_ATTEMPTS -> throw new AuthException(AuthErrorCode.TOO_MANY_PASSWORD_RESET_ATTEMPTS);
             case VERIFIED -> {}
         }
