@@ -18,7 +18,6 @@ import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.QuestionL
 import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.QuestionResponse;
 import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.SurveyResultResponse;
 import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.SurveyStatusResponse;
-import org.cotato.gongmozip.domains.survey.entity.PersonalityProfile;
 import org.cotato.gongmozip.domains.survey.entity.SurveyAnswer;
 import org.cotato.gongmozip.domains.survey.entity.SurveyOption;
 import org.cotato.gongmozip.domains.survey.entity.SurveyQuestion;
@@ -28,7 +27,6 @@ import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
 import org.cotato.gongmozip.domains.survey.enums.SubmissionStatus;
 import org.cotato.gongmozip.domains.survey.exception.SurveyException;
 import org.cotato.gongmozip.domains.survey.exception.codes.SurveyErrorCode;
-import org.cotato.gongmozip.domains.survey.repository.PersonalityProfileRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyAnswerRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyOptionRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyQuestionRepository;
@@ -48,7 +46,6 @@ public class SurveyService {
     private final SurveyOptionRepository surveyOptionRepository;
     private final SurveySubmissionRepository surveySubmissionRepository;
     private final SurveyAnswerRepository surveyAnswerRepository;
-    private final PersonalityProfileRepository personalityProfileRepository;
 
     // 질문 목록 조회 — 선택지와 함께 반환하며 매 요청마다 순서를 셔플한다
     public QuestionListResponse getQuestions() {
@@ -134,33 +131,26 @@ public class SurveyService {
         surveyAnswerRepository.saveAll(answers);
         submission.submit();
 
-        // 기존 성향 프로필이 있으면 점수만 갱신하고, 없으면 새로 생성
+        // 점수 계산 후 submission에 기록
         Map<String, Long> keyToId = questions.stream()
                 .collect(Collectors.toMap(SurveyQuestion::getQuestionKey, SurveyQuestion::getQuestionId));
-        PersonalityProfile calculated = buildPersonalityProfile(member, answerMap, keyToId);
-        PersonalityProfile profile = personalityProfileRepository
-                .findTopByMemberOrderByProfileIdDesc(member)
-                .map(existing -> {
-                    existing.updateSurveyResult(calculated);
-                    return existing;
-                })
-                .orElse(calculated);
-        personalityProfileRepository.save(profile);
+        calculateAndRecordScores(submission, answerMap, keyToId);
 
-        return SurveyConverter.toResultResponse(profile);
+        return SurveyConverter.toResultResponse(submission);
     }
 
     // 가장 최근 제출한 설문 결과 조회
     public SurveyResultResponse getResult(Member member) {
-        PersonalityProfile profile = personalityProfileRepository
-                .findTopByMemberOrderByProfileIdDesc(member)
+        SurveySubmission submission = surveySubmissionRepository
+                .findByMember(member)
+                .filter(s -> s.getStatus() == SubmissionStatus.SUBMITTED)
                 .orElseThrow(() -> new SurveyException(SurveyErrorCode.SURVEY_NOT_SUBMITTED));
-        return SurveyConverter.toResultResponse(profile);
+        return SurveyConverter.toResultResponse(submission);
     }
 
-    // 답변 기반으로 HEXACO 점수와 팀 성향 점수를 계산해 PersonalityProfile을 생성한다
-    private PersonalityProfile buildPersonalityProfile(
-            Member member, Map<Long, SurveyOption> answerMap, Map<String, Long> keyToId) {
+    // 답변 기반으로 HEXACO 점수와 팀 성향 점수를 계산해 submission에 기록한다
+    private void calculateAndRecordScores(
+            SurveySubmission submission, Map<Long, SurveyOption> answerMap, Map<String, Long> keyToId) {
 
         // HEXACO 4개 요인: 각 3문항 평균
         BigDecimal agreeableness = avg(
@@ -194,22 +184,20 @@ public class SurveyService {
         // Y축: 소통방식 + 외향성2 + 외향성3 (만점 15)
         BigDecimal yScore = communicationStyle.add(extroversion2).add(extroversion3);
 
-        return PersonalityProfile.builder()
-                .member(member)
-                .agreeablenessScore(agreeableness)
-                .conscientiousnessScore(conscientiousness)
-                .honestyHumilityScore(honestyHumility)
-                .extroversionScore(extroversion)
-                .goalPreferenceScore(goalPreference)
-                .workStyleScore(workStyle)
-                .communicationStyleScore(communicationStyle)
-                .extroversion2Score(extroversion2)
-                .extroversion3Score(extroversion3)
-                .characterXScore(xScore)
-                .characterYScore(yScore)
-                .extroversionType(resolveExtroversionType(extroversion))
-                .characterType(resolveCharacterType(xScore, yScore))
-                .build();
+        submission.recordScores(
+                agreeableness,
+                conscientiousness,
+                honestyHumility,
+                extroversion,
+                goalPreference,
+                workStyle,
+                communicationStyle,
+                extroversion2,
+                extroversion3,
+                resolveExtroversionType(extroversion),
+                resolveCharacterType(xScore, yScore),
+                xScore,
+                yScore);
     }
 
     // 질문 키로 해당 답변의 점수를 반환한다

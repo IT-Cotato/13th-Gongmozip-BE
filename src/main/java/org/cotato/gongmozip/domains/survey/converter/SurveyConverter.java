@@ -6,7 +6,6 @@ import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.AxisRespo
 import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.OptionResponse;
 import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.QuestionResponse;
 import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.SurveyResultResponse;
-import org.cotato.gongmozip.domains.survey.entity.PersonalityProfile;
 import org.cotato.gongmozip.domains.survey.entity.SurveyAnswer;
 import org.cotato.gongmozip.domains.survey.entity.SurveyOption;
 import org.cotato.gongmozip.domains.survey.entity.SurveyQuestion;
@@ -49,37 +48,38 @@ public class SurveyConverter {
                 .build();
     }
 
-    // 성향 프로필 엔티티를 설문 결과 응답 DTO로 변환
-    public static SurveyResultResponse toResultResponse(PersonalityProfile profile) {
+    // 제출 엔티티를 설문 결과 응답 DTO로 변환
+    public static SurveyResultResponse toResultResponse(SurveySubmission submission) {
         // CONSCIENTIOUSNESS_1 단독 점수는 X축 합산에서 역산 (characterXScore = GOAL + WORK + CONSC_1)
-        BigDecimal conscientiousness1Score = profile.getCharacterXScore()
-                .subtract(profile.getGoalPreferenceScore())
-                .subtract(profile.getWorkStyleScore());
+        BigDecimal conscientiousness1Score = submission
+                .getCharacterXScore()
+                .subtract(submission.getGoalPreferenceScore())
+                .subtract(submission.getWorkStyleScore());
 
         return new SurveyResultResponse(
-                profile.getCharacterType(),
-                profile.getExtroversionType(),
-                profile.getCharacterXScore(),
-                profile.getCharacterYScore(),
-                profile.getAgreeablenessScore(),
-                profile.getConscientiousnessScore(),
-                profile.getHonestyHumilityScore(),
-                profile.getExtroversionScore(),
-                profile.getGoalPreferenceScore(),
-                profile.getWorkStyleScore(),
-                profile.getCommunicationStyleScore(),
-                buildAxes(profile, conscientiousness1Score));
+                submission.getCharacterType(),
+                submission.getExtroversionType(),
+                submission.getCharacterXScore(),
+                submission.getCharacterYScore(),
+                submission.getAgreeablenessScore(),
+                submission.getConscientiousnessScore(),
+                submission.getHonestyHumilityScore(),
+                submission.getExtroversionScore(),
+                submission.getGoalPreferenceScore(),
+                submission.getWorkStyleScore(),
+                submission.getCommunicationStyleScore(),
+                buildAxes(submission, conscientiousness1Score));
     }
 
     // 캐릭터 유형별로 표시할 성향 축 3개를 조립한다
-    private static List<AxisResponse> buildAxes(PersonalityProfile profile, BigDecimal conscientiousness1Score) {
-        BigDecimal workStyle = profile.getWorkStyleScore();
-        BigDecimal communication = profile.getCommunicationStyleScore();
-        BigDecimal goal = profile.getGoalPreferenceScore();
-        BigDecimal ext2 = profile.getExtroversion2Score();
-        BigDecimal ext3 = profile.getExtroversion3Score();
+    private static List<AxisResponse> buildAxes(SurveySubmission submission, BigDecimal conscientiousness1Score) {
+        BigDecimal workStyle = submission.getWorkStyleScore();
+        BigDecimal communication = submission.getCommunicationStyleScore();
+        BigDecimal goal = submission.getGoalPreferenceScore();
+        BigDecimal ext2 = submission.getExtroversion2Score();
+        BigDecimal ext3 = submission.getExtroversion3Score();
 
-        return switch (profile.getCharacterType()) {
+        return switch (submission.getCharacterType()) {
             case LEAD_RUNNER -> List.of(
                     new AxisResponse("즉흥형", "계획형", workStyle),
                     new AxisResponse("독립형", "조율형", communication),
