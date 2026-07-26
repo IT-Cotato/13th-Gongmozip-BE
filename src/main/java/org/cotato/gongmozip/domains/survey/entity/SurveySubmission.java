@@ -9,7 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
@@ -34,11 +34,11 @@ public class SurveySubmission extends BaseEntity {
     @Column(name = "survey_submission_id", nullable = false, updatable = false)
     private Long surveySubmissionId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "member_id", nullable = false)
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "member_id", nullable = false, unique = true)
     private Member member;
 
-    // IN_PROGRESS: 작성 중 / SUBMITTED: 현재 유효한 제출 (회원당 1개) / SUPERSEDED: 재검사로 대체됨
+    // 회원별 제출은 하나만 유지하며, 재검사 시 답변과 제출 시각을 갱신한다.
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
     private SubmissionStatus status;
@@ -49,9 +49,5 @@ public class SurveySubmission extends BaseEntity {
     public void submit() {
         this.status = SubmissionStatus.SUBMITTED;
         this.submittedAt = LocalDateTime.now();
-    }
-
-    public void supersede() {
-        this.status = SubmissionStatus.SUPERSEDED;
     }
 }
