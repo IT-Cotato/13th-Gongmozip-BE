@@ -11,8 +11,7 @@ public class ProfileResponse {
     public record CharacterSummary(String characterType, String imageUrl) {}
 
     // 1. 프로필 생성 응답
-    public record CreateProfileResponse(
-            Long profileId, String nickname, boolean isMain, boolean isPublic, LocalDateTime createdAt) {}
+    public record CreateProfileResponse(Long profileId, String nickname, boolean isPublic, LocalDateTime createdAt) {}
 
     // 2. 내 프로필 목록 조회 응답
     public record ProfileListResponse(List<ProfileListItemResponse> profiles, int profileCount) {}
@@ -25,7 +24,6 @@ public class ProfileResponse {
             String major,
             Double gpa,
             Double gpaScale,
-            boolean isMain,
             boolean isPublic,
             LocalDateTime updatedAt) {}
 
@@ -41,7 +39,6 @@ public class ProfileResponse {
             Double gpa,
             Double gpaScale,
             List<InterestCategory> interestCategories,
-            boolean isMain,
             boolean isPublic,
             List<ProjectDetailResponse> projects,
             List<AwardListItemResponse> awards,
@@ -61,9 +58,6 @@ public class ProfileResponse {
             List<InterestCategory> interestCategories,
             LocalDateTime updatedAt) {}
 
-    // 5. 대표 프로필 설정 응답
-    public record UpdateMainProfileResponse(Long profileId, String nickname, boolean isMain, LocalDateTime updatedAt) {}
-
     // 6. 프로필 공개 여부 변경 응답
     public record UpdateVisibilityResponse(Long profileId, boolean isPublic, LocalDateTime updatedAt) {}
 
@@ -82,7 +76,6 @@ public class ProfileResponse {
             List<ProjectPreviewSummary> projectSummaries,
             int awardCount,
             int certificationCount,
-            boolean isMain,
             boolean isPublic) {}
 
     public record ProjectPreviewSummary(Long projectId, String projectName, String summary) {}

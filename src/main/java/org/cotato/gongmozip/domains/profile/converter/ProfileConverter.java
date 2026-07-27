@@ -15,7 +15,7 @@ import org.springframework.data.domain.Page;
 public class ProfileConverter {
 
     // 프로필
-    public static Profile toProfile(CreateProfileRequest request, Member member, boolean isMain) {
+    public static Profile toProfile(CreateProfileRequest request, Member member) {
         return Profile.builder()
                 .member(member)
                 .nickname(request.nickname())
@@ -26,18 +26,13 @@ public class ProfileConverter {
                 .gpa(request.gpa())
                 .gpaScale(request.gpaScale())
                 .interestCategories(request.interestCategories())
-                .isMain(isMain)
                 .isPublic(request.isPublic())
                 .build();
     }
 
     public static CreateProfileResponse toCreateProfileResponse(Profile profile) {
         return new CreateProfileResponse(
-                profile.getProfileId(),
-                profile.getNickname(),
-                profile.isMain(),
-                profile.isPublic(),
-                profile.getCreatedAt());
+                profile.getProfileId(), profile.getNickname(), profile.isPublic(), profile.getCreatedAt());
     }
 
     public static ProfileListItemResponse toProfileListItemResponse(Profile profile) {
@@ -49,7 +44,6 @@ public class ProfileConverter {
                 profile.getMajor(),
                 profile.getGpa(),
                 profile.getGpaScale(),
-                profile.isMain(),
                 profile.isPublic(),
                 profile.getUpdatedAt());
     }
@@ -90,7 +84,6 @@ public class ProfileConverter {
                 profile.getGpa(),
                 profile.getGpaScale(),
                 profile.getInterestCategories(),
-                profile.isMain(),
                 profile.isPublic(),
                 projectDetails,
                 awardDetails,
@@ -110,11 +103,6 @@ public class ProfileConverter {
                 profile.getGpaScale(),
                 profile.getInterestCategories(),
                 profile.getUpdatedAt());
-    }
-
-    public static UpdateMainProfileResponse toUpdateMainProfileResponse(Profile profile) {
-        return new UpdateMainProfileResponse(
-                profile.getProfileId(), profile.getNickname(), profile.isMain(), profile.getUpdatedAt());
     }
 
     public static UpdateVisibilityResponse toUpdateVisibilityResponse(Profile profile) {
@@ -146,7 +134,6 @@ public class ProfileConverter {
                 summaries,
                 awardCount,
                 certificationCount,
-                profile.isMain(),
                 profile.isPublic());
     }
 
