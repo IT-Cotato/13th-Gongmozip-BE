@@ -15,6 +15,7 @@ import org.cotato.gongmozip.domains.profile.enums.CertificationCategory;
 import org.cotato.gongmozip.domains.profile.exception.ProfileException;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.repository.*;
+import org.cotato.gongmozip.domains.survey.repository.MatchingApplicationRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -33,6 +34,7 @@ public class ProfileService {
     private final AwardRepository awardRepository;
     private final CertificationRepository certificationRepository;
     private final ProfileCertificationRepository profileCertificationRepository;
+    private final MatchingApplicationRepository matchingApplicationRepository;
 
     // 프로필 비즈니스 로직
 
@@ -121,6 +123,11 @@ public class ProfileService {
                 .orElseThrow(() -> new ProfileException(ProfileErrorCode.PROFILE_ACCESS_DENIED));
 
         Profile profile = getProfileAndValidateOwner(profileId, member);
+
+        // 매칭 신청 참조 검증
+        if (matchingApplicationRepository.existsByProfile(profile)) {
+            throw new ProfileException(ProfileErrorCode.CANNOT_DELETE_REFERENCED_PROFILE);
+        }
 
         profileRepository.delete(profile);
         profileRepository.flush();

@@ -14,10 +14,11 @@ SET ma.profile_id = (
 -- 3. profile_id 컬럼을 NOT NULL 제약조건으로 변경
 ALTER TABLE matching_applications MODIFY COLUMN profile_id BIGINT NOT NULL;
 
--- 4. profiles 테이블과의 외래키(FK) 제약조건 추가
+-- 4. profiles 테이블과의 외래키(FK) 제약조건 추가 (참조 프로필 삭제 방지를 위한 RESTRICT 설정)
 ALTER TABLE matching_applications
     ADD CONSTRAINT fk_matching_applications_profile
-    FOREIGN KEY (profile_id) REFERENCES profiles (profile_id);
+    FOREIGN KEY (profile_id) REFERENCES profiles (profile_id)
+    ON DELETE RESTRICT;
 
 -- 5. fk_profiles_member 외래키가 사용하던 uq_member_is_main_unique 인덱스를 대체할 인덱스 생성
 ALTER TABLE profiles ADD INDEX idx_profiles_member_id (member_id);

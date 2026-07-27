@@ -19,6 +19,7 @@ import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.profile.exception.ProfileException;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.repository.*;
+import org.cotato.gongmozip.domains.survey.repository.MatchingApplicationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,9 @@ class ProfileServiceTest {
 
     @Mock
     private ProfileCertificationRepository profileCertificationRepository;
+
+    @Mock
+    private MatchingApplicationRepository matchingApplicationRepository;
 
     @InjectMocks
     private ProfileService profileService;
@@ -181,12 +185,30 @@ class ProfileServiceTest {
 
         given(memberRepository.findByIdWithLock(1L)).willReturn(Optional.of(member));
         given(profileRepository.findById(10L)).willReturn(Optional.of(mainProfile));
+        given(matchingApplicationRepository.existsByProfile(mainProfile)).willReturn(false);
 
         // when
         profileService.deleteProfile(10L, member);
 
         // then
         then(profileRepository).should().delete(mainProfile);
+    }
+
+    @DisplayName("프로필 삭제 시 매칭 신청 이력이 존재하면 예외가 발생한다.")
+    @Test
+    void 프로필_삭제_시_매칭_신청_이력이_존재하면_예외가_발생한다() {
+        // given
+        Profile mainProfile =
+                Profile.builder().profileId(10L).member(member).nickname("메인").build();
+
+        given(memberRepository.findByIdWithLock(1L)).willReturn(Optional.of(member));
+        given(profileRepository.findById(10L)).willReturn(Optional.of(mainProfile));
+        given(matchingApplicationRepository.existsByProfile(mainProfile)).willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> profileService.deleteProfile(10L, member))
+                .isInstanceOf(ProfileException.class)
+                .hasMessage(ProfileErrorCode.CANNOT_DELETE_REFERENCED_PROFILE.getMessage());
     }
 
     // 프로젝트 경험 CRUD & 날짜 검증 테스트
