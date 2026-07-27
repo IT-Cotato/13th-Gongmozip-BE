@@ -50,21 +50,14 @@ public class ProfileService {
             throw new ProfileException(ProfileErrorCode.DUPLICATE_NICKNAME);
         }
 
-        // 기존 대표 프로필이 있다면 해제
-        profileRepository.findByMemberAndIsMainTrue(member).ifPresent(p -> {
-            p.setMain(false);
-            profileRepository.flush();
-        });
-
-        // 가장 최근에 입력한 프로필을 대표 프로필(isMain = true)로 자동 설정
-        Profile profile = ProfileConverter.toProfile(request, member, true);
+        Profile profile = ProfileConverter.toProfile(request, member);
         profileRepository.save(profile);
 
         return ProfileConverter.toCreateProfileResponse(profile);
     }
 
     public ProfileListResponse getMyProfiles(Member member) {
-        List<Profile> profiles = profileRepository.findAllByMemberOrderByIsMainDescUpdatedAtDesc(member);
+        List<Profile> profiles = profileRepository.findAllByMemberOrderByUpdatedAtDesc(member);
         return ProfileConverter.toProfileListResponse(profiles);
     }
 
@@ -128,35 +121,9 @@ public class ProfileService {
                 .orElseThrow(() -> new ProfileException(ProfileErrorCode.PROFILE_ACCESS_DENIED));
 
         Profile profile = getProfileAndValidateOwner(profileId, member);
-        boolean deletedIsMain = profile.isMain();
 
         profileRepository.delete(profile);
         profileRepository.flush();
-
-        // 대표 프로필을 삭제했고 다른 프로필이 남아있는 경우, 가장 먼저 생성된 프로필을 대표로 설정
-        if (deletedIsMain) {
-            profileRepository.findFirstByMemberOrderByCreatedAtAsc(member).ifPresent(p -> p.setMain(true));
-        }
-    }
-
-    @Transactional
-    public UpdateMainProfileResponse setMainProfile(Long profileId, Member member) {
-        // 동시성 보안: 회원 행에 비관적 락을 겁산 후 대표 설정 진행
-        memberRepository
-                .findByIdWithLock(member.getMemberId())
-                .orElseThrow(() -> new ProfileException(ProfileErrorCode.PROFILE_ACCESS_DENIED));
-
-        Profile profile = getProfileAndValidateOwner(profileId, member);
-
-        if (profile.isMain()) {
-            throw new ProfileException(ProfileErrorCode.ALREADY_MAIN_PROFILE);
-        }
-
-        // 기존 대표 프로필 해제
-        profileRepository.findByMemberAndIsMainTrue(member).ifPresent(p -> p.setMain(false));
-
-        profile.setMain(true);
-        return ProfileConverter.toUpdateMainProfileResponse(profile);
     }
 
     @Transactional
