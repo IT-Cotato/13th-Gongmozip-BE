@@ -54,6 +54,13 @@ public class RedisUtil {
         return Boolean.TRUE.equals(redisTemplate.hasKey(key));
     }
 
+    // 원자적 증가
+    public long increment(String key) {
+        validateInput(key);
+        Long count = redisTemplate.opsForValue().increment(key);
+        return count != null ? count : 1L;
+    }
+
     // 원자적 증가 후 최초 생성 시에만 TTL 설정
     public long incrementWithTtl(String key, long timeout, TimeUnit unit) {
         validateInput(key);
