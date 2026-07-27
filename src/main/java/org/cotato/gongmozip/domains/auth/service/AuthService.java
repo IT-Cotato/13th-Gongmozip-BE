@@ -42,12 +42,14 @@ public class AuthService {
 
     private static final String REFRESH_TOKEN_PREFIX = "refresh:";
     private static final String BLACKLIST_PREFIX = "blacklist:";
+    private static final String LOGIN_FAILURE_PREFIX = "login:failure:";
     private static final String PASSWORD_RESET_TOKEN_PREFIX = "password-reset:token:";
     private static final String PASSWORD_RESET_MEMBER_PREFIX = "password-reset:member:";
     private static final String PASSWORD_RESET_COOLDOWN_PREFIX = "password-reset:cooldown:";
     private static final int PASSWORD_RESET_TOKEN_BYTES = 32;
     private static final long PASSWORD_RESET_TOKEN_TTL_MINUTES = 10;
     private static final long PASSWORD_RESET_CODE_COOLDOWN_SECONDS = 60;
+    private static final int MAX_LOGIN_FAILURES = 5;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     @Value("${jwt.refresh-token-expiration}")
@@ -69,8 +71,15 @@ public class AuthService {
 
         // 비밀번호 틀린 경우
         if (!passwordEncoder.matches(request.password(), member.getPassword())) {
+            long failureCount = redisUtil.increment(LOGIN_FAILURE_PREFIX + member.getMemberId());
+            if (failureCount >= MAX_LOGIN_FAILURES) {
+                throw new AuthException(AuthErrorCode.PASSWORD_RESET_RECOMMENDED);
+            }
             throw new AuthException(AuthErrorCode.INVALID_PASSWORD);
         }
+
+        // 로그인 성공 시 연속 실패 횟수 초기화
+        redisUtil.delete(LOGIN_FAILURE_PREFIX + member.getMemberId());
 
         // 토큰 발급
         String accessToken = jwtProvider.generateAccessToken(member.getMemberId(), member.getEmail());
@@ -235,6 +244,7 @@ public class AuthService {
             public void afterCommit() {
                 redisUtil.delete(memberKey);
                 redisUtil.delete(REFRESH_TOKEN_PREFIX + memberId);
+                redisUtil.delete(LOGIN_FAILURE_PREFIX + memberId);
             }
         });
     }

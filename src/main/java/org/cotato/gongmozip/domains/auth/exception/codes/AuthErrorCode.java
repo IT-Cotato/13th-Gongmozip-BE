@@ -24,6 +24,7 @@ public enum AuthErrorCode implements BaseErrorCode {
     KAKAO_ACCOUNT_NOT_FOUND(HttpStatus.UNAUTHORIZED, "AUTH_401_4", "카카오 계정 정보가 없습니다."),
     KAKAO_EMAIL_NOT_PROVIDED(HttpStatus.UNAUTHORIZED, "AUTH_401_5", "카카오 이메일 정보가 없습니다."),
     GOOGLE_EMAIL_NOT_PROVIDED(HttpStatus.UNAUTHORIZED, "AUTH_401_6", "구글 이메일 정보가 없습니다."),
+    PASSWORD_RESET_RECOMMENDED(HttpStatus.UNAUTHORIZED, "AUTH_401_7", "비밀번호를 5회 이상 잘못 입력했습니다. 비밀번호 재설정을 권장합니다."),
 
     // 429
     TOO_MANY_PASSWORD_RESET_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "AUTH_429_1", "인증 시도 횟수를 초과했습니다. 새 인증코드를 요청해 주세요."),
