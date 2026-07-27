@@ -3,8 +3,10 @@ package org.cotato.gongmozip.domains.member.dto.request;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import java.time.LocalDate;
 import org.cotato.gongmozip.domains.member.enums.Gender;
+import org.cotato.gongmozip.global.validation.PasswordPolicy;
 
 public class MemberAuthRequest {
 
@@ -17,7 +19,7 @@ public class MemberAuthRequest {
     // 회원가입 요청
     public record SignUpRequest(
             @Email @NotBlank String email,
-            @NotBlank String password,
+            @NotBlank @Pattern(regexp = PasswordPolicy.REGEX, message = PasswordPolicy.MESSAGE) String password,
             @NotNull Gender gender,
             @NotNull LocalDate birthDate) {}
 

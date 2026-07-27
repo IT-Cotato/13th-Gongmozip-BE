@@ -7,4 +7,7 @@ public class AuthResponse {
 
     // 로그인 내부 전달용 (서비스 -> 컨트롤러)
     public record LoginResult(String accessToken, String refreshToken) {}
+
+    // 비밀번호 재설정 인증코드 확인 응답
+    public record PasswordResetVerifyResponse(String passwordResetToken) {}
 }
