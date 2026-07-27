@@ -20,9 +20,7 @@ import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.mypage.dto.response.MyPageResponse.*;
 import org.cotato.gongmozip.domains.mypage.exception.MyPageException;
 import org.cotato.gongmozip.domains.mypage.exception.codes.MyPageErrorCode;
-import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
-import org.cotato.gongmozip.domains.profile.repository.ProfileRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -42,16 +40,12 @@ class MyPageServiceTest {
     private MemberRepository memberRepository;
 
     @Mock
-    private ProfileRepository profileRepository;
-
-    @Mock
     private ContestScrapRepository contestScrapRepository;
 
     @InjectMocks
     private MyPageService myPageService;
 
     private Member testMember;
-    private Profile testProfile;
 
     @BeforeEach
     void setUp() {
@@ -61,27 +55,13 @@ class MyPageServiceTest {
                 .status(MemberStatus.ACTIVE)
                 .role(MemberRole.USER)
                 .build();
-
-        testProfile = Profile.builder()
-                .profileId(10L)
-                .member(testMember)
-                .nickname("채영")
-                .schoolName("숙명여자대학교")
-                .grade(3)
-                .major("컴퓨터과학전공")
-                .gpa(4.0)
-                .gpaScale(4.5)
-                .isMain(true)
-                .isPublic(true)
-                .build();
     }
 
     @Test
-    @DisplayName("마이페이지 메인 조회 - 대표 프로필 및 정보 조회가 성공한다.")
+    @DisplayName("마이페이지 메인 조회 - 정보 조회가 성공한다.")
     void getMyPageMain_success() {
         // given
         given(memberRepository.findById(1L)).willReturn(Optional.of(testMember));
-        given(profileRepository.findByMemberAndIsMainTrue(testMember)).willReturn(Optional.of(testProfile));
         given(contestScrapRepository.countByMember(testMember)).willReturn(3);
 
         // when
@@ -89,9 +69,6 @@ class MyPageServiceTest {
 
         // then
         assertThat(response).isNotNull();
-        assertThat(response.mainProfile()).isNotNull();
-        assertThat(response.mainProfile().profileId()).isEqualTo(10L);
-        assertThat(response.mainProfile().nickname()).isEqualTo("채영");
         assertThat(response.collaborationDistance().current()).isEqualTo(100);
         assertThat(response.collaborationDistance().max()).isEqualTo(500);
         assertThat(response.collaborationDistance().progress()).isEqualTo(20);
@@ -99,24 +76,6 @@ class MyPageServiceTest {
         assertThat(response.ongoingProjectCount()).isEqualTo(0);
         assertThat(response.completedProjectCount()).isEqualTo(0);
         assertThat(response.reviewCount()).isEqualTo(0);
-    }
-
-    @Test
-    @DisplayName("마이페이지 메인 조회 - 대표 프로필이 없으면 mainProfile이 null로 반환된다.")
-    void getMyPageMain_noMainProfile() {
-        // given
-        given(memberRepository.findById(1L)).willReturn(Optional.of(testMember));
-        given(profileRepository.findByMemberAndIsMainTrue(testMember)).willReturn(Optional.empty());
-        given(profileRepository.findFirstByMemberOrderByCreatedAtAsc(testMember))
-                .willReturn(Optional.empty());
-        given(contestScrapRepository.countByMember(testMember)).willReturn(0);
-
-        // when
-        MyPageMainResponse response = myPageService.getMyPageMain(1L);
-
-        // then
-        assertThat(response.mainProfile()).isNull();
-        assertThat(response.scrapContestCount()).isEqualTo(0);
     }
 
     @Test

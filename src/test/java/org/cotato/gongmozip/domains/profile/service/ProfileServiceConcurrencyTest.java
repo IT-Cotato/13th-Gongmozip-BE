@@ -39,7 +39,7 @@ class ProfileServiceConcurrencyTest {
     }
 
     @Test
-    void 동시에_프로필을_생성해도_대표_프로필은_하나만_존재한다() throws Exception {
+    void 동시에_프로필을_생성해도_모두_성공적으로_생성된다() throws Exception {
         Member member = memberRepository.saveAndFlush(Member.builder()
                 .email("concurrency@gongmozip.com")
                 .password("password")
@@ -62,7 +62,6 @@ class ProfileServiceConcurrencyTest {
 
         List<Profile> profiles = profileRepository.findAll();
         assertThat(profiles).hasSize(2);
-        assertThat(profiles.stream().filter(Profile::isMain)).hasSize(1);
     }
 
     private void createProfileAfterSignal(Member member, String nickname, CountDownLatch ready, CountDownLatch start) {

@@ -65,9 +65,9 @@ class ProfileServiceTest {
     // 프로필 생성 테스트
     // ==========================================
 
-    @DisplayName("첫 프로필 생성 시 자동으로 대표 프로필(isMain = true)로 설정된다.")
+    @DisplayName("첫 프로필 생성 시 성공한다.")
     @Test
-    void 첫_프로필_생성_시_자동으로_대표_프로필로_설정된다() {
+    void 첫_프로필_생성_시_성공한다() {
         // given
         CreateProfileRequest request = new CreateProfileRequest(
                 "러너", "학교", 3, "소프트웨어", "경영", 4.0, 4.5, List.of(InterestCategory.IT_AI_TECH), true);
@@ -78,62 +78,7 @@ class ProfileServiceTest {
         CreateProfileResponse response = profileService.createProfile(request, member);
 
         // then
-        assertThat(response.isMain()).isTrue();
         then(profileRepository).should().save(any(Profile.class));
-    }
-
-    @DisplayName("두 번째 프로필 생성 시 새로 생성된 프로필이 대표 프로필(isMain = true)로 자동 설정된다.")
-    @Test
-    void 두_번째_프로필_생성_시_새로_생성된_프로필이_대표_프로필로_설정된다() {
-        // given
-        CreateProfileRequest request = new CreateProfileRequest(
-                "러너2", "학교", 3, "소프트웨어", "경영", 4.0, 4.5, List.of(InterestCategory.IT_AI_TECH), true);
-        Profile currentMain =
-                Profile.builder().profileId(10L).member(member).isMain(true).build();
-
-        given(memberRepository.findByIdWithLock(1L)).willReturn(Optional.of(member));
-        given(profileRepository.existsByNickname("러너2")).willReturn(false);
-        given(profileRepository.findByMemberAndIsMainTrue(member)).willReturn(Optional.of(currentMain));
-
-        // when
-        CreateProfileResponse response = profileService.createProfile(request, member);
-
-        // then
-        assertThat(response.isMain()).isTrue();
-        assertThat(currentMain.isMain()).isFalse();
-        then(profileRepository).should().save(any(Profile.class));
-    }
-
-    // 대표 프로필 설정 테스트
-
-    @DisplayName("대표 프로필 설정을 성공하면 기존 대표 프로필은 해제되고 새로운 대표 프로필이 설정된다.")
-    @Test
-    void 대표_프로필_설정을_성공하면_기존_대표_프로필은_해제되고_새로운_대표_프로필이_설정된다() {
-        // given
-        Profile currentMain = Profile.builder()
-                .profileId(10L)
-                .member(member)
-                .nickname("메인")
-                .isMain(true)
-                .build();
-        Profile targetMain = Profile.builder()
-                .profileId(20L)
-                .member(member)
-                .nickname("타겟")
-                .isMain(false)
-                .build();
-
-        given(memberRepository.findByIdWithLock(1L)).willReturn(Optional.of(member));
-        given(profileRepository.findById(20L)).willReturn(Optional.of(targetMain));
-        given(profileRepository.findByMemberAndIsMainTrue(member)).willReturn(Optional.of(currentMain));
-
-        // when
-        UpdateMainProfileResponse response = profileService.setMainProfile(20L, member);
-
-        // then
-        assertThat(response.isMain()).isTrue();
-        assertThat(currentMain.isMain()).isFalse();
-        assertThat(targetMain.isMain()).isTrue();
     }
 
     // 권한 및 접근 제어 테스트
@@ -227,33 +172,21 @@ class ProfileServiceTest {
         assertThat(profile.getGrade()).isEqualTo(3);
     }
 
-    @DisplayName("대표 프로필이 삭제되면 남은 프로필 중 하나가 자동으로 대표 프로필로 설정된다.")
+    @DisplayName("프로필 삭제에 성공한다.")
     @Test
-    void 대표_프로필_삭제_시_남은_프로필이_대표로_설정된다() {
+    void 프로필_삭제에_성공한다() {
         // given
-        Profile mainProfile = Profile.builder()
-                .profileId(10L)
-                .member(member)
-                .nickname("메인")
-                .isMain(true)
-                .build();
-        Profile subProfile = Profile.builder()
-                .profileId(20L)
-                .member(member)
-                .nickname("서브")
-                .isMain(false)
-                .build();
+        Profile mainProfile =
+                Profile.builder().profileId(10L).member(member).nickname("메인").build();
 
         given(memberRepository.findByIdWithLock(1L)).willReturn(Optional.of(member));
         given(profileRepository.findById(10L)).willReturn(Optional.of(mainProfile));
-        given(profileRepository.findFirstByMemberOrderByCreatedAtAsc(member)).willReturn(Optional.of(subProfile));
 
         // when
         profileService.deleteProfile(10L, member);
 
         // then
         then(profileRepository).should().delete(mainProfile);
-        assertThat(subProfile.isMain()).isTrue();
     }
 
     // 프로젝트 경험 CRUD & 날짜 검증 테스트
