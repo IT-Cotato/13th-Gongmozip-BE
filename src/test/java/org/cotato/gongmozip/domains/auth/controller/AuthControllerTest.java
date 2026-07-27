@@ -8,10 +8,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.cotato.gongmozip.domains.auth.dto.request.AuthRequest.LoginRequest;
 import org.cotato.gongmozip.domains.auth.dto.request.AuthRequest.PasswordResetCodeRequest;
 import org.cotato.gongmozip.domains.auth.dto.request.AuthRequest.PasswordResetCodeVerifyRequest;
 import org.cotato.gongmozip.domains.auth.dto.request.AuthRequest.PasswordResetRequest;
 import org.cotato.gongmozip.domains.auth.dto.response.AuthResponse.PasswordResetVerifyResponse;
+import org.cotato.gongmozip.domains.auth.exception.AuthException;
+import org.cotato.gongmozip.domains.auth.exception.codes.AuthErrorCode;
 import org.cotato.gongmozip.domains.auth.service.AuthService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,6 +34,20 @@ class AuthControllerTest {
 
     @MockitoBean
     private AuthService authService;
+
+    @Test
+    @DisplayName("로그인 비밀번호를 5회 이상 틀리면 비밀번호 재설정 권장 응답을 반환한다.")
+    void login_passwordResetRecommended() throws Exception {
+        given(authService.login(any(LoginRequest.class)))
+                .willThrow(new AuthException(AuthErrorCode.PASSWORD_RESET_RECOMMENDED));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"user@gongmozip.com\",\"password\":\"wrongPassword1!\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_401_7"))
+                .andExpect(jsonPath("$.message").value("비밀번호를 5회 이상 잘못 입력했습니다. 비밀번호 재설정을 권장합니다."));
+    }
 
     @Test
     @DisplayName("비로그인 사용자도 비밀번호 재설정 인증코드를 요청할 수 있다.")

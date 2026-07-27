@@ -113,19 +113,37 @@ class AuthServiceTest {
                 .hasMessage(MemberErrorCode.MEMBER_NOT_FOUND.getMessage());
     }
 
-    @DisplayName("비밀번호가 틀리면 비밀번호 불일치 예외가 발생한다.")
+    @DisplayName("비밀번호 실패가 5회 미만이면 비밀번호 불일치 예외가 발생한다.")
     @Test
-    void 비밀번호가_틀리면_비밀번호_불일치_예외가_발생한다() {
+    void 비밀번호_실패가_5회_미만이면_비밀번호_불일치_예외가_발생한다() {
         // given
         LoginRequest request = new LoginRequest(TEST_EMAIL, "wrongPassword");
         Member member = createMember();
         given(memberRepository.findByEmail(TEST_EMAIL)).willReturn(Optional.of(member));
         given(passwordEncoder.matches("wrongPassword", ENCODED_PASSWORD)).willReturn(false);
+        given(redisUtil.increment("login:failure:" + TEST_MEMBER_ID)).willReturn(4L);
 
         // when & then
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(AuthException.class)
                 .hasMessage(AuthErrorCode.INVALID_PASSWORD.getMessage());
+        then(redisUtil).should().increment("login:failure:" + TEST_MEMBER_ID);
+    }
+
+    @DisplayName("비밀번호를 5회 이상 틀리면 비밀번호 재설정 권장 예외가 발생한다.")
+    @Test
+    void 비밀번호를_5회_이상_틀리면_비밀번호_재설정_권장_예외가_발생한다() {
+        // given
+        LoginRequest request = new LoginRequest(TEST_EMAIL, "wrongPassword");
+        Member member = createMember();
+        given(memberRepository.findByEmail(TEST_EMAIL)).willReturn(Optional.of(member));
+        given(passwordEncoder.matches("wrongPassword", ENCODED_PASSWORD)).willReturn(false);
+        given(redisUtil.increment("login:failure:" + TEST_MEMBER_ID)).willReturn(5L);
+
+        // when & then
+        assertThatThrownBy(() -> authService.login(request))
+                .isInstanceOf(AuthException.class)
+                .hasMessage(AuthErrorCode.PASSWORD_RESET_RECOMMENDED.getMessage());
     }
 
     @DisplayName("로그인 성공 시 Access Token과 Refresh Token이 생성되어 반환된다.")
@@ -145,6 +163,7 @@ class AuthServiceTest {
         // then
         assertThat(result.accessToken()).isEqualTo(ACCESS_TOKEN);
         assertThat(result.refreshToken()).isEqualTo(REFRESH_TOKEN);
+        then(redisUtil).should().delete("login:failure:" + TEST_MEMBER_ID);
     }
 
     @DisplayName("로그인 성공 시 Refresh Token이 Redis에 저장된다.")
@@ -512,11 +531,13 @@ class AuthServiceTest {
             assertThat(member.getPassword()).isEqualTo(newEncodedPassword);
             then(redisUtil).should(never()).delete("password-reset:member:" + TEST_MEMBER_ID);
             then(redisUtil).should(never()).delete("refresh:" + TEST_MEMBER_ID);
+            then(redisUtil).should(never()).delete("login:failure:" + TEST_MEMBER_ID);
 
             TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
 
             then(redisUtil).should().delete("password-reset:member:" + TEST_MEMBER_ID);
             then(redisUtil).should().delete("refresh:" + TEST_MEMBER_ID);
+            then(redisUtil).should().delete("login:failure:" + TEST_MEMBER_ID);
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
