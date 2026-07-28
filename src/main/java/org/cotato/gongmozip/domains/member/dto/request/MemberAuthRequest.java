@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Pattern;
 import java.time.LocalDate;
 import org.cotato.gongmozip.domains.member.enums.Gender;
 import org.cotato.gongmozip.global.validation.PasswordPolicy;
+import org.cotato.gongmozip.global.validation.annotation.ValidBirthDate;
 
 public class MemberAuthRequest {
 
@@ -21,8 +22,9 @@ public class MemberAuthRequest {
             @Email @NotBlank String email,
             @NotBlank @Pattern(regexp = PasswordPolicy.REGEX, message = PasswordPolicy.MESSAGE) String password,
             @NotNull Gender gender,
-            @NotNull LocalDate birthDate) {}
+            @NotNull @ValidBirthDate(minimumAge = 14) LocalDate birthDate) {}
 
     // 소셜 회원 필수 정보(성별/생년월일) 등록 요청
-    public record RegisterRequiredInfoRequest(@NotNull Gender gender, @NotNull LocalDate birthDate) {}
+    public record RegisterRequiredInfoRequest(
+            @NotNull Gender gender, @NotNull @ValidBirthDate(minimumAge = 14) LocalDate birthDate) {}
 }
