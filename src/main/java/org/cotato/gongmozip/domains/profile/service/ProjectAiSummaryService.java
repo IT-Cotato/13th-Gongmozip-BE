@@ -22,25 +22,27 @@ public class ProjectAiSummaryService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void generateSummaryAsync(Long projectId, String projectName, String role, String description) {
         log.info("Starting async AI summary generation for projectId: {}", projectId);
-        ProjectExperience project = projectExperienceRepository
-                .findById(projectId)
-                .orElseThrow(() -> {
-                    log.error("Project not found during async AI summary generation. projectId: {}", projectId);
-                    return new IllegalArgumentException("Project not found: " + projectId);
-                });
-
-        project.startAiSummaryProcessing();
-        projectExperienceRepository.saveAndFlush(project);
-
+        ProjectExperience project = null;
         try {
+            project = projectExperienceRepository
+                    .findById(projectId)
+                    .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
+
+            project.startAiSummaryProcessing();
+            projectExperienceRepository.saveAndFlush(project);
+
             String summary = aiClient.generateSummary(projectName, role, description);
             project.completeAiSummary(summary);
             log.info("Successfully completed AI summary for projectId: {}", projectId);
         } catch (Exception e) {
             log.error("Failed to generate AI summary for projectId: {}. Error: ", projectId, e);
-            project.failAiSummary();
+            if (project != null) {
+                project.failAiSummary();
+            }
         } finally {
-            projectExperienceRepository.saveAndFlush(project);
+            if (project != null) {
+                projectExperienceRepository.saveAndFlush(project);
+            }
         }
     }
 }

@@ -23,6 +23,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
@@ -258,12 +260,22 @@ public class ProfileService {
         if (request.isOngoing() != null || request.endedAt() != null) project.updateIsOngoing(ongoing);
 
         // 콘텐츠가 수정되었다면 자동으로 비동기 AI 재요약 트리거
-        if (contentChanged) {
+        if (contentChanged
+                && project.getAiSummaryStatus() != AiSummaryStatus.PENDING
+                && project.getAiSummaryStatus() != AiSummaryStatus.PROCESSING) {
             project.pendingAiSummary();
             projectExperienceRepository.save(project);
 
-            projectAiSummaryService.generateSummaryAsync(
-                    project.getProjectId(), project.getProjectName(), project.getRole(), project.getDescription());
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    projectAiSummaryService.generateSummaryAsync(
+                            project.getProjectId(),
+                            project.getProjectName(),
+                            project.getRole(),
+                            project.getDescription());
+                }
+            });
         }
         String aiStatus = project.getAiSummaryStatus().name();
 
@@ -561,8 +573,13 @@ public class ProfileService {
         project.pendingAiSummary();
         projectExperienceRepository.save(project);
 
-        projectAiSummaryService.generateSummaryAsync(
-                project.getProjectId(), project.getProjectName(), project.getRole(), project.getDescription());
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                projectAiSummaryService.generateSummaryAsync(
+                        project.getProjectId(), project.getProjectName(), project.getRole(), project.getDescription());
+            }
+        });
     }
 
     public ProjectAiSummaryResponse getProjectAiSummary(Long profileId, Long projectId, Member member) {
@@ -596,7 +613,12 @@ public class ProfileService {
         project.pendingAiSummary();
         projectExperienceRepository.save(project);
 
-        projectAiSummaryService.generateSummaryAsync(
-                project.getProjectId(), project.getProjectName(), project.getRole(), project.getDescription());
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                projectAiSummaryService.generateSummaryAsync(
+                        project.getProjectId(), project.getProjectName(), project.getRole(), project.getDescription());
+            }
+        });
     }
 }

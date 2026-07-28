@@ -21,6 +21,7 @@ import org.cotato.gongmozip.domains.profile.exception.ProfileException;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.repository.*;
 import org.cotato.gongmozip.domains.survey.repository.MatchingApplicationRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class ProfileServiceTest {
@@ -67,6 +70,15 @@ class ProfileServiceTest {
         member = Member.builder().memberId(1L).email("test@gongmozip.com").build();
 
         otherMember = Member.builder().memberId(2L).email("other@gongmozip.com").build();
+
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clear();
+        }
     }
 
     // ==========================================
@@ -461,6 +473,8 @@ class ProfileServiceTest {
         ProjectResponse response = profileService.updateProject(
                 10L, 20L, new UpdateProjectRequest("변경된 프로젝트", null, null, null, null, null, null), member);
 
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
         assertThat(project.getAiSummaryStatus()).isEqualTo(AiSummaryStatus.PENDING);
         assertThat(response.aiSummaryStatus()).isEqualTo("PENDING");
         then(projectExperienceRepository).should().save(project);
@@ -486,6 +500,8 @@ class ProfileServiceTest {
 
         // when
         profileService.generateProjectAiSummary(10L, 20L, member);
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
 
         // then
         assertThat(project.getAiSummaryStatus()).isEqualTo(AiSummaryStatus.PENDING);
@@ -576,6 +592,8 @@ class ProfileServiceTest {
 
         // when
         profileService.regenerateProjectAiSummary(10L, 20L, member);
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
 
         // then
         assertThat(project.getAiSummaryStatus()).isEqualTo(AiSummaryStatus.PENDING);
