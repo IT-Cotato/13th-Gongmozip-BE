@@ -326,7 +326,7 @@ public class ProfileConverter {
     }
 
     public static ProjectResponse toProjectResponse(ProjectExperience project) {
-        String aiStatus = project.getAiSummary() == null ? "NOT_CREATED" : "CREATED";
+        String aiStatus = project.getAiSummaryStatus().name();
         return new ProjectResponse(
                 project.getProjectId(),
                 project.getProfile().getProfileId(),
@@ -388,7 +388,7 @@ public class ProfileConverter {
                 project.getEndedAt(),
                 project.isOngoing(),
                 project.getAiSummary(),
-                project.getAiSummary() != null ? project.getUpdatedAt() : null, // AI 요약 업데이트 시각
+                project.getAiSummaryGeneratedAt(), // AI 요약 업데이트 시각
                 project.getCreatedAt(),
                 project.getUpdatedAt());
     }

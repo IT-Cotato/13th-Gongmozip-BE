@@ -11,6 +11,7 @@ import org.cotato.gongmozip.domains.profile.converter.ProfileConverter;
 import org.cotato.gongmozip.domains.profile.dto.request.ProfileRequest.*;
 import org.cotato.gongmozip.domains.profile.dto.response.ProfileResponse.*;
 import org.cotato.gongmozip.domains.profile.entity.*;
+import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
 import org.cotato.gongmozip.domains.profile.enums.CertificationCategory;
 import org.cotato.gongmozip.domains.profile.exception.ProfileException;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
@@ -35,6 +36,7 @@ public class ProfileService {
     private final CertificationRepository certificationRepository;
     private final ProfileCertificationRepository profileCertificationRepository;
     private final MatchingApplicationRepository matchingApplicationRepository;
+    private final ProjectAiSummaryService projectAiSummaryService;
 
     // 프로필 비즈니스 로직
 
@@ -256,15 +258,10 @@ public class ProfileService {
         if (request.isOngoing() != null || request.endedAt() != null) project.updateIsOngoing(ongoing);
 
         // 콘텐츠가 수정되었고 기존 AI 요약이 존재하면 OUTDATED 처리
-        String aiStatus = "NOT_CREATED";
-        if (project.getAiSummary() != null) {
-            if (contentChanged) {
-                aiStatus = "OUTDATED";
-                project.updateAiSummary(null);
-            } else {
-                aiStatus = "CREATED";
-            }
+        if (contentChanged && project.getAiSummaryStatus() == AiSummaryStatus.COMPLETED) {
+            project.outdateAiSummary();
         }
+        String aiStatus = project.getAiSummaryStatus().name();
 
         return ProfileConverter.toProjectUpdateResponse(project, aiStatus);
     }
@@ -543,5 +540,59 @@ public class ProfileService {
         if (date != null && date.isAfter(LocalDate.now())) {
             throw new ProfileException(ProfileErrorCode.INVALID_DATE); // 미래 날짜 검증 실패
         }
+    }
+
+    @Transactional
+    public void generateProjectAiSummary(Long profileId, Long projectId, Member member) {
+        Profile profile = getProfileAndValidateOwner(profileId, member);
+        ProjectExperience project = getProjectAndValidateRelation(profileId, projectId);
+
+        // 이미 생성 중(PENDING, PROCESSING)이거나 완료(COMPLETED)된 경우 예외 처리
+        if (project.getAiSummaryStatus() == AiSummaryStatus.PENDING
+                || project.getAiSummaryStatus() == AiSummaryStatus.PROCESSING
+                || project.getAiSummaryStatus() == AiSummaryStatus.COMPLETED) {
+            throw new ProfileException(ProfileErrorCode.AI_SUMMARY_ALREADY_EXISTS);
+        }
+
+        project.pendingAiSummary();
+        projectExperienceRepository.save(project);
+
+        projectAiSummaryService.generateSummaryAsync(
+                project.getProjectId(), project.getProjectName(), project.getRole(), project.getDescription());
+    }
+
+    public ProjectAiSummaryResponse getProjectAiSummary(Long profileId, Long projectId, Member member) {
+        Profile profile = getProfileAndValidateOwner(profileId, member);
+        ProjectExperience project = getProjectAndValidateRelation(profileId, projectId);
+
+        if (project.getAiSummaryStatus() == AiSummaryStatus.NOT_CREATED) {
+            throw new ProfileException(ProfileErrorCode.AI_SUMMARY_NOT_FOUND);
+        }
+
+        return new ProjectAiSummaryResponse(
+                project.getAiSummary(), project.getAiSummaryStatus().name(), project.getAiSummaryGeneratedAt());
+    }
+
+    @Transactional
+    public void regenerateProjectAiSummary(Long profileId, Long projectId, Member member) {
+        Profile profile = getProfileAndValidateOwner(profileId, member);
+        ProjectExperience project = getProjectAndValidateRelation(profileId, projectId);
+
+        // 생성된 적이 없는 경우 예외 처리
+        if (project.getAiSummaryStatus() == AiSummaryStatus.NOT_CREATED) {
+            throw new ProfileException(ProfileErrorCode.AI_SUMMARY_NOT_FOUND);
+        }
+
+        // 이미 생성 중(PENDING, PROCESSING)인 경우 예외 처리
+        if (project.getAiSummaryStatus() == AiSummaryStatus.PENDING
+                || project.getAiSummaryStatus() == AiSummaryStatus.PROCESSING) {
+            throw new ProfileException(ProfileErrorCode.AI_SUMMARY_GENERATION_IN_PROGRESS);
+        }
+
+        project.pendingAiSummary();
+        projectExperienceRepository.save(project);
+
+        projectAiSummaryService.generateSummaryAsync(
+                project.getProjectId(), project.getProjectName(), project.getRole(), project.getDescription());
     }
 }
