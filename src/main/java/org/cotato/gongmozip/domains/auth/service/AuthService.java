@@ -69,17 +69,23 @@ public class AuthService {
                 .findByEmail(request.email())
                 .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
 
+        String loginFailureKey = LOGIN_FAILURE_PREFIX + member.getMemberId();
+        String failureCount = redisUtil.get(loginFailureKey);
+        if (failureCount != null && Long.parseLong(failureCount) >= MAX_LOGIN_FAILURES) {
+            throw new AuthException(AuthErrorCode.LOGIN_LOCKED);
+        }
+
         // 비밀번호 틀린 경우
         if (!passwordEncoder.matches(request.password(), member.getPassword())) {
-            long failureCount = redisUtil.increment(LOGIN_FAILURE_PREFIX + member.getMemberId());
-            if (failureCount >= MAX_LOGIN_FAILURES) {
-                throw new AuthException(AuthErrorCode.PASSWORD_RESET_RECOMMENDED);
+            long updatedFailureCount = redisUtil.increment(loginFailureKey);
+            if (updatedFailureCount >= MAX_LOGIN_FAILURES) {
+                throw new AuthException(AuthErrorCode.LOGIN_LOCKED);
             }
             throw new AuthException(AuthErrorCode.INVALID_PASSWORD);
         }
 
         // 로그인 성공 시 연속 실패 횟수 초기화
-        redisUtil.delete(LOGIN_FAILURE_PREFIX + member.getMemberId());
+        redisUtil.delete(loginFailureKey);
 
         // 토큰 발급
         String accessToken = jwtProvider.generateAccessToken(member.getMemberId(), member.getEmail());
