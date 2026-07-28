@@ -11,8 +11,6 @@ import org.cotato.gongmozip.domains.mypage.converter.MyPageConverter;
 import org.cotato.gongmozip.domains.mypage.dto.response.MyPageResponse.*;
 import org.cotato.gongmozip.domains.mypage.exception.MyPageException;
 import org.cotato.gongmozip.domains.mypage.exception.codes.MyPageErrorCode;
-import org.cotato.gongmozip.domains.profile.entity.Profile;
-import org.cotato.gongmozip.domains.profile.repository.ProfileRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -26,19 +24,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class MyPageService {
 
     private final MemberRepository memberRepository;
-    private final ProfileRepository profileRepository;
     private final ContestScrapRepository contestScrapRepository;
     private final CharacterService characterService;
 
     public MyPageMainResponse getMyPageMain(Long memberId) {
         Member member = getMember(memberId);
-
-        // 대표 프로필 조회 (isMain = true), 없을 경우 첫 번째 프로필 조회
-        Profile mainProfile = profileRepository
-                .findByMemberAndIsMainTrue(member)
-                .orElseGet(() -> profileRepository
-                        .findFirstByMemberOrderByCreatedAtAsc(member)
-                        .orElse(null));
 
         int scrapCount = contestScrapRepository.countByMember(member);
         int ongoingProjectCount = 0;
@@ -48,7 +38,7 @@ public class MyPageService {
                 characterService.findCurrentCharacter(member).orElse(null);
 
         return MyPageConverter.toMyPageMainResponse(
-                mainProfile, character, scrapCount, ongoingProjectCount, completedProjectCount, reviewCount);
+                character, scrapCount, ongoingProjectCount, completedProjectCount, reviewCount);
     }
 
     public OngoingProjectsResponse getOngoingProjects(Long memberId, Integer page, Integer size) {

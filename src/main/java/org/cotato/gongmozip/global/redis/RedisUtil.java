@@ -31,6 +31,14 @@ public class RedisUtil {
         return redisTemplate.opsForValue().get(key);
     }
 
+    // 원자적으로 조회 후 삭제
+    public String getAndDelete(String key) {
+        if (!StringUtils.hasText(key)) {
+            return null;
+        }
+        return redisTemplate.opsForValue().getAndDelete(key);
+    }
+
     // 삭제
     public void delete(String key) {
         validateInput(key);

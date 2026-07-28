@@ -6,7 +6,6 @@ import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.Cur
 import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.entity.ContestScrap;
 import org.cotato.gongmozip.domains.mypage.dto.response.MyPageResponse.*;
-import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.springframework.data.domain.Page;
 
 public class MyPageConverter {
@@ -14,22 +13,11 @@ public class MyPageConverter {
     private MyPageConverter() {}
 
     public static MyPageMainResponse toMyPageMainResponse(
-            Profile mainProfile,
             CurrentCharacterResponse currentCharacter,
             int scrapContestCount,
             int ongoingProjectCount,
             int completedProjectCount,
             int reviewCount) {
-        MainProfileSummary mainProfileSummary = null;
-        if (mainProfile != null) {
-            mainProfileSummary = new MainProfileSummary(
-                    mainProfile.getProfileId(),
-                    mainProfile.getNickname(),
-                    mainProfile.getSchoolName(),
-                    mainProfile.getMajor(),
-                    mainProfile.getGrade());
-        }
-
         // 초기 기본 협업거리 (현재 100m, Max 500m, 진행률 20%)
         CollaborationDistanceSummary distanceSummary = new CollaborationDistanceSummary(100, 500, 20);
 
@@ -42,7 +30,6 @@ public class MyPageConverter {
         return new MyPageMainResponse(
                 characterSummary,
                 distanceSummary,
-                mainProfileSummary,
                 ongoingProjectCount,
                 completedProjectCount,
                 reviewCount,

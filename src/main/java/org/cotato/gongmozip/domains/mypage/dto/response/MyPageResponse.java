@@ -8,7 +8,6 @@ public class MyPageResponse {
     public record MyPageMainResponse(
             CharacterSummary character,
             CollaborationDistanceSummary collaborationDistance,
-            MainProfileSummary mainProfile,
             Integer ongoingProjectCount,
             Integer completedProjectCount,
             Integer reviewCount,
@@ -17,8 +16,6 @@ public class MyPageResponse {
     public record CharacterSummary(String characterType, String paletteCode) {}
 
     public record CollaborationDistanceSummary(Integer current, Integer max, Integer progress) {}
-
-    public record MainProfileSummary(Long profileId, String nickname, String schoolName, String major, Integer grade) {}
 
     // 2. 진행 중 프로젝트 response
     public record OngoingProjectsResponse(
