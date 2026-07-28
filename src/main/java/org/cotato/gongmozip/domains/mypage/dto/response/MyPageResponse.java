@@ -14,7 +14,7 @@ public class MyPageResponse {
             Integer reviewCount,
             Integer scrapContestCount) {}
 
-    public record CharacterSummary(String characterType, String imageUrl) {}
+    public record CharacterSummary(String characterType, String paletteCode) {}
 
     public record CollaborationDistanceSummary(Integer current, Integer max, Integer progress) {}
 

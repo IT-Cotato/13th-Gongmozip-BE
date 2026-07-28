@@ -1,6 +1,8 @@
 package org.cotato.gongmozip.domains.mypage.service;
 
 import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
+import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.contest.entity.ContestScrap;
 import org.cotato.gongmozip.domains.contest.repository.ContestScrapRepository;
 import org.cotato.gongmozip.domains.member.entity.Member;
@@ -26,6 +28,7 @@ public class MyPageService {
     private final MemberRepository memberRepository;
     private final ProfileRepository profileRepository;
     private final ContestScrapRepository contestScrapRepository;
+    private final CharacterService characterService;
 
     public MyPageMainResponse getMyPageMain(Long memberId) {
         Member member = getMember(memberId);
@@ -41,9 +44,11 @@ public class MyPageService {
         int ongoingProjectCount = 0;
         int completedProjectCount = 0;
         int reviewCount = 0;
+        CurrentCharacterResponse character =
+                characterService.findCurrentCharacter(member).orElse(null);
 
         return MyPageConverter.toMyPageMainResponse(
-                mainProfile, scrapCount, ongoingProjectCount, completedProjectCount, reviewCount);
+                mainProfile, character, scrapCount, ongoingProjectCount, completedProjectCount, reviewCount);
     }
 
     public OngoingProjectsResponse getOngoingProjects(Long memberId, Integer page, Integer size) {
