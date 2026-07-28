@@ -43,7 +43,11 @@ public class CharacterController {
         return BaseResponseFormatter.success(CharacterSuccessCode.CHARACTER_RETRIEVED, response);
     }
 
-    @Operation(summary = "캐릭터 팔레트 목록 조회", description = "현재 캐릭터에 적용 가능한 단색·그라데이션 팔레트를 조회합니다.")
+    @Operation(
+            summary = "캐릭터 팔레트 목록 조회",
+            description = "현재 캐릭터에 적용 가능한 단색·그라데이션 팔레트를 조회합니다. "
+                    + "primaryHex는 DEFAULT 스타일일 때 null이며, "
+                    + "secondaryHex는 SOLID 또는 DEFAULT 스타일일 때 null입니다.")
     @CustomErrorCodes(
             commonErrorCodes = GlobalErrorCode.class,
             domainErrorCodes = {CharacterErrorCode.class, MemberErrorCode.class})
