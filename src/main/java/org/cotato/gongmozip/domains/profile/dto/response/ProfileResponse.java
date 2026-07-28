@@ -1,5 +1,6 @@
 package org.cotato.gongmozip.domains.profile.dto.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,6 +32,7 @@ public class ProfileResponse {
     public record ProfileDetailResponse(
             Long profileId,
             String nickname,
+            @Schema(nullable = true, description = "성향 검사 미완료 시 null")
             CharacterSummary character,
             String schoolName,
             Integer grade,
@@ -84,6 +86,7 @@ public class ProfileResponse {
     public record PublicProfileResponse(
             Long profileId,
             String nickname,
+            @Schema(nullable = true, description = "성향 검사 미완료 시 null")
             CharacterSummary character,
             String schoolRegion,
             String schoolName,
