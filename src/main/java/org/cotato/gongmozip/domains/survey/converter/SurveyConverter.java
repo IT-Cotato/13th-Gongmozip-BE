@@ -2,6 +2,7 @@ package org.cotato.gongmozip.domains.survey.converter;
 
 import java.math.BigDecimal;
 import java.util.List;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
 import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.AxisResponse;
 import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.OptionResponse;
 import org.cotato.gongmozip.domains.survey.dto.response.SurveyResponse.QuestionResponse;
@@ -48,8 +49,9 @@ public class SurveyConverter {
                 .build();
     }
 
-    // 제출 엔티티를 설문 결과 응답 DTO로 변환
-    public static SurveyResultResponse toResultResponse(SurveySubmission submission) {
+    // 제출 엔티티와 캐릭터 정보를 설문 결과 응답 DTO로 변환
+    public static SurveyResultResponse toResultResponse(
+            SurveySubmission submission, CurrentCharacterResponse character) {
         // CONSCIENTIOUSNESS_1 단독 점수는 X축 합산에서 역산 (characterXScore = GOAL + WORK + CONSC_1)
         BigDecimal conscientiousness1Score = submission
                 .getCharacterXScore()
@@ -68,7 +70,8 @@ public class SurveyConverter {
                 submission.getGoalPreferenceScore(),
                 submission.getWorkStyleScore(),
                 submission.getCommunicationStyleScore(),
-                buildAxes(submission, conscientiousness1Score));
+                buildAxes(submission, conscientiousness1Score),
+                character);
     }
 
     // 캐릭터 유형별로 표시할 성향 축 3개를 조립한다
