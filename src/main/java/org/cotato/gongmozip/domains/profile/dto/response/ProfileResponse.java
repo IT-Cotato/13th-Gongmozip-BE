@@ -8,7 +8,7 @@ import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 public class ProfileResponse {
 
     // 캐릭터 요약 정보 DTO
-    public record CharacterSummary(String characterType, String imageUrl) {}
+    public record CharacterSummary(String characterType, String paletteCode) {}
 
     // 1. 프로필 생성 응답
     public record CreateProfileResponse(
@@ -72,7 +72,7 @@ public class ProfileResponse {
             Long profileId,
             String nickname,
             String characterType,
-            String characterImageUrl,
+            String characterPaletteCode,
             String schoolName,
             Integer grade,
             String major,

@@ -5,6 +5,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
+import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.converter.ProfileConverter;
@@ -33,6 +35,7 @@ public class ProfileService {
     private final AwardRepository awardRepository;
     private final CertificationRepository certificationRepository;
     private final ProfileCertificationRepository profileCertificationRepository;
+    private final CharacterService characterService;
 
     // 프로필 비즈니스 로직
 
@@ -74,8 +77,11 @@ public class ProfileService {
         List<ProjectExperience> projects = projectExperienceRepository.findAllByProfile(profile);
         List<Award> awards = awardRepository.findAllByProfile(profile);
         List<ProfileCertification> certifications = profileCertificationRepository.findAllByProfile(profile);
+        CurrentCharacterResponse character =
+                // 없으면 빈 값 허용
+                characterService.findCurrentCharacter(member).orElse(null);
 
-        return ProfileConverter.toProfileDetailResponse(profile, projects, awards, certifications);
+        return ProfileConverter.toProfileDetailResponse(profile, projects, awards, certifications, character);
     }
 
     @Transactional
@@ -173,8 +179,10 @@ public class ProfileService {
         int awardCount = awardRepository.findAllByProfile(profile).size();
         int certificationCount =
                 profileCertificationRepository.findAllByProfile(profile).size();
+        CurrentCharacterResponse character =
+                characterService.findCurrentCharacter(member).orElse(null);
 
-        return ProfileConverter.toProfilePreviewResponse(profile, projects, awardCount, certificationCount);
+        return ProfileConverter.toProfilePreviewResponse(profile, projects, awardCount, certificationCount, character);
     }
 
     public PublicProfileResponse getPublicProfile(Long profileId) {
@@ -190,8 +198,10 @@ public class ProfileService {
         List<ProjectExperience> projects = projectExperienceRepository.findAllByProfile(profile);
         List<Award> awards = awardRepository.findAllByProfile(profile);
         List<ProfileCertification> certifications = profileCertificationRepository.findAllByProfile(profile);
+        CurrentCharacterResponse character =
+                characterService.findCurrentCharacter(profile.getMember()).orElse(null);
 
-        return ProfileConverter.toPublicProfileResponse(profile, projects, awards, certifications);
+        return ProfileConverter.toPublicProfileResponse(profile, projects, awards, certifications, character);
     }
 
     // 프로젝트 경험 비즈니스 로직

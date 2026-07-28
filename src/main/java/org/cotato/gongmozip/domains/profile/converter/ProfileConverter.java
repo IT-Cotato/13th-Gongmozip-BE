@@ -3,6 +3,7 @@ package org.cotato.gongmozip.domains.profile.converter;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.dto.request.ProfileRequest.CreateAwardRequest;
 import org.cotato.gongmozip.domains.profile.dto.request.ProfileRequest.CreateCertificationRequest;
@@ -65,9 +66,9 @@ public class ProfileConverter {
             Profile profile,
             List<ProjectExperience> projects,
             List<Award> awards,
-            List<ProfileCertification> certifications) {
-        // character는 성향 검사 전이므로 null
-        CharacterSummary character = null;
+            List<ProfileCertification> certifications,
+            CurrentCharacterResponse currentCharacter) {
+        CharacterSummary character = toCharacterSummary(currentCharacter);
 
         List<ProjectDetailResponse> projectDetails =
                 projects.stream().map(ProfileConverter::toProjectDetailResponse).collect(Collectors.toList());
@@ -122,10 +123,16 @@ public class ProfileConverter {
     }
 
     public static ProfilePreviewResponse toProfilePreviewResponse(
-            Profile profile, List<ProjectExperience> projects, int awardCount, int certificationCount) {
-        // AI 캐릭터 없음으로 설정 (null/기본값)
-        String characterType = null;
-        String characterImageUrl = null;
+            Profile profile,
+            List<ProjectExperience> projects,
+            int awardCount,
+            int certificationCount,
+            CurrentCharacterResponse currentCharacter) {
+        String characterType = currentCharacter == null
+                ? null
+                : currentCharacter.characterType().name();
+        String characterPaletteCode =
+                currentCharacter == null ? null : currentCharacter.paletteCode().name();
 
         List<ProjectPreviewSummary> summaries = projects.stream()
                 .map(p -> new ProjectPreviewSummary(
@@ -136,7 +143,7 @@ public class ProfileConverter {
                 profile.getProfileId(),
                 profile.getNickname(),
                 characterType,
-                characterImageUrl,
+                characterPaletteCode,
                 profile.getSchoolName(),
                 profile.getGrade(),
                 profile.getMajor(),
@@ -154,8 +161,9 @@ public class ProfileConverter {
             Profile profile,
             List<ProjectExperience> projects,
             List<Award> awards,
-            List<ProfileCertification> certifications) {
-        CharacterSummary character = null;
+            List<ProfileCertification> certifications,
+            CurrentCharacterResponse currentCharacter) {
+        CharacterSummary character = toCharacterSummary(currentCharacter);
 
         String schoolRegion = getSchoolRegion(profile.getSchoolName());
         String maskedSchoolName = "ㅇㅇ대학교"; // 명세서 예시에 따른 마스킹 처리
@@ -184,6 +192,15 @@ public class ProfileConverter {
                 projectDetails,
                 awardDetails,
                 certDetails);
+    }
+
+    private static CharacterSummary toCharacterSummary(CurrentCharacterResponse currentCharacter) {
+        if (currentCharacter == null) {
+            return null;
+        }
+        return new CharacterSummary(
+                currentCharacter.characterType().name(),
+                currentCharacter.paletteCode().name());
     }
 
     // 분교(입결 독립) 또는 이원화이지만 입결 차이가 현저한 캠퍼스 패턴
