@@ -77,6 +77,13 @@ jobs:
           scp -i ~/.ssh/ec2_key docker-compose.prod.yml "$EC2_USERNAME@$EC2_HOST:~/gongmozip/"
           scp -i ~/.ssh/ec2_key nginx/default.conf "$EC2_USERNAME@$EC2_HOST:~/gongmozip/nginx/"
 
+      - name: Clean up unused Docker images before pull
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+        run: |
+          ssh -i ~/.ssh/ec2_key "$EC2_USERNAME@$EC2_HOST" "docker image prune -af"
+
       - name: Pull image and restart services
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -107,10 +114,3 @@ jobs:
             docker logs --tail=100 gongmozip-nginx || true
             exit 1
           '
-
-      - name: Clean up unused Docker images
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
-        run: |
-          ssh -i ~/.ssh/ec2_key "$EC2_USERNAME@$EC2_HOST" "docker image prune -af"
