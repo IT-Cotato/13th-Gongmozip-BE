@@ -7,6 +7,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import org.cotato.gongmozip.domains.character.entity.CharacterDefinition;
+import org.cotato.gongmozip.domains.character.repository.CharacterDefinitionRepository;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.enums.MemberStatus;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
@@ -15,6 +17,7 @@ import org.cotato.gongmozip.domains.survey.dto.request.SurveyRequest.SubmitSurve
 import org.cotato.gongmozip.domains.survey.entity.SurveyOption;
 import org.cotato.gongmozip.domains.survey.entity.SurveyQuestion;
 import org.cotato.gongmozip.domains.survey.entity.SurveySubmission;
+import org.cotato.gongmozip.domains.survey.enums.CharacterType;
 import org.cotato.gongmozip.domains.survey.enums.QuestionType;
 import org.cotato.gongmozip.domains.survey.repository.MatchingApplicationRepository;
 import org.cotato.gongmozip.domains.survey.repository.SurveyAnswerRepository;
@@ -70,6 +73,9 @@ class SurveyServiceIntegrationTest {
     private MatchingApplicationRepository matchingApplicationRepository;
 
     @Autowired
+    private CharacterDefinitionRepository characterDefinitionRepository;
+
+    @Autowired
     private EntityManager entityManager;
 
     @DisplayName("3개월 후 재설문해도 회원별 제출은 하나만 유지되고 답변과 점수는 교체된다")
@@ -77,6 +83,7 @@ class SurveyServiceIntegrationTest {
     void resubmit_replacesAnswersAndUpdatesExistingRows() {
         surveyOptionRepository.deleteAllInBatch();
         surveyQuestionRepository.deleteAllInBatch();
+        saveCharacterDefinitions();
 
         Member member = memberRepository.save(Member.builder()
                 .email("survey-integration@example.com")
@@ -121,6 +128,23 @@ class SurveyServiceIntegrationTest {
         assertThat(updatedSubmission.getCharacterXScore()).isEqualByComparingTo("15");
         assertThat(updatedSubmission.getCharacterYScore()).isEqualByComparingTo("15");
         assertThat(matchingApplicationRepository.count()).isZero();
+    }
+
+    private void saveCharacterDefinitions() {
+        if (characterDefinitionRepository.count() > 0) {
+            return;
+        }
+        characterDefinitionRepository.saveAll(List.of(
+                CharacterDefinition.builder()
+                        .characterType(CharacterType.FREE_RUNNER)
+                        .displayName("프리러너")
+                        .catchphrase("정해진 길보다 나만의 방식으로 답을 찾아요!")
+                        .build(),
+                CharacterDefinition.builder()
+                        .characterType(CharacterType.LEAD_RUNNER)
+                        .displayName("리드러너")
+                        .catchphrase("방향을 정하고 함께 완주하는 리더")
+                        .build()));
     }
 
     private SurveyRequests saveSurveyQuestionsAndOptions() {

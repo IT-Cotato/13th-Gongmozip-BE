@@ -1,11 +1,13 @@
 package org.cotato.gongmozip.domains.mypage.dto.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
 public class MyPageResponse {
 
     // 1. 마이페이지 메인 response
     public record MyPageMainResponse(
+            @Schema(nullable = true, description = "성향 검사 미완료 시 null")
             CharacterSummary character,
             CollaborationDistanceSummary collaborationDistance,
             Integer ongoingProjectCount,
@@ -13,7 +15,7 @@ public class MyPageResponse {
             Integer reviewCount,
             Integer scrapContestCount) {}
 
-    public record CharacterSummary(String characterType, String imageUrl) {}
+    public record CharacterSummary(String characterType, String paletteCode) {}
 
     public record CollaborationDistanceSummary(Integer current, Integer max, Integer progress) {}
 

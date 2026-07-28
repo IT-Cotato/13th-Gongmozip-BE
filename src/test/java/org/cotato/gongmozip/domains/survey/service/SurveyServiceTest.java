@@ -12,6 +12,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
+import org.cotato.gongmozip.domains.character.enums.CharacterPalette;
+import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.survey.dto.request.SurveyRequest.AnswerRequest;
 import org.cotato.gongmozip.domains.survey.dto.request.SurveyRequest.SubmitSurveyRequest;
@@ -42,6 +45,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class SurveyServiceTest {
+
+    @Mock
+    private CharacterService characterService;
 
     private static final List<String> QUESTION_KEYS = List.of(
             "AGREEABLENESS_1",
@@ -245,7 +251,17 @@ class SurveyServiceTest {
     @Test
     void getResult_returnsStoredProfile() {
         SurveySubmission submission = submittedSubmissionWithScores();
+        CurrentCharacterResponse character = new CurrentCharacterResponse(
+                CharacterType.FREE_RUNNER,
+                "프리러너",
+                CharacterPalette.DEFAULT,
+                "정해진 길보다 나만의 방식으로 답을 찾아요!",
+                List.of("유연함"),
+                List.of("상황에 맞게 방향을 바꾸며 답을 찾아가는 러너"),
+                submission.getSubmittedAt(),
+                submission.getUpdatedAt());
         given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.of(submission));
+        given(characterService.getCurrentCharacter(member)).willReturn(character);
 
         SurveyResultResponse response = surveyService.getResult(member);
 
@@ -263,6 +279,7 @@ class SurveyServiceTest {
         assertThat(submission.getExtroversion2Score()).isEqualByComparingTo("2.4");
         assertThat(submission.getExtroversion3Score()).isEqualByComparingTo("2.5");
         assertThat(response.axes()).hasSize(3);
+        assertThat(response.character()).isSameAs(character);
     }
 
     @DisplayName("저장된 성향 결과가 없으면 예외가 발생한다")
