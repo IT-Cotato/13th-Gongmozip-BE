@@ -130,9 +130,9 @@ class AuthServiceTest {
         then(redisUtil).should().increment("login:failure:" + TEST_MEMBER_ID);
     }
 
-    @DisplayName("비밀번호를 5회 이상 틀리면 비밀번호 재설정 권장 예외가 발생한다.")
+    @DisplayName("비밀번호를 5회 이상 틀리면 로그인 제한 예외가 발생한다.")
     @Test
-    void 비밀번호를_5회_이상_틀리면_비밀번호_재설정_권장_예외가_발생한다() {
+    void 비밀번호를_5회_이상_틀리면_로그인_제한_예외가_발생한다() {
         // given
         LoginRequest request = new LoginRequest(TEST_EMAIL, "wrongPassword");
         Member member = createMember();
@@ -143,7 +143,25 @@ class AuthServiceTest {
         // when & then
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(AuthException.class)
-                .hasMessage(AuthErrorCode.PASSWORD_RESET_RECOMMENDED.getMessage());
+                .hasMessage(AuthErrorCode.LOGIN_LOCKED.getMessage());
+    }
+
+    @DisplayName("로그인이 제한된 계정은 올바른 비밀번호를 입력해도 로그인할 수 없다.")
+    @Test
+    void 로그인이_제한된_계정은_올바른_비밀번호를_입력해도_로그인할_수_없다() {
+        // given
+        LoginRequest request = new LoginRequest(TEST_EMAIL, TEST_PASSWORD);
+        Member member = createMember();
+        given(memberRepository.findByEmail(TEST_EMAIL)).willReturn(Optional.of(member));
+        given(redisUtil.get("login:failure:" + TEST_MEMBER_ID)).willReturn("5");
+
+        // when & then
+        assertThatThrownBy(() -> authService.login(request))
+                .isInstanceOf(AuthException.class)
+                .hasMessage(AuthErrorCode.LOGIN_LOCKED.getMessage());
+        then(passwordEncoder).should(never()).matches(anyString(), anyString());
+        then(redisUtil).should(never()).delete("login:failure:" + TEST_MEMBER_ID);
+        then(jwtProvider).should(never()).generateAccessToken(anyLong(), anyString());
     }
 
     @DisplayName("로그인 성공 시 Access Token과 Refresh Token이 생성되어 반환된다.")

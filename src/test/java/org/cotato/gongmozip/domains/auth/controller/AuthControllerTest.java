@@ -36,17 +36,16 @@ class AuthControllerTest {
     private AuthService authService;
 
     @Test
-    @DisplayName("로그인 비밀번호를 5회 이상 틀리면 비밀번호 재설정 권장 응답을 반환한다.")
-    void login_passwordResetRecommended() throws Exception {
-        given(authService.login(any(LoginRequest.class)))
-                .willThrow(new AuthException(AuthErrorCode.PASSWORD_RESET_RECOMMENDED));
+    @DisplayName("로그인 비밀번호를 5회 이상 틀리면 로그인 제한 응답을 반환한다.")
+    void login_locked() throws Exception {
+        given(authService.login(any(LoginRequest.class))).willThrow(new AuthException(AuthErrorCode.LOGIN_LOCKED));
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"user@gongmozip.com\",\"password\":\"wrongPassword1!\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_401_7"))
-                .andExpect(jsonPath("$.message").value("비밀번호를 5회 이상 잘못 입력했습니다. 비밀번호 재설정을 권장합니다."));
+                .andExpect(jsonPath("$.message").value("비밀번호를 5회 이상 잘못 입력하여 로그인이 제한되었습니다. 비밀번호를 재설정해 주세요."));
     }
 
     @Test
