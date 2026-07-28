@@ -257,9 +257,13 @@ public class ProfileService {
         project.updateEndedAt(ended);
         if (request.isOngoing() != null || request.endedAt() != null) project.updateIsOngoing(ongoing);
 
-        // 콘텐츠가 수정되었고 기존 AI 요약이 존재하면 OUTDATED 처리
-        if (contentChanged && project.getAiSummaryStatus() == AiSummaryStatus.COMPLETED) {
-            project.outdateAiSummary();
+        // 콘텐츠가 수정되었다면 자동으로 비동기 AI 재요약 트리거
+        if (contentChanged) {
+            project.pendingAiSummary();
+            projectExperienceRepository.save(project);
+
+            projectAiSummaryService.generateSummaryAsync(
+                    project.getProjectId(), project.getProjectName(), project.getRole(), project.getDescription());
         }
         String aiStatus = project.getAiSummaryStatus().name();
 

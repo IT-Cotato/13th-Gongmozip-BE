@@ -438,9 +438,9 @@ class ProfileServiceTest {
         assertThat(project.getEndedAt()).isEqualTo(endedAt);
     }
 
-    @DisplayName("프로젝트 콘텐츠가 변경되면 기존 AI 요약을 OUTDATED 처리한다.")
+    @DisplayName("프로젝트 콘텐츠가 변경되면 자동으로 AI 요약을 재요청한다.")
     @Test
-    void 프로젝트_콘텐츠가_변경되면_AI_요약을_OUTDATED_처리한다() {
+    void 프로젝트_콘텐츠가_변경되면_자동으로_AI_요약을_재요청한다() {
         Profile profile =
                 Profile.builder().profileId(10L).member(member).nickname("러너").build();
         ProjectExperience project = ProjectExperience.builder()
@@ -461,9 +461,10 @@ class ProfileServiceTest {
         ProjectResponse response = profileService.updateProject(
                 10L, 20L, new UpdateProjectRequest("변경된 프로젝트", null, null, null, null, null, null), member);
 
-        assertThat(project.getAiSummary()).isEqualTo("기존 요약");
-        assertThat(project.getAiSummaryStatus()).isEqualTo(AiSummaryStatus.OUTDATED);
-        assertThat(response.aiSummaryStatus()).isEqualTo("OUTDATED");
+        assertThat(project.getAiSummaryStatus()).isEqualTo(AiSummaryStatus.PENDING);
+        assertThat(response.aiSummaryStatus()).isEqualTo("PENDING");
+        then(projectExperienceRepository).should().save(project);
+        then(projectAiSummaryService).should().generateSummaryAsync(20L, "변경된 프로젝트", "역할", "설명");
     }
 
     @DisplayName("프로젝트 AI 요약 생성 요청 시 정상 접수된다.")
