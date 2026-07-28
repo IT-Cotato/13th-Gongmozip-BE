@@ -28,7 +28,8 @@ public enum ProfileErrorCode implements BaseErrorCode {
     // 409
     ALREADY_MAIN_PROFILE(HttpStatus.CONFLICT, "PROFILE_409_1", "이미 대표 프로필로 설정되어 있습니다."),
     DUPLICATE_CERTIFICATION(HttpStatus.CONFLICT, "PROFILE_409_2", "동일한 자격증이 중복 등록되었습니다."),
-    DUPLICATE_NICKNAME(HttpStatus.CONFLICT, "PROFILE_409_3", "동일한 닉네임의 프로필이 이미 존재합니다.");
+    DUPLICATE_NICKNAME(HttpStatus.CONFLICT, "PROFILE_409_3", "동일한 닉네임의 프로필이 이미 존재합니다."),
+    CANNOT_DELETE_REFERENCED_PROFILE(HttpStatus.CONFLICT, "PROFILE_409_4", "매칭 신청 이력이 존재하여 삭제할 수 없는 프로필입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

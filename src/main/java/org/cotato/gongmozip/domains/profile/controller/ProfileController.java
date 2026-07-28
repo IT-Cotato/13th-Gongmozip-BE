@@ -92,16 +92,6 @@ public class ProfileController {
         return BaseResponseFormatter.success(ProfileSuccessCode.PROFILE_DELETED);
     }
 
-    @Operation(summary = "대표 프로필 설정")
-    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
-    @PatchMapping("/profiles/{profileId}/main")
-    public ResponseEntity<BaseResponse<UpdateMainProfileResponse>> setMainProfile(
-            @PathVariable("profileId") Long profileId, @AuthenticationPrincipal CustomUserDetails userDetails) {
-        Member member = getAuthenticatedMember(userDetails);
-        UpdateMainProfileResponse response = profileService.setMainProfile(profileId, member);
-        return BaseResponseFormatter.success(ProfileSuccessCode.MAIN_PROFILE_SET, response);
-    }
-
     @Operation(summary = "프로필 공개 여부 변경")
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @PatchMapping("/profiles/{profileId}/visibility")

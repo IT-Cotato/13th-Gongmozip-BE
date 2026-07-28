@@ -45,16 +45,14 @@ class MyPageControllerTest {
                 .build();
         CustomUserDetails userDetails = new CustomUserDetails(userMember);
 
-        MainProfileSummary mainProfile = new MainProfileSummary(10L, "채영", "숙명여자대학교", "컴퓨터과학전공", 3);
         CollaborationDistanceSummary distance = new CollaborationDistanceSummary(100, 500, 20);
-        MyPageMainResponse response = new MyPageMainResponse(null, distance, mainProfile, 0, 0, 0, 3);
+        MyPageMainResponse response = new MyPageMainResponse(null, distance, 0, 0, 0, 3);
 
         given(myPageService.getMyPageMain(1L)).willReturn(response);
 
         // when & then
         mockMvc.perform(get("/api/mypage").with(user(userDetails)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.mainProfile.nickname").value("채영"))
                 .andExpect(jsonPath("$.data.collaborationDistance.current").value(100))
                 .andExpect(jsonPath("$.data.scrapContestCount").value(3));
     }

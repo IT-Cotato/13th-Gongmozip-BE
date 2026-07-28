@@ -18,6 +18,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.cotato.gongmozip.domains.member.entity.Member;
+import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.survey.enums.CharacterType;
 import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
@@ -39,6 +40,10 @@ public class MatchingApplication extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "member_id", nullable = false)
     private Member member;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "profile_id", nullable = false)
+    private Profile profile;
 
     // 매칭 신청 시 입력받는 공모전 관심 분야
     @Enumerated(EnumType.STRING)
@@ -101,12 +106,14 @@ public class MatchingApplication extends BaseEntity {
 
     public static MatchingApplication snapshotOf(
             SurveySubmission submission,
+            Profile profile,
             InterestCategory contestCategory,
             BigDecimal skillScore,
             Integer skillGroup,
             Integer collaborationDistance) {
         return MatchingApplication.builder()
                 .member(submission.getMember())
+                .profile(profile)
                 .contestCategory(contestCategory)
                 .skillScore(skillScore)
                 .skillGroup(skillGroup)
