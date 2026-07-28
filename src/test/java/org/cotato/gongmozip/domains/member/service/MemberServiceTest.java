@@ -21,7 +21,9 @@ import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.global.exception.CustomException;
 import org.cotato.gongmozip.global.redis.RedisUtil;
-import org.junit.jupiter.api.BeforeEach;
+import org.cotato.gongmozip.global.verification.EmailVerificationResult;
+import org.cotato.gongmozip.global.verification.EmailVerificationService;
+import org.cotato.gongmozip.global.verification.EmailVerificationService.Purpose;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,10 +32,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mail.MailSendException;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class MemberServiceTest {
@@ -48,7 +47,7 @@ class MemberServiceTest {
     private PasswordEncoder passwordEncoder;
 
     @Mock
-    private JavaMailSender mailSender;
+    private EmailVerificationService emailVerificationService;
 
     @Mock
     private RedisUtil redisUtil;
@@ -58,11 +57,6 @@ class MemberServiceTest {
 
     private static final String TEST_EMAIL = "test@gongmozip.com";
     private static final String TEST_CODE = "123456";
-
-    @BeforeEach
-    void setUp() {
-        ReflectionTestUtils.setField(memberService, "mailUsername", "no-reply@gongmozip.com");
-    }
 
     // ========== 이메일 코드 전송 메서드 테스트 ==========
 
@@ -79,7 +73,7 @@ class MemberServiceTest {
                 .hasMessage(MemberErrorCode.DUPLICATE_EMAIL.getMessage());
     }
 
-    @DisplayName("유효한 이메일로 인증코드를 요청하면 Redis에 인증코드와 발급 내역이 저장된다.")
+    @DisplayName("유효한 이메일로 회원가입 인증코드 전송을 요청한다.")
     @Test
     void 유효한_이메일로_인증코드_요청시_Redis에_코드와_발급내역이_저장된다() {
         // given
@@ -90,12 +84,7 @@ class MemberServiceTest {
         memberService.sendVerificationCode(request);
 
         // then
-        then(redisUtil).should().set(eq("email:verify:" + TEST_EMAIL), anyString(), eq(5L), eq(TimeUnit.MINUTES));
-        then(redisUtil)
-                .should()
-                .set(eq("email:verify:issued:" + TEST_EMAIL), eq("true"), eq(10L), eq(TimeUnit.MINUTES));
-        then(redisUtil).should().delete("email:verify:fail:" + TEST_EMAIL);
-        then(mailSender).should().send(any(SimpleMailMessage.class));
+        then(emailVerificationService).should().sendCode(Purpose.SIGN_UP, TEST_EMAIL, "[공모집] 이메일 인증코드");
     }
 
     @DisplayName("이메일 서버 오류로 인증코드 전송이 실패하면 이메일 전송 실패 예외가 발생한다.")
@@ -104,7 +93,9 @@ class MemberServiceTest {
         // given
         EmailVerifyRequest request = new EmailVerifyRequest(TEST_EMAIL);
         given(memberRepository.existsByEmail(TEST_EMAIL)).willReturn(false);
-        willThrow(new MailSendException("SMTP timeout")).given(mailSender).send(any(SimpleMailMessage.class));
+        willThrow(new MailSendException("SMTP timeout"))
+                .given(emailVerificationService)
+                .sendCode(Purpose.SIGN_UP, TEST_EMAIL, "[공모집] 이메일 인증코드");
 
         // when & then
         assertThatThrownBy(() -> memberService.sendVerificationCode(request))
@@ -119,9 +110,8 @@ class MemberServiceTest {
     void 인증코드_발급_이력이_없는_경우_코드_미발급_예외가_발생한다() {
         // given
         EmailVerifyConfirmRequest request = new EmailVerifyConfirmRequest(TEST_EMAIL, TEST_CODE);
-        given(redisUtil.get("email:verify:fail:" + TEST_EMAIL)).willReturn(null);
-        given(redisUtil.get("email:verify:" + TEST_EMAIL)).willReturn(null);
-        given(redisUtil.exists("email:verify:issued:" + TEST_EMAIL)).willReturn(false);
+        given(emailVerificationService.verifyCode(Purpose.SIGN_UP, TEST_EMAIL, TEST_CODE))
+                .willReturn(EmailVerificationResult.CODE_NOT_ISSUED);
 
         // when & then
         assertThatThrownBy(() -> memberService.confirmVerificationCode(request))
@@ -134,9 +124,8 @@ class MemberServiceTest {
     void 인증코드_유효시간이_만료된_경우_만료_예외가_발생한다() {
         // given
         EmailVerifyConfirmRequest request = new EmailVerifyConfirmRequest(TEST_EMAIL, TEST_CODE);
-        given(redisUtil.get("email:verify:fail:" + TEST_EMAIL)).willReturn(null);
-        given(redisUtil.get("email:verify:" + TEST_EMAIL)).willReturn(null);
-        given(redisUtil.exists("email:verify:issued:" + TEST_EMAIL)).willReturn(true);
+        given(emailVerificationService.verifyCode(Purpose.SIGN_UP, TEST_EMAIL, TEST_CODE))
+                .willReturn(EmailVerificationResult.EXPIRED_CODE);
 
         // when & then
         assertThatThrownBy(() -> memberService.confirmVerificationCode(request))
@@ -149,14 +138,13 @@ class MemberServiceTest {
     void 올바르지_않은_인증코드_입력시_불일치_예외가_발생한다() {
         // given
         EmailVerifyConfirmRequest request = new EmailVerifyConfirmRequest(TEST_EMAIL, "000000");
-        given(redisUtil.get("email:verify:fail:" + TEST_EMAIL)).willReturn(null);
-        given(redisUtil.get("email:verify:" + TEST_EMAIL)).willReturn(TEST_CODE);
+        given(emailVerificationService.verifyCode(Purpose.SIGN_UP, TEST_EMAIL, "000000"))
+                .willReturn(EmailVerificationResult.INVALID_CODE);
 
         // when & then
         assertThatThrownBy(() -> memberService.confirmVerificationCode(request))
                 .isInstanceOf(MemberException.class)
                 .hasMessage(MemberErrorCode.INVALID_VERIFY_CODE.getMessage());
-        then(redisUtil).should().incrementWithTtl(eq("email:verify:fail:" + TEST_EMAIL), eq(5L), eq(TimeUnit.MINUTES));
     }
 
     @DisplayName("인증코드 실패 횟수가 최대치(5회)에 도달하면 시도 횟수 초과 예외가 발생한다.")
@@ -164,7 +152,8 @@ class MemberServiceTest {
     void 인증코드_실패_횟수가_최대치에_도달하면_시도_횟수_초과_예외가_발생한다() {
         // given
         EmailVerifyConfirmRequest request = new EmailVerifyConfirmRequest(TEST_EMAIL, TEST_CODE);
-        given(redisUtil.get("email:verify:fail:" + TEST_EMAIL)).willReturn("5");
+        given(emailVerificationService.verifyCode(Purpose.SIGN_UP, TEST_EMAIL, TEST_CODE))
+                .willReturn(EmailVerificationResult.TOO_MANY_ATTEMPTS);
 
         // when & then
         assertThatThrownBy(() -> memberService.confirmVerificationCode(request))
@@ -177,14 +166,13 @@ class MemberServiceTest {
     void 인증코드_실패_횟수가_최대치_미만이면_인증을_계속_시도할_수_있다() {
         // given
         EmailVerifyConfirmRequest request = new EmailVerifyConfirmRequest(TEST_EMAIL, "000000");
-        given(redisUtil.get("email:verify:fail:" + TEST_EMAIL)).willReturn("4");
-        given(redisUtil.get("email:verify:" + TEST_EMAIL)).willReturn(TEST_CODE);
+        given(emailVerificationService.verifyCode(Purpose.SIGN_UP, TEST_EMAIL, "000000"))
+                .willReturn(EmailVerificationResult.INVALID_CODE);
 
         // when & then
         assertThatThrownBy(() -> memberService.confirmVerificationCode(request))
                 .isInstanceOf(MemberException.class)
                 .hasMessage(MemberErrorCode.INVALID_VERIFY_CODE.getMessage());
-        then(redisUtil).should().incrementWithTtl(eq("email:verify:fail:" + TEST_EMAIL), eq(5L), eq(TimeUnit.MINUTES));
     }
 
     @DisplayName("올바른 인증코드를 입력하면 인증코드가 삭제되고 인증 완료 내역이 저장된다.")
@@ -192,15 +180,13 @@ class MemberServiceTest {
     void 올바른_인증코드_입력시_인증코드_삭제되고_인증완료_내역이_저장된다() {
         // given
         EmailVerifyConfirmRequest request = new EmailVerifyConfirmRequest(TEST_EMAIL, TEST_CODE);
-        given(redisUtil.get("email:verify:fail:" + TEST_EMAIL)).willReturn(null);
-        given(redisUtil.get("email:verify:" + TEST_EMAIL)).willReturn(TEST_CODE);
+        given(emailVerificationService.verifyCode(Purpose.SIGN_UP, TEST_EMAIL, TEST_CODE))
+                .willReturn(EmailVerificationResult.VERIFIED);
 
         // when
         memberService.confirmVerificationCode(request);
 
         // then
-        then(redisUtil).should().delete("email:verify:" + TEST_EMAIL);
-        then(redisUtil).should().delete("email:verify:fail:" + TEST_EMAIL);
         then(redisUtil).should().set(eq("email:verified:" + TEST_EMAIL), eq("true"), eq(30L), eq(TimeUnit.MINUTES));
     }
 

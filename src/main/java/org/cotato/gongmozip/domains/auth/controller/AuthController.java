@@ -7,8 +7,12 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.auth.dto.request.AuthRequest.LoginRequest;
+import org.cotato.gongmozip.domains.auth.dto.request.AuthRequest.PasswordResetCodeRequest;
+import org.cotato.gongmozip.domains.auth.dto.request.AuthRequest.PasswordResetCodeVerifyRequest;
+import org.cotato.gongmozip.domains.auth.dto.request.AuthRequest.PasswordResetRequest;
 import org.cotato.gongmozip.domains.auth.dto.response.AuthResponse.LoginResponse;
 import org.cotato.gongmozip.domains.auth.dto.response.AuthResponse.LoginResult;
+import org.cotato.gongmozip.domains.auth.dto.response.AuthResponse.PasswordResetVerifyResponse;
 import org.cotato.gongmozip.domains.auth.exception.codes.AuthErrorCode;
 import org.cotato.gongmozip.domains.auth.exception.codes.AuthSuccessCode;
 import org.cotato.gongmozip.domains.auth.service.AuthService;
@@ -25,6 +29,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -109,6 +114,38 @@ public class AuthController {
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
         return BaseResponseFormatter.success(AuthSuccessCode.REISSUE_SUCCESS, new LoginResponse(result.accessToken()));
+    }
+
+    @Operation(summary = "비밀번호 재설정 인증코드 전송")
+    @CustomErrorCodes(
+            commonErrorCodes = GlobalErrorCode.class,
+            domainErrorCodes = {AuthErrorCode.class, MemberErrorCode.class})
+    @PostMapping("/password-reset/code")
+    public ResponseEntity<BaseResponse<Void>> sendPasswordResetCode(
+            @RequestBody @Valid PasswordResetCodeRequest request) {
+        authService.sendPasswordResetCode(request);
+        return BaseResponseFormatter.success(AuthSuccessCode.PASSWORD_RESET_CODE_SENT);
+    }
+
+    @Operation(summary = "비밀번호 재설정 인증코드 확인")
+    @CustomErrorCodes(
+            commonErrorCodes = GlobalErrorCode.class,
+            domainErrorCodes = {AuthErrorCode.class, MemberErrorCode.class})
+    @PostMapping("/password-reset/verify")
+    public ResponseEntity<BaseResponse<PasswordResetVerifyResponse>> verifyPasswordResetCode(
+            @RequestBody @Valid PasswordResetCodeVerifyRequest request) {
+        PasswordResetVerifyResponse response = authService.verifyPasswordResetCode(request);
+        return BaseResponseFormatter.success(AuthSuccessCode.PASSWORD_RESET_CODE_VERIFIED, response);
+    }
+
+    @Operation(summary = "비밀번호 재설정")
+    @CustomErrorCodes(
+            commonErrorCodes = GlobalErrorCode.class,
+            domainErrorCodes = {AuthErrorCode.class, MemberErrorCode.class})
+    @PatchMapping("/password-reset")
+    public ResponseEntity<BaseResponse<Void>> resetPassword(@RequestBody @Valid PasswordResetRequest request) {
+        authService.resetPassword(request);
+        return BaseResponseFormatter.success(AuthSuccessCode.PASSWORD_RESET_SUCCESS);
     }
 
     private String extractToken(HttpServletRequest request) {

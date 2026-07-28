@@ -58,4 +58,8 @@ public class Member extends BaseEntity {
         this.gender = gender;
         this.birthDate = birthDate;
     }
+
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
 }

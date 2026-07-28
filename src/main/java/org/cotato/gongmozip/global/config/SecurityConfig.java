@@ -53,6 +53,9 @@ public class SecurityConfig {
                                 "/api/members/email/verify", // 인증코드 확인
                                 "/api/auth/login", // 로그인
                                 "/api/auth/reissue", // 토큰 재발급
+                                "/api/auth/password-reset/code", // 비밀번호 재설정 인증코드 전송
+                                "/api/auth/password-reset/verify", // 비밀번호 재설정 인증코드 확인
+                                "/api/auth/password-reset", // 비밀번호 재설정
                                 "/login/oauth2/**",
                                 "/oauth2/**", // 소셜 로그인
                                 "/swagger-ui/**",
