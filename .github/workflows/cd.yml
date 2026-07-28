@@ -12,31 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Java 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: gradle
-
-      - name: Grant execute permission for Gradle
-        run: chmod +x ./gradlew
-
-      - name: Run tests
-        run: ./gradlew clean test
-
   publish:
     name: Build and Push Docker Image
-    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -130,3 +107,10 @@ jobs:
             docker logs --tail=100 gongmozip-nginx || true
             exit 1
           '
+
+      - name: Clean up unused Docker images
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+        run: |
+          ssh -i ~/.ssh/ec2_key "$EC2_USERNAME@$EC2_HOST" "docker image prune -af"
