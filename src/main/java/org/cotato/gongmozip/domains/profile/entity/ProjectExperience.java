@@ -3,6 +3,8 @@ package org.cotato.gongmozip.domains.profile.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -11,6 +13,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AccessLevel;
@@ -18,6 +21,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
 import org.cotato.gongmozip.global.entity.BaseEntity;
 
 @Getter
@@ -62,6 +66,36 @@ public class ProjectExperience extends BaseEntity {
 
     @Column(name = "ai_summary", columnDefinition = "TEXT")
     private String aiSummary;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "ai_summary_status", nullable = false)
+    @Builder.Default
+    private AiSummaryStatus aiSummaryStatus = AiSummaryStatus.NOT_CREATED;
+
+    @Column(name = "ai_summary_generated_at")
+    private LocalDateTime aiSummaryGeneratedAt;
+
+    public void startAiSummaryProcessing() {
+        this.aiSummaryStatus = AiSummaryStatus.PROCESSING;
+    }
+
+    public void completeAiSummary(String summary) {
+        this.aiSummary = summary;
+        this.aiSummaryStatus = AiSummaryStatus.COMPLETED;
+        this.aiSummaryGeneratedAt = LocalDateTime.now();
+    }
+
+    public void failAiSummary() {
+        this.aiSummaryStatus = AiSummaryStatus.FAILED;
+    }
+
+    public void outdateAiSummary() {
+        this.aiSummaryStatus = AiSummaryStatus.OUTDATED;
+    }
+
+    public void pendingAiSummary() {
+        this.aiSummaryStatus = AiSummaryStatus.PENDING;
+    }
 
     public void updateProjectName(String projectName) {
         this.projectName = projectName;

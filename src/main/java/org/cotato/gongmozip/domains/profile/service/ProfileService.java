@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
 import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.member.entity.Member;
@@ -13,18 +14,23 @@ import org.cotato.gongmozip.domains.profile.converter.ProfileConverter;
 import org.cotato.gongmozip.domains.profile.dto.request.ProfileRequest.*;
 import org.cotato.gongmozip.domains.profile.dto.response.ProfileResponse.*;
 import org.cotato.gongmozip.domains.profile.entity.*;
+import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
 import org.cotato.gongmozip.domains.profile.enums.CertificationCategory;
 import org.cotato.gongmozip.domains.profile.exception.ProfileException;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.repository.*;
 import org.cotato.gongmozip.domains.survey.repository.MatchingApplicationRepository;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -37,6 +43,8 @@ public class ProfileService {
     private final CertificationRepository certificationRepository;
     private final ProfileCertificationRepository profileCertificationRepository;
     private final MatchingApplicationRepository matchingApplicationRepository;
+    private final ProjectAiSummaryService projectAiSummaryService;
+    private final ProjectAiSummaryTxService projectAiSummaryTxService;
     private final CharacterService characterService;
 
     // 프로필 비즈니스 로직
@@ -265,16 +273,30 @@ public class ProfileService {
         project.updateEndedAt(ended);
         if (request.isOngoing() != null || request.endedAt() != null) project.updateIsOngoing(ongoing);
 
-        // 콘텐츠가 수정되었고 기존 AI 요약이 존재하면 OUTDATED 처리
-        String aiStatus = "NOT_CREATED";
-        if (project.getAiSummary() != null) {
-            if (contentChanged) {
-                aiStatus = "OUTDATED";
-                project.updateAiSummary(null);
-            } else {
-                aiStatus = "CREATED";
-            }
+        // 콘텐츠가 수정되었다면 자동으로 비동기 AI 재요약 트리거
+        if (contentChanged
+                && project.getAiSummaryStatus() != AiSummaryStatus.PENDING
+                && project.getAiSummaryStatus() != AiSummaryStatus.PROCESSING) {
+            project.pendingAiSummary();
+            projectExperienceRepository.save(project);
+
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        projectAiSummaryService.generateSummaryAsync(
+                                project.getProjectId(),
+                                project.getProjectName(),
+                                project.getRole(),
+                                project.getDescription());
+                    } catch (TaskRejectedException e) {
+                        log.error("자동 AI 요약 트리거 중 쓰레드 풀 포화로 작업 제출 실패", e);
+                        projectAiSummaryTxService.failSummary(project.getProjectId());
+                    }
+                }
+            });
         }
+        String aiStatus = project.getAiSummaryStatus().name();
 
         return ProfileConverter.toProjectUpdateResponse(project, aiStatus);
     }
@@ -553,5 +575,48 @@ public class ProfileService {
         if (date != null && date.isAfter(LocalDate.now())) {
             throw new ProfileException(ProfileErrorCode.INVALID_DATE); // 미래 날짜 검증 실패
         }
+    }
+
+    @Transactional
+    public void generateProjectAiSummary(Long profileId, Long projectId, Member member) {
+        Profile profile = getProfileAndValidateOwner(profileId, member);
+        ProjectExperience project = getProjectAndValidateRelation(profileId, projectId);
+
+        // 이미 생성 중(PENDING, PROCESSING)인 경우 예외 처리
+        if (project.getAiSummaryStatus() == AiSummaryStatus.PENDING
+                || project.getAiSummaryStatus() == AiSummaryStatus.PROCESSING) {
+            throw new ProfileException(ProfileErrorCode.AI_SUMMARY_GENERATION_IN_PROGRESS);
+        }
+
+        project.pendingAiSummary();
+        projectExperienceRepository.save(project);
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    projectAiSummaryService.generateSummaryAsync(
+                            project.getProjectId(),
+                            project.getProjectName(),
+                            project.getRole(),
+                            project.getDescription());
+                } catch (TaskRejectedException e) {
+                    log.error("AI 요약 생성 요청 중 쓰레드 풀 포화로 작업 제출 실패", e);
+                    projectAiSummaryTxService.failSummary(project.getProjectId());
+                }
+            }
+        });
+    }
+
+    public ProjectAiSummaryResponse getProjectAiSummary(Long profileId, Long projectId, Member member) {
+        Profile profile = getProfileAndValidateOwner(profileId, member);
+        ProjectExperience project = getProjectAndValidateRelation(profileId, projectId);
+
+        if (project.getAiSummaryStatus() == AiSummaryStatus.NOT_CREATED) {
+            throw new ProfileException(ProfileErrorCode.AI_SUMMARY_NOT_FOUND);
+        }
+
+        return new ProjectAiSummaryResponse(
+                project.getAiSummary(), project.getAiSummaryStatus().name(), project.getAiSummaryGeneratedAt());
     }
 }

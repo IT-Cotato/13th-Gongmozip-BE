@@ -15,12 +15,14 @@ import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.dto.request.ProfileRequest.*;
 import org.cotato.gongmozip.domains.profile.dto.response.ProfileResponse.*;
 import org.cotato.gongmozip.domains.profile.entity.*;
+import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
 import org.cotato.gongmozip.domains.profile.enums.CertificationCategory;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.profile.exception.ProfileException;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.repository.*;
 import org.cotato.gongmozip.domains.survey.repository.MatchingApplicationRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +30,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class ProfileServiceTest {
@@ -56,6 +60,9 @@ class ProfileServiceTest {
     @Mock
     private MatchingApplicationRepository matchingApplicationRepository;
 
+    @Mock
+    private ProjectAiSummaryService projectAiSummaryService;
+
     @InjectMocks
     private ProfileService profileService;
 
@@ -67,6 +74,15 @@ class ProfileServiceTest {
         member = Member.builder().memberId(1L).email("test@gongmozip.com").build();
 
         otherMember = Member.builder().memberId(2L).email("other@gongmozip.com").build();
+
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clear();
+        }
     }
 
     // ==========================================
@@ -438,9 +454,9 @@ class ProfileServiceTest {
         assertThat(project.getEndedAt()).isEqualTo(endedAt);
     }
 
-    @DisplayName("프로젝트 콘텐츠가 변경되면 기존 AI 요약을 제거한다.")
+    @DisplayName("프로젝트 콘텐츠가 변경되면 자동으로 AI 요약을 재요청한다.")
     @Test
-    void 프로젝트_콘텐츠가_변경되면_AI_요약을_제거한다() {
+    void 프로젝트_콘텐츠가_변경되면_자동으로_AI_요약을_재요청한다() {
         Profile profile =
                 Profile.builder().profileId(10L).member(member).nickname("러너").build();
         ProjectExperience project = ProjectExperience.builder()
@@ -453,6 +469,7 @@ class ProfileServiceTest {
                 .startedAt(LocalDate.of(2026, 1, 1))
                 .isOngoing(true)
                 .aiSummary("기존 요약")
+                .aiSummaryStatus(AiSummaryStatus.COMPLETED)
                 .build();
         given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
         given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
@@ -460,7 +477,131 @@ class ProfileServiceTest {
         ProjectResponse response = profileService.updateProject(
                 10L, 20L, new UpdateProjectRequest("변경된 프로젝트", null, null, null, null, null, null), member);
 
-        assertThat(project.getAiSummary()).isNull();
-        assertThat(response.aiSummaryStatus()).isEqualTo("OUTDATED");
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+        assertThat(project.getAiSummaryStatus()).isEqualTo(AiSummaryStatus.PENDING);
+        assertThat(response.aiSummaryStatus()).isEqualTo("PENDING");
+        then(projectExperienceRepository).should().save(project);
+        then(projectAiSummaryService).should().generateSummaryAsync(20L, "변경된 프로젝트", "역할", "설명");
+    }
+
+    @DisplayName("프로젝트 AI 요약 생성 요청 시 정상 접수된다.")
+    @Test
+    void 프로젝트_AI_요약_생성_요청_시_정상_접수된다() {
+        // given
+        Profile profile =
+                Profile.builder().profileId(10L).member(member).nickname("러너").build();
+        ProjectExperience project = ProjectExperience.builder()
+                .projectId(20L)
+                .profile(profile)
+                .projectName("프로젝트")
+                .description("설명")
+                .role("역할")
+                .aiSummaryStatus(AiSummaryStatus.NOT_CREATED)
+                .build();
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
+        given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
+
+        // when
+        profileService.generateProjectAiSummary(10L, 20L, member);
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+        // then
+        assertThat(project.getAiSummaryStatus()).isEqualTo(AiSummaryStatus.PENDING);
+        then(projectExperienceRepository).should().save(project);
+        then(projectAiSummaryService).should().generateSummaryAsync(20L, "프로젝트", "역할", "설명");
+    }
+
+    @DisplayName("이미 생성 중인 프로젝트 AI 요약 생성 요청 시 예외가 발생한다.")
+    @Test
+    void 이미_생성_중인_프로젝트_AI_요약_생성_요청_시_예외가_발생한다() {
+        // given
+        Profile profile =
+                Profile.builder().profileId(10L).member(member).nickname("러너").build();
+        ProjectExperience project = ProjectExperience.builder()
+                .projectId(20L)
+                .profile(profile)
+                .aiSummaryStatus(AiSummaryStatus.PROCESSING)
+                .build();
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
+        given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
+
+        // when & then
+        assertThatThrownBy(() -> profileService.generateProjectAiSummary(10L, 20L, member))
+                .isInstanceOf(ProfileException.class)
+                .hasMessage(ProfileErrorCode.AI_SUMMARY_GENERATION_IN_PROGRESS.getMessage());
+    }
+
+    @DisplayName("프로젝트 AI 요약 조회 시 성공한다.")
+    @Test
+    void 프로젝트_AI_요약_조회_시_성공한다() {
+        // given
+        Profile profile =
+                Profile.builder().profileId(10L).member(member).nickname("러너").build();
+        ProjectExperience project = ProjectExperience.builder()
+                .projectId(20L)
+                .profile(profile)
+                .aiSummary("생성된 요약")
+                .aiSummaryStatus(AiSummaryStatus.COMPLETED)
+                .build();
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
+        given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
+
+        // when
+        ProjectAiSummaryResponse response = profileService.getProjectAiSummary(10L, 20L, member);
+
+        // then
+        assertThat(response.summary()).isEqualTo("생성된 요약");
+        assertThat(response.status()).isEqualTo("COMPLETED");
+    }
+
+    @DisplayName("생성되지 않은 프로젝트 AI 요약 조회 시 예외가 발생한다.")
+    @Test
+    void 생성되지_않은_프로젝트_AI_요약_조회_시_예외가_발생한다() {
+        // given
+        Profile profile =
+                Profile.builder().profileId(10L).member(member).nickname("러너").build();
+        ProjectExperience project = ProjectExperience.builder()
+                .projectId(20L)
+                .profile(profile)
+                .aiSummaryStatus(AiSummaryStatus.NOT_CREATED)
+                .build();
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
+        given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
+
+        // when & then
+        assertThatThrownBy(() -> profileService.getProjectAiSummary(10L, 20L, member))
+                .isInstanceOf(ProfileException.class)
+                .hasMessage(ProfileErrorCode.AI_SUMMARY_NOT_FOUND.getMessage());
+    }
+
+    @DisplayName("이미 완료된 프로젝트 AI 요약 재생성 요청 시 정상 접수된다.")
+    @Test
+    void 이미_완료된_프로젝트_AI_요약_재생성_요청_시_정상_접수된다() {
+        // given
+        Profile profile =
+                Profile.builder().profileId(10L).member(member).nickname("러너").build();
+        ProjectExperience project = ProjectExperience.builder()
+                .projectId(20L)
+                .profile(profile)
+                .projectName("프로젝트")
+                .description("설명")
+                .role("역할")
+                .aiSummary("기존 요약")
+                .aiSummaryStatus(AiSummaryStatus.COMPLETED)
+                .build();
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
+        given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
+
+        // when
+        profileService.generateProjectAiSummary(10L, 20L, member);
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+        // then
+        assertThat(project.getAiSummaryStatus()).isEqualTo(AiSummaryStatus.PENDING);
+        then(projectExperienceRepository).should().save(project);
+        then(projectAiSummaryService).should().generateSummaryAsync(20L, "프로젝트", "역할", "설명");
     }
 }

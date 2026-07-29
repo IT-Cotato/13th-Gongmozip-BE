@@ -224,4 +224,7 @@ public class ProfileResponse {
             String issuer,
             LocalDate acquiredAt,
             boolean isCustom) {}
+
+    // 18. 프로젝트 AI 요약 조회 응답
+    public record ProjectAiSummaryResponse(String summary, String status, LocalDateTime generatedAt) {}
 }

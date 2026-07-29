@@ -188,6 +188,30 @@ public class ProfileController {
         return BaseResponseFormatter.success(ProfileSuccessCode.PROJECT_DELETED);
     }
 
+    @Operation(summary = "프로젝트 경험 AI 요약 생성")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
+    @PostMapping("/profiles/{profileId}/projects/{projectId}/ai-summary")
+    public ResponseEntity<BaseResponse<Void>> generateProjectAiSummary(
+            @PathVariable("profileId") Long profileId,
+            @PathVariable("projectId") Long projectId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        Member member = getAuthenticatedMember(userDetails);
+        profileService.generateProjectAiSummary(profileId, projectId, member);
+        return BaseResponseFormatter.success(ProfileSuccessCode.AI_SUMMARY_GENERATION_REQUESTED);
+    }
+
+    @Operation(summary = "프로젝트 경험 AI 요약 및 상태 조회")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
+    @GetMapping("/profiles/{profileId}/projects/{projectId}/ai-summary")
+    public ResponseEntity<BaseResponse<ProjectAiSummaryResponse>> getProjectAiSummary(
+            @PathVariable("profileId") Long profileId,
+            @PathVariable("projectId") Long projectId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        Member member = getAuthenticatedMember(userDetails);
+        ProjectAiSummaryResponse response = profileService.getProjectAiSummary(profileId, projectId, member);
+        return BaseResponseFormatter.success(ProfileSuccessCode.AI_SUMMARY_RETRIEVED, response);
+    }
+
     // 수상 경험 API
 
     @Operation(summary = "수상 경험 등록")
