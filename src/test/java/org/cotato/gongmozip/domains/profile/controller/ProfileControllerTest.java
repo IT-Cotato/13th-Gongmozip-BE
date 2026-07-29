@@ -82,17 +82,4 @@ class ProfileControllerTest {
                 .andExpect(jsonPath("$.data.summary").value("프로젝트 요약"))
                 .andExpect(jsonPath("$.data.status").value("COMPLETED"));
     }
-
-    @Test
-    void AI_요약_재생성_요청_시_202_ACCEPTED_를_반환한다() throws Exception {
-        Member member =
-                Member.builder().memberId(1L).email("user@gongmozip.com").build();
-        CustomUserDetails userDetails = new CustomUserDetails(member);
-        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
-
-        mockMvc.perform(post("/api/profiles/{profileId}/projects/{projectId}/ai-summary/regenerate", 1L, 10L)
-                        .with(user(userDetails)))
-                .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.code").value("PROFILE_202_2"));
-    }
 }

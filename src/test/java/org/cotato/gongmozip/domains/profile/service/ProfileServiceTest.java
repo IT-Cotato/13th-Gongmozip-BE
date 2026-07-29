@@ -509,16 +509,16 @@ class ProfileServiceTest {
         then(projectAiSummaryService).should().generateSummaryAsync(20L, "프로젝트", "역할", "설명");
     }
 
-    @DisplayName("이미 존재하는 AI 요약 생성 요청 시 예외가 발생한다.")
+    @DisplayName("이미 생성 중인 프로젝트 AI 요약 생성 요청 시 예외가 발생한다.")
     @Test
-    void 이미_존재하는_AI_요약_생성_요청_시_예외가_발생한다() {
+    void 이미_생성_중인_프로젝트_AI_요약_생성_요청_시_예외가_발생한다() {
         // given
         Profile profile =
                 Profile.builder().profileId(10L).member(member).nickname("러너").build();
         ProjectExperience project = ProjectExperience.builder()
                 .projectId(20L)
                 .profile(profile)
-                .aiSummaryStatus(AiSummaryStatus.COMPLETED)
+                .aiSummaryStatus(AiSummaryStatus.PROCESSING)
                 .build();
         given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
         given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
@@ -526,7 +526,7 @@ class ProfileServiceTest {
         // when & then
         assertThatThrownBy(() -> profileService.generateProjectAiSummary(10L, 20L, member))
                 .isInstanceOf(ProfileException.class)
-                .hasMessage(ProfileErrorCode.AI_SUMMARY_ALREADY_EXISTS.getMessage());
+                .hasMessage(ProfileErrorCode.AI_SUMMARY_GENERATION_IN_PROGRESS.getMessage());
     }
 
     @DisplayName("프로젝트 AI 요약 조회 시 성공한다.")
@@ -572,9 +572,9 @@ class ProfileServiceTest {
                 .hasMessage(ProfileErrorCode.AI_SUMMARY_NOT_FOUND.getMessage());
     }
 
-    @DisplayName("프로젝트 AI 요약 재생성 요청 시 정상 접수된다.")
+    @DisplayName("이미 완료된 프로젝트 AI 요약 재생성 요청 시 정상 접수된다.")
     @Test
-    void 프로젝트_AI_요약_재생성_요청_시_정상_접수된다() {
+    void 이미_완료된_프로젝트_AI_요약_재생성_요청_시_정상_접수된다() {
         // given
         Profile profile =
                 Profile.builder().profileId(10L).member(member).nickname("러너").build();
@@ -591,7 +591,7 @@ class ProfileServiceTest {
         given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
 
         // when
-        profileService.regenerateProjectAiSummary(10L, 20L, member);
+        profileService.generateProjectAiSummary(10L, 20L, member);
 
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
 
