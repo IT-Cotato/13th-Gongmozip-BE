@@ -12,6 +12,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
+import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.survey.converter.SurveyConverter;
 import org.cotato.gongmozip.domains.survey.dto.request.SurveyRequest.AnswerRequest;
@@ -66,6 +68,7 @@ public class SurveyService {
     private final SurveyOptionRepository surveyOptionRepository;
     private final SurveySubmissionRepository surveySubmissionRepository;
     private final SurveyAnswerRepository surveyAnswerRepository;
+    private final CharacterService characterService;
 
     // 질문 목록 조회 — 선택지와 함께 반환하며 매 요청마다 순서를 셔플한다
     public QuestionListResponse getQuestions() {
@@ -160,7 +163,12 @@ public class SurveyService {
                 .toList();
         surveyAnswerRepository.saveAll(answers);
 
-        return SurveyConverter.toResultResponse(savedSubmission);
+        // 설문 완료 시 자동으로 캐릭터 색상 및 엔티티 생성(Default)
+        characterService.initialize(member);
+        // 캐릭터 생성 실패 시 예외 반환 -> 트랜잭션 전체 실패처리
+        CurrentCharacterResponse character = characterService.getCurrentCharacter(member);
+
+        return SurveyConverter.toResultResponse(savedSubmission, character);
     }
 
     private Map<Long, List<SurveyOption>> loadOptionsByQuestionId(List<SurveyQuestion> questions) {
@@ -189,7 +197,8 @@ public class SurveyService {
                 .findByMember(member)
                 .filter(s -> s.getStatus() == SubmissionStatus.SUBMITTED)
                 .orElseThrow(() -> new SurveyException(SurveyErrorCode.SURVEY_NOT_SUBMITTED));
-        return SurveyConverter.toResultResponse(submission);
+        CurrentCharacterResponse character = characterService.getCurrentCharacter(member);
+        return SurveyConverter.toResultResponse(submission, character);
     }
 
     // 답변 기반으로 HEXACO 점수와 팀 성향 점수를 계산해 submission에 기록한다

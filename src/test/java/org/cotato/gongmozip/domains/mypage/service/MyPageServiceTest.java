@@ -9,6 +9,7 @@ import static org.mockito.BDDMockito.given;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.entity.ContestScrap;
 import org.cotato.gongmozip.domains.contest.enums.ContestStatus;
@@ -41,6 +42,9 @@ class MyPageServiceTest {
 
     @Mock
     private ContestScrapRepository contestScrapRepository;
+
+    @Mock
+    private CharacterService characterService;
 
     @InjectMocks
     private MyPageService myPageService;

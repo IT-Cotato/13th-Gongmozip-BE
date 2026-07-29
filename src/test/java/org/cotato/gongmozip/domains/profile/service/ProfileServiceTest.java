@@ -9,6 +9,7 @@ import static org.mockito.BDDMockito.then;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.dto.request.ProfileRequest.*;
@@ -34,6 +35,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 @ExtendWith(MockitoExtension.class)
 class ProfileServiceTest {
+
+    @Mock
+    private CharacterService characterService;
 
     @Mock
     private MemberRepository memberRepository;

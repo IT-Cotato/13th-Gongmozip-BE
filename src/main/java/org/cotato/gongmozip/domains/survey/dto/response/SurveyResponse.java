@@ -2,6 +2,7 @@ package org.cotato.gongmozip.domains.survey.dto.response;
 
 import java.math.BigDecimal;
 import java.util.List;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
 import org.cotato.gongmozip.domains.survey.enums.CharacterType;
 import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
 import org.cotato.gongmozip.domains.survey.enums.QuestionType;
@@ -43,5 +44,6 @@ public class SurveyResponse {
             BigDecimal goalPreferenceScore,
             BigDecimal workStyleScore,
             BigDecimal communicationStyleScore,
-            List<AxisResponse> axes) {}
+            List<AxisResponse> axes,
+            CurrentCharacterResponse character) {}
 }

@@ -1,5 +1,6 @@
 package org.cotato.gongmozip.domains.profile.dto.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -8,7 +9,7 @@ import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 public class ProfileResponse {
 
     // 캐릭터 요약 정보 DTO
-    public record CharacterSummary(String characterType, String imageUrl) {}
+    public record CharacterSummary(String characterType, String paletteCode) {}
 
     // 1. 프로필 생성 응답
     public record CreateProfileResponse(Long profileId, String nickname, boolean isPublic, LocalDateTime createdAt) {}
@@ -31,6 +32,7 @@ public class ProfileResponse {
     public record ProfileDetailResponse(
             Long profileId,
             String nickname,
+            @Schema(nullable = true, description = "성향 검사 미완료 시 null")
             CharacterSummary character,
             String schoolName,
             Integer grade,
@@ -66,7 +68,7 @@ public class ProfileResponse {
             Long profileId,
             String nickname,
             String characterType,
-            String characterImageUrl,
+            String characterPaletteCode,
             String schoolName,
             Integer grade,
             String major,
@@ -84,6 +86,7 @@ public class ProfileResponse {
     public record PublicProfileResponse(
             Long profileId,
             String nickname,
+            @Schema(nullable = true, description = "성향 검사 미완료 시 null")
             CharacterSummary character,
             String schoolRegion,
             String schoolName,

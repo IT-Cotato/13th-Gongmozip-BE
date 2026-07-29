@@ -10,8 +10,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
+import org.cotato.gongmozip.domains.character.enums.CharacterPalette;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.survey.dto.request.SurveyRequest.AnswerRequest;
@@ -71,7 +74,7 @@ class SurveyControllerTest {
 
         mockMvc.perform(get("/api/survey/questions").with(user(userDetails)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("SURVEY_001"))
+                .andExpect(jsonPath("$.code").value("SURVEY_200_1"))
                 .andExpect(jsonPath("$.data.questions[0].questionId").value(1L))
                 .andExpect(jsonPath("$.data.questions[0].options[0].optionId").value(10L));
     }
@@ -90,7 +93,7 @@ class SurveyControllerTest {
 
         mockMvc.perform(get("/api/survey/status").with(user(userDetails)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("SURVEY_002"))
+                .andExpect(jsonPath("$.code").value("SURVEY_200_2"))
                 .andExpect(jsonPath("$.data.status").value("SUBMITTED"));
     }
 
@@ -107,10 +110,11 @@ class SurveyControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("SURVEY_003"))
+                .andExpect(jsonPath("$.code").value("SURVEY_200_3"))
                 .andExpect(jsonPath("$.data.characterType").value("LEAD_RUNNER"))
                 .andExpect(jsonPath("$.data.extroversionType").value("E"))
-                .andExpect(jsonPath("$.data.axes.length()").value(3));
+                .andExpect(jsonPath("$.data.axes.length()").value(3))
+                .andExpect(jsonPath("$.data.character.paletteCode").value("DEFAULT"));
     }
 
     @DisplayName("답변 목록이 비어 있으면 400 응답을 반환한다")
@@ -139,7 +143,7 @@ class SurveyControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("SURVEY_006"))
+                .andExpect(jsonPath("$.code").value("SURVEY_409_1"))
                 .andExpect(jsonPath("$.message").value("협업 유형 검사는 3개월에 한 번만 재응시할 수 있습니다."));
     }
 
@@ -151,7 +155,7 @@ class SurveyControllerTest {
 
         mockMvc.perform(get("/api/survey/result").with(user(userDetails)))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("SURVEY_001"));
+                .andExpect(jsonPath("$.code").value("SURVEY_404_1"));
     }
 
     private SurveyResultResponse resultResponse() {
@@ -171,6 +175,15 @@ class SurveyControllerTest {
                 List.of(
                         new AxisResponse("즉흥형", "계획형", score),
                         new AxisResponse("독립형", "조율형", score),
-                        new AxisResponse("신중형", "추진형", score)));
+                        new AxisResponse("신중형", "추진형", score)),
+                new CurrentCharacterResponse(
+                        CharacterType.LEAD_RUNNER,
+                        "리드러너",
+                        CharacterPalette.DEFAULT,
+                        "방향을 정하고 함께 완주하는 리더",
+                        List.of("주도성"),
+                        List.of("팀의 목표와 방향을 빠르게 정리하는 러너"),
+                        LocalDateTime.of(2026, 5, 19, 15, 0),
+                        LocalDateTime.of(2026, 5, 19, 15, 0)));
     }
 }
