@@ -37,9 +37,7 @@ public enum ProfileSuccessCode implements BaseSuccessCode {
     CERTIFICATION_DELETED(HttpStatus.OK, "PROFILE_200_22", "자격증 삭제에 성공하였습니다."),
     AI_SUMMARY_RETRIEVED(HttpStatus.OK, "PROFILE_200_23", "프로젝트 AI 요약 조회에 성공하였습니다."),
 
-    // 202
     AI_SUMMARY_GENERATION_REQUESTED(HttpStatus.ACCEPTED, "PROFILE_202_1", "프로젝트 AI 요약 생성 요청에 성공하였습니다."),
-    AI_SUMMARY_REGENERATION_REQUESTED(HttpStatus.ACCEPTED, "PROFILE_202_2", "프로젝트 AI 요약 재생성 요청에 성공하였습니다."),
 
     // 201
     PROFILE_CREATED(HttpStatus.CREATED, "PROFILE_201_1", "프로필 생성에 성공하였습니다."),

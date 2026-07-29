@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.converter.ProfileConverter;
@@ -17,6 +18,7 @@ import org.cotato.gongmozip.domains.profile.exception.ProfileException;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.repository.*;
 import org.cotato.gongmozip.domains.survey.repository.MatchingApplicationRepository;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -26,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -39,6 +42,7 @@ public class ProfileService {
     private final ProfileCertificationRepository profileCertificationRepository;
     private final MatchingApplicationRepository matchingApplicationRepository;
     private final ProjectAiSummaryService projectAiSummaryService;
+    private final ProjectAiSummaryTxService projectAiSummaryTxService;
 
     // 프로필 비즈니스 로직
 
@@ -269,11 +273,16 @@ public class ProfileService {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    projectAiSummaryService.generateSummaryAsync(
-                            project.getProjectId(),
-                            project.getProjectName(),
-                            project.getRole(),
-                            project.getDescription());
+                    try {
+                        projectAiSummaryService.generateSummaryAsync(
+                                project.getProjectId(),
+                                project.getProjectName(),
+                                project.getRole(),
+                                project.getDescription());
+                    } catch (TaskRejectedException e) {
+                        log.error("자동 AI 요약 트리거 중 쓰레드 풀 포화로 작업 제출 실패", e);
+                        projectAiSummaryTxService.failSummary(project.getProjectId());
+                    }
                 }
             });
         }
@@ -563,11 +572,10 @@ public class ProfileService {
         Profile profile = getProfileAndValidateOwner(profileId, member);
         ProjectExperience project = getProjectAndValidateRelation(profileId, projectId);
 
-        // 이미 생성 중(PENDING, PROCESSING)이거나 완료(COMPLETED)된 경우 예외 처리
+        // 이미 생성 중(PENDING, PROCESSING)인 경우 예외 처리
         if (project.getAiSummaryStatus() == AiSummaryStatus.PENDING
-                || project.getAiSummaryStatus() == AiSummaryStatus.PROCESSING
-                || project.getAiSummaryStatus() == AiSummaryStatus.COMPLETED) {
-            throw new ProfileException(ProfileErrorCode.AI_SUMMARY_ALREADY_EXISTS);
+                || project.getAiSummaryStatus() == AiSummaryStatus.PROCESSING) {
+            throw new ProfileException(ProfileErrorCode.AI_SUMMARY_GENERATION_IN_PROGRESS);
         }
 
         project.pendingAiSummary();
@@ -576,8 +584,16 @@ public class ProfileService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                projectAiSummaryService.generateSummaryAsync(
-                        project.getProjectId(), project.getProjectName(), project.getRole(), project.getDescription());
+                try {
+                    projectAiSummaryService.generateSummaryAsync(
+                            project.getProjectId(),
+                            project.getProjectName(),
+                            project.getRole(),
+                            project.getDescription());
+                } catch (TaskRejectedException e) {
+                    log.error("AI 요약 생성 요청 중 쓰레드 풀 포화로 작업 제출 실패", e);
+                    projectAiSummaryTxService.failSummary(project.getProjectId());
+                }
             }
         });
     }
@@ -592,33 +608,5 @@ public class ProfileService {
 
         return new ProjectAiSummaryResponse(
                 project.getAiSummary(), project.getAiSummaryStatus().name(), project.getAiSummaryGeneratedAt());
-    }
-
-    @Transactional
-    public void regenerateProjectAiSummary(Long profileId, Long projectId, Member member) {
-        Profile profile = getProfileAndValidateOwner(profileId, member);
-        ProjectExperience project = getProjectAndValidateRelation(profileId, projectId);
-
-        // 생성된 적이 없는 경우 예외 처리
-        if (project.getAiSummaryStatus() == AiSummaryStatus.NOT_CREATED) {
-            throw new ProfileException(ProfileErrorCode.AI_SUMMARY_NOT_FOUND);
-        }
-
-        // 이미 생성 중(PENDING, PROCESSING)인 경우 예외 처리
-        if (project.getAiSummaryStatus() == AiSummaryStatus.PENDING
-                || project.getAiSummaryStatus() == AiSummaryStatus.PROCESSING) {
-            throw new ProfileException(ProfileErrorCode.AI_SUMMARY_GENERATION_IN_PROGRESS);
-        }
-
-        project.pendingAiSummary();
-        projectExperienceRepository.save(project);
-
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                projectAiSummaryService.generateSummaryAsync(
-                        project.getProjectId(), project.getProjectName(), project.getRole(), project.getDescription());
-            }
-        });
     }
 }

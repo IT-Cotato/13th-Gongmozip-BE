@@ -212,18 +212,6 @@ public class ProfileController {
         return BaseResponseFormatter.success(ProfileSuccessCode.AI_SUMMARY_RETRIEVED, response);
     }
 
-    @Operation(summary = "프로젝트 경험 AI 요약 재생성")
-    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
-    @PostMapping("/profiles/{profileId}/projects/{projectId}/ai-summary/regenerate")
-    public ResponseEntity<BaseResponse<Void>> regenerateProjectAiSummary(
-            @PathVariable("profileId") Long profileId,
-            @PathVariable("projectId") Long projectId,
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
-        Member member = getAuthenticatedMember(userDetails);
-        profileService.regenerateProjectAiSummary(profileId, projectId, member);
-        return BaseResponseFormatter.success(ProfileSuccessCode.AI_SUMMARY_REGENERATION_REQUESTED);
-    }
-
     // 수상 경험 API
 
     @Operation(summary = "수상 경험 등록")
