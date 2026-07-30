@@ -32,8 +32,7 @@ public class ProfileResponse {
     public record ProfileDetailResponse(
             Long profileId,
             String nickname,
-            @Schema(nullable = true, description = "성향 검사 미완료 시 null")
-            CharacterSummary character,
+            @Schema(nullable = true, description = "성향 검사 미완료 시 null") CharacterSummary character,
             String schoolName,
             Integer grade,
             String major,
@@ -86,8 +85,7 @@ public class ProfileResponse {
     public record PublicProfileResponse(
             Long profileId,
             String nickname,
-            @Schema(nullable = true, description = "성향 검사 미완료 시 null")
-            CharacterSummary character,
+            @Schema(nullable = true, description = "성향 검사 미완료 시 null") CharacterSummary character,
             String schoolRegion,
             String schoolName,
             Integer grade,

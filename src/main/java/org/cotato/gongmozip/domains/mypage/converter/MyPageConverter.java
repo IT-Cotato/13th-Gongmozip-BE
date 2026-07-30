@@ -5,6 +5,7 @@ import java.util.List;
 import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.entity.ContestScrap;
+import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.mypage.dto.response.MyPageResponse.*;
 import org.springframework.data.domain.Page;
 
@@ -17,9 +18,11 @@ public class MyPageConverter {
             int scrapContestCount,
             int ongoingProjectCount,
             int completedProjectCount,
-            int reviewCount) {
-        // 초기 기본 협업거리 (현재 100m, Max 500m, 진행률 20%)
-        CollaborationDistanceSummary distanceSummary = new CollaborationDistanceSummary(100, 500, 20);
+            int reviewCount,
+            int collaborationPoint) {
+        int progress = collaborationPoint * 100 / Member.MAX_COLLABORATION_POINT;
+        CollaborationDistanceSummary distanceSummary =
+                new CollaborationDistanceSummary(collaborationPoint, Member.MAX_COLLABORATION_POINT, progress);
 
         CharacterSummary characterSummary = currentCharacter == null
                 ? null

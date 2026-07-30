@@ -58,6 +58,7 @@ class MyPageServiceTest {
                 .email("test@gongmozip.com")
                 .status(MemberStatus.ACTIVE)
                 .role(MemberRole.USER)
+                .collaborationPoint(100)
                 .build();
     }
 
