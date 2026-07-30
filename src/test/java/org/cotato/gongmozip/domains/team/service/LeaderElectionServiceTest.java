@@ -1,0 +1,489 @@
+package org.cotato.gongmozip.domains.team.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
+import java.util.List;
+import java.util.Optional;
+import org.cotato.gongmozip.domains.chat.entity.Message;
+import org.cotato.gongmozip.domains.chat.enums.MessageType;
+import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
+import org.cotato.gongmozip.domains.chat.service.ChatService;
+import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
+import org.cotato.gongmozip.domains.member.entity.Member;
+import org.cotato.gongmozip.domains.profile.entity.Profile;
+import org.cotato.gongmozip.domains.team.entity.LeaderVote;
+import org.cotato.gongmozip.domains.team.entity.Team;
+import org.cotato.gongmozip.domains.team.entity.TeamMember;
+import org.cotato.gongmozip.domains.team.enums.LeaderCandidacyStatus;
+import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
+import org.cotato.gongmozip.domains.team.enums.TeamRole;
+import org.cotato.gongmozip.domains.team.enums.TeamStatus;
+import org.cotato.gongmozip.domains.team.exception.TeamException;
+import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
+import org.cotato.gongmozip.domains.team.repository.LeaderVoteRepository;
+import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
+import org.cotato.gongmozip.domains.team.repository.TeamRepository;
+import org.cotato.gongmozip.global.ai.AiClient;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+class LeaderElectionServiceTest {
+
+    @Mock
+    private ChatService chatService;
+
+    @Mock
+    private ChatbotOrchestrationService chatbotOrchestrationService;
+
+    @Mock
+    private TeamRepository teamRepository;
+
+    @Mock
+    private TeamMemberRepository teamMemberRepository;
+
+    @Mock
+    private LeaderVoteRepository leaderVoteRepository;
+
+    @Mock
+    private MessageRepository messageRepository;
+
+    @Mock
+    private AiClient aiClient;
+
+    @InjectMocks
+    private LeaderElectionService leaderElectionService;
+
+    @DisplayName("LEADER_SELECTING 상태가 아니면 팀장 여부 투표에 실패한다.")
+    @Test
+    void LEADER_SELECTING_상태가_아니면_팀장_여부_투표에_실패한다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when & then
+        assertThatThrownBy(() -> leaderElectionService.submitCandidacy(1L, 10L, true))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.INVALID_TEAM_STATUS);
+    }
+
+    @DisplayName("이미 팀장 투표가 시작됐으면 여부 투표를 다시 할 수 없다.")
+    @Test
+    void 이미_팀장_투표가_시작됐으면_여부_투표를_다시_할_수_없다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> leaderElectionService.submitCandidacy(1L, 10L, true))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.INVALID_TEAM_STATUS);
+    }
+
+    @DisplayName("일부만 응답했으면 다음 단계로 넘어가지 않는다.")
+    @Test
+    void 일부만_응답했으면_다음_단계로_넘어가지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember responder = teamMemberOf(team, 10L, "김철수");
+        TeamMember notYet = teamMemberOf(team, 20L, "이해은");
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(false);
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(responder));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(responder, notYet));
+
+        // when
+        leaderElectionService.submitCandidacy(1L, 10L, true);
+
+        // then
+        assertThat(responder.getLeaderCandidacy()).isEqualTo(LeaderCandidacyStatus.WANTS);
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
+        verify(chatService, never()).postChatbotMessage(any(), anyString());
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
+
+    @DisplayName("전원이 원하지 않으면 무작위로 임시 팀장이 지정된다.")
+    @Test
+    void 전원이_원하지_않으면_무작위로_임시_팀장이_지정된다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember a = teamMemberOf(team, 10L, "김철수");
+        a.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
+        TeamMember b = teamMemberOf(team, 20L, "이해은");
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(false);
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(b));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(a, b));
+
+        // when
+        leaderElectionService.submitCandidacy(1L, 20L, false);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
+        assertThat(List.of(a.getRole(), b.getRole())).contains(TeamRole.LEADER);
+        verify(chatService).postChatbotMessage(eq(team), anyString());
+    }
+
+    @DisplayName("후보가 1명뿐이면 투표 없이 바로 팀장으로 확정된다.")
+    @Test
+    void 후보가_1명뿐이면_투표_없이_바로_팀장으로_확정된다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember onlyCandidate = teamMemberOf(team, 10L, "김철수");
+        TeamMember other = teamMemberOf(team, 20L, "이해은");
+        other.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(false);
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(onlyCandidate));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(onlyCandidate, other));
+
+        // when
+        leaderElectionService.submitCandidacy(1L, 10L, true);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
+        assertThat(onlyCandidate.getRole()).isEqualTo(TeamRole.LEADER);
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
+
+    @DisplayName("후보가 2명 이상이면 팀장 투표 카드가 발행되고 아직 팀장은 정해지지 않는다.")
+    @Test
+    void 후보가_2명_이상이면_팀장_투표_카드가_발행되고_아직_팀장은_정해지지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember a = teamMemberOf(team, 10L, "김철수");
+        a.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember b = teamMemberOf(team, 20L, "이해은");
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(false);
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(b));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(a, b));
+
+        // when
+        leaderElectionService.submitCandidacy(1L, 20L, true);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
+        assertThat(a.getRole()).isEqualTo(TeamRole.MEMBER);
+        assertThat(b.getRole()).isEqualTo(TeamRole.MEMBER);
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_VOTE_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("아직 후보가 정해지지 않았으면 투표할 수 없다.")
+    @Test
+    void 아직_후보가_정해지지_않았으면_투표할_수_없다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember voter = teamMemberOf(team, 10L, "김철수");
+        TeamMember pending = teamMemberOf(team, 20L, "이해은");
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(voter));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(voter, pending));
+
+        // when & then
+        assertThatThrownBy(() -> leaderElectionService.castVote(1L, 10L, 20L))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.LEADER_CANDIDACY_PENDING);
+    }
+
+    @DisplayName("후보가 아닌 팀원에게 투표하면 실패한다.")
+    @Test
+    void 후보가_아닌_팀원에게_투표하면_실패한다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember voter = teamMemberOf(team, 10L, "김철수");
+        voter.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember notACandidate = teamMemberOf(team, 20L, "이해은");
+        notACandidate.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
+        TeamMember alsoCandidate = teamMemberOf(team, 30L, "박준수");
+        alsoCandidate.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(voter));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(voter, notACandidate, alsoCandidate));
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
+
+        // when & then
+        assertThatThrownBy(() -> leaderElectionService.castVote(1L, 10L, 20L))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.INVALID_LEADER_CANDIDATE);
+    }
+
+    @DisplayName("이미 이번 라운드에 투표했으면 다시 투표할 수 없다.")
+    @Test
+    void 이미_이번_라운드에_투표했으면_다시_투표할_수_없다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember voter = teamMemberOf(team, 10L, "김철수");
+        voter.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember candidate = teamMemberOf(team, 20L, "이해은");
+        candidate.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(voter));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(voter, candidate));
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
+        given(leaderVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(1L, 10L, 1))
+                .willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> leaderElectionService.castVote(1L, 10L, 20L))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.ALREADY_VOTED_LEADER);
+    }
+
+    @DisplayName("전원이 투표하고 단독 1위가 있으면 팀장으로 확정된다.")
+    @Test
+    void 전원이_투표하고_단독_1위가_있으면_팀장으로_확정된다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember voter1 = teamMemberOf(team, 10L, "김철수");
+        voter1.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember voter2 = teamMemberOf(team, 20L, "이해은");
+        voter2.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember voter3 = teamMemberOf(team, 30L, "박준수");
+        voter3.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 30L)).willReturn(Optional.of(voter3));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(voter1, voter2, voter3));
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);
+
+        LeaderVote existing1 = LeaderVote.builder()
+                .team(team)
+                .voterTeamMember(voter1)
+                .candidateTeamMember(voter1)
+                .round(1)
+                .build();
+        LeaderVote existing2 = LeaderVote.builder()
+                .team(team)
+                .voterTeamMember(voter2)
+                .candidateTeamMember(voter1)
+                .round(1)
+                .build();
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(existing1, existing2))
+                .willReturn(List.of(
+                        existing1,
+                        existing2,
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(voter3)
+                                .candidateTeamMember(voter1)
+                                .round(1)
+                                .build()));
+        given(leaderVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(1L, 30L, 1))
+                .willReturn(false);
+
+        // when
+        leaderElectionService.castVote(1L, 30L, 10L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
+        assertThat(voter1.getRole()).isEqualTo(TeamRole.LEADER);
+        verify(chatService).postChatbotMessage(eq(team), anyString());
+    }
+
+    @DisplayName("전원이 투표했는데 동률이면 재투표 안내 카드가 발행되고 팀장은 정해지지 않는다.")
+    @Test
+    void 전원이_투표했는데_동률이면_재투표_안내_카드가_발행되고_팀장은_정해지지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember voter1 = teamMemberOf(team, 10L, "김철수");
+        voter1.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember voter2 = teamMemberOf(team, 20L, "이해은");
+        voter2.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(voter2));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(voter1, voter2));
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
+        given(aiClient.recommendTiebreakLeader(any())).willReturn(10L);
+
+        LeaderVote existing = LeaderVote.builder()
+                .team(team)
+                .voterTeamMember(voter1)
+                .candidateTeamMember(voter1)
+                .round(1)
+                .build();
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(
+                        existing,
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(voter2)
+                                .candidateTeamMember(voter2)
+                                .round(1)
+                                .build()));
+
+        // when
+        leaderElectionService.castVote(1L, 20L, 20L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
+        assertThat(voter1.getRole()).isEqualTo(TeamRole.MEMBER);
+        assertThat(voter2.getRole()).isEqualTo(TeamRole.MEMBER);
+        ArgumentCaptor<String> metadataCaptor = ArgumentCaptor.forClass(String.class);
+        verify(chatService)
+                .postChatbotCardMessage(
+                        eq(team), eq(MessageType.LEADER_VOTE_CARD), anyString(), metadataCaptor.capture());
+        assertThat(metadataCaptor.getValue()).contains("10").contains("20");
+        assertThat(metadataCaptor.getValue()).contains("aiRecommendedTeamMemberId");
+    }
+
+    @DisplayName("LEADER_SELECTING 상태가 아니면 AI 추천 수락에 실패한다.")
+    @Test
+    void LEADER_SELECTING_상태가_아니면_AI_추천_수락에_실패한다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when & then
+        assertThatThrownBy(() -> leaderElectionService.acceptAiRecommendation(1L, 10L))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.INVALID_TEAM_STATUS);
+    }
+
+    @DisplayName("수락할 AI 추천이 없으면 실패한다.")
+    @Test
+    void 수락할_AI_추천이_없으면_실패한다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember member = teamMemberOf(team, 10L, "김철수");
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(member));
+        given(messageRepository.findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(
+                        1L, MessageType.LEADER_VOTE_CARD))
+                .willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> leaderElectionService.acceptAiRecommendation(1L, 10L))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.NO_PENDING_AI_RECOMMENDATION);
+    }
+
+    @DisplayName("AI 추천을 수락하면 추천된 후보가 바로 팀장으로 확정된다.")
+    @Test
+    void AI_추천을_수락하면_추천된_후보가_바로_팀장으로_확정된다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember accepter = teamMemberOf(team, 20L, "이해은");
+        TeamMember recommended = teamMemberOf(team, 10L, "김철수");
+        Message voteCard = Message.builder()
+                .messageType(MessageType.LEADER_VOTE_CARD)
+                .metadata("{\"candidateTeamMemberIds\":[10,20],\"aiRecommendedTeamMemberId\":10}")
+                .build();
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(accepter));
+        given(messageRepository.findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(
+                        1L, MessageType.LEADER_VOTE_CARD))
+                .willReturn(Optional.of(voteCard));
+        given(teamMemberRepository.findById(10L)).willReturn(Optional.of(recommended));
+
+        // when
+        leaderElectionService.acceptAiRecommendation(1L, 20L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
+        assertThat(recommended.getRole()).isEqualTo(TeamRole.LEADER);
+        verify(chatService).postChatbotMessage(eq(team), anyString());
+        verify(chatbotOrchestrationService).advanceToContestSelecting(team);
+    }
+
+    @DisplayName("추천된 후보가 이미 팀을 나갔으면 AI 추천 수락에 실패한다.")
+    @Test
+    void 추천된_후보가_이미_팀을_나갔으면_AI_추천_수락에_실패한다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember accepter = teamMemberOf(team, 20L, "이해은");
+        TeamMember left = TeamMember.builder()
+                .teamMemberId(10L)
+                .team(team)
+                .member(Member.builder().memberId(10L).build())
+                .profile(Profile.builder().nickname("김철수").build())
+                .status(TeamMemberStatus.LEFT)
+                .build();
+        Message voteCard = Message.builder()
+                .messageType(MessageType.LEADER_VOTE_CARD)
+                .metadata("{\"candidateTeamMemberIds\":[10,20],\"aiRecommendedTeamMemberId\":10}")
+                .build();
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(accepter));
+        given(messageRepository.findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(
+                        1L, MessageType.LEADER_VOTE_CARD))
+                .willReturn(Optional.of(voteCard));
+        given(teamMemberRepository.findById(10L)).willReturn(Optional.of(left));
+
+        // when & then
+        assertThatThrownBy(() -> leaderElectionService.acceptAiRecommendation(1L, 20L))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.INVALID_LEADER_CANDIDATE);
+    }
+
+    @DisplayName("존재하지 않는 팀이면 예외가 발생한다.")
+    @Test
+    void 존재하지_않는_팀이면_예외가_발생한다() {
+        // given
+        given(teamRepository.findById(999L)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> leaderElectionService.submitCandidacy(999L, 1L, true))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.TEAM_NOT_FOUND);
+    }
+
+    private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {
+        Member member = Member.builder().memberId(memberId).build();
+        Profile profile = Profile.builder().nickname(nickname).build();
+        return TeamMember.builder()
+                .teamMemberId(memberId)
+                .team(team)
+                .member(member)
+                .profile(profile)
+                .status(TeamMemberStatus.ACTIVE)
+                .build();
+    }
+}
