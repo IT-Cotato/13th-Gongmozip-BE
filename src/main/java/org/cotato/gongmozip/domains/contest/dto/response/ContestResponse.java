@@ -72,4 +72,9 @@ public final class ContestResponse {
             LocalDateTime applyEndAt,
             Integer daysRemaining,
             String detailUrl) {}
+
+    public record ContestCandidateItemResponse(
+            Long contestCandidateId, ContestSummaryResponse contest, Long addedByTeamMemberId) {}
+
+    public record ContestCandidateListResponse(List<ContestCandidateItemResponse> candidates) {}
 }

@@ -7,8 +7,7 @@ public class MyPageResponse {
 
     // 1. 마이페이지 메인 response
     public record MyPageMainResponse(
-            @Schema(nullable = true, description = "성향 검사 미완료 시 null")
-            CharacterSummary character,
+            @Schema(nullable = true, description = "성향 검사 미완료 시 null") CharacterSummary character,
             CollaborationDistanceSummary collaborationDistance,
             Integer ongoingProjectCount,
             Integer completedProjectCount,

@@ -38,7 +38,12 @@ public class MyPageService {
                 characterService.findCurrentCharacter(member).orElse(null);
 
         return MyPageConverter.toMyPageMainResponse(
-                character, scrapCount, ongoingProjectCount, completedProjectCount, reviewCount);
+                character,
+                scrapCount,
+                ongoingProjectCount,
+                completedProjectCount,
+                reviewCount,
+                member.getCollaborationPoint());
     }
 
     public OngoingProjectsResponse getOngoingProjects(Long memberId, Integer page, Integer size) {
