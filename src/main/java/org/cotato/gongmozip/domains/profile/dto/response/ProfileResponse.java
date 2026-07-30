@@ -32,8 +32,7 @@ public class ProfileResponse {
     public record ProfileDetailResponse(
             Long profileId,
             String nickname,
-            @Schema(nullable = true, description = "성향 검사 미완료 시 null")
-            CharacterSummary character,
+            @Schema(nullable = true, description = "성향 검사 미완료 시 null") CharacterSummary character,
             String schoolName,
             Integer grade,
             String major,
@@ -86,8 +85,7 @@ public class ProfileResponse {
     public record PublicProfileResponse(
             Long profileId,
             String nickname,
-            @Schema(nullable = true, description = "성향 검사 미완료 시 null")
-            CharacterSummary character,
+            @Schema(nullable = true, description = "성향 검사 미완료 시 null") CharacterSummary character,
             String schoolRegion,
             String schoolName,
             Integer grade,
@@ -227,4 +225,7 @@ public class ProfileResponse {
 
     // 18. 프로젝트 AI 요약 조회 응답
     public record ProjectAiSummaryResponse(String summary, String status, LocalDateTime generatedAt) {}
+
+    // 19. 프로젝트 경험 AI 평가 조회 응답
+    public record ProjectEvaluationResponse(Long evaluationId, String status, Integer score, String feedback) {}
 }
