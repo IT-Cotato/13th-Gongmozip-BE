@@ -44,12 +44,35 @@ DB_PASSWORD=your_password
 ```
 
 IntelliJ를 사용하는 경우 **Run/Debug Configurations → Environment variables**에 위 값을 입력합니다.
+터미널에서 직접 실행하는 경우 `.env`가 자동으로 로드되지 않으니 아래처럼 셸 환경변수로 먼저
+export 해야 합니다.
+
+```bash
+set -a; source .env; set +a
+```
+
+### Redis 준비 (로컬)
+
+로컬에 Redis가 없다면 `docker-compose.local.yml`로 간단히 띄울 수 있습니다 (Docker Desktop 필요).
+
+```bash
+docker compose -f docker-compose.local.yml up -d
+```
 
 ### 3. 실행
 
 ```bash
 ./gradlew bootRun
 ```
+
+이메일 인증 없이 계정을 발급하는 `/api/test/**` 같은 개발용 엔드포인트를 쓰려면 `local` 프로필을
+명시적으로 켜야 합니다 (기본값은 비활성 — prod 서버 설정에 기대지 않고 항상 꺼져 있는 쪽이 기본).
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=local'
+```
+
+IntelliJ Run/Debug Configurations를 쓴다면 **Active profiles**에 `local`을 추가하세요.
 
 ### 4. API 문서 확인
 

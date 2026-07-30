@@ -1,0 +1,90 @@
+# 03. 채팅 (Message, 챗봇 on/off, 나가기)
+
+## 배경/목적
+
+채팅방 내 메시지 송수신, 챗봇 참여 상태, 채팅방 나가기, 안읽음 처리를 정의한다.
+
+## 엔티티 · 필드 정의
+
+### Message
+
+| 필드 | 설명 |
+|---|---|
+| team | FK |
+| senderType | `MEMBER` / `CHATBOT` / `SYSTEM` |
+| senderTeamMember | nullable — CHATBOT/SYTEM이면 null |
+| messageType | `TEXT`, `SYSTEM_NOTICE`, `SLEADER_NOMINATION_CARD`, `LEADER_VOTE_CARD`, `CONTEST_RECOMMEND_CARD`, `CONTEST_VOTE_CARD`, `PROGRESS_CHECK_CARD`, `SUBMISSION_CHECK_CARD` |
+| content | 텍스트 |
+| metadata | 카드가 참조하는 투표/후보 id 등 (JSON 텍스트) |
+
+### 챗봇 on/off
+
+별도 엔티티 없음. `Team.chatbotEnabled` boolean 하나로 처리.
+
+> **결정 이유**: 챗봇은 투표/신고/리뷰의 대상이 되지 않는다. 가상의 TeamMember row를 만들면
+> unique 제약, 리스트 조회, 투표 후보 필터링 등 모든 쿼리에 "챗봇 제외" 조건을 추가해야 해서
+> 오히려 복잡해진다. "대화상대 조회" API 응답에서 실제 TeamMember 배열 + `chatbotEnabled`
+> 플래그를 함께 내려주고, 프론트에서 리스트 맨 아래에 얹는 방식으로 처리한다.
+> 추가/삭제 시 `SYSTEM_NOTICE` 메시지("OOO님이 챗봇을 추가/제거했습니다")를 기록한다.
+
+### 나가기
+
+`TeamMember.status = LEFT`, `leftAt` 기록. 나가기 시 confirm 다이얼로그
+("협업거리가 10m 줄어들어요") → [06-collaboration-point.md](./06-collaboration-point.md)의
+`LEAVE_PENALTY` 이벤트 발생.
+
+### 읽음 처리
+
+`TeamMember.lastReadAt` 갱신 방식 (per-message read-flag 대신 커서 방식으로 안읽음 배지 계산).
+
+## 결정사항
+
+- 프로필 팝업은 기존 `Profile.isPublic` 그대로 사용 — 비공개면 "비공개 프로필입니다" 안내만
+  노출, 신규 필드 불필요.
+- "팀원 이름 수정"(로컬 별칭) 기능은 **이번 스코프에서 제외**. 추후 필요 시 별도 설계 필요
+  (viewer × target 조인 엔티티가 필요해 TeamMember 필드 하나로는 해결 안 됨).
+
+## 구현 현황 (Phase 2 완료, 2026-07-29 WebSocket으로 전환)
+
+- 엔티티: `domains/chat/entity/Message.java`
+- 리포지토리: `domains/chat/repository/MessageRepository.java`
+- 서비스: `domains/chat/service/ChatService.java` — `sendMessage`, `getMessages`(최신 50건),
+  `markAsRead`, `postSystemMessage`(팀 도메인에서 나가기/챗봇 토글 시 호출). 메시지가 저장될
+  때마다 `SimpMessagingTemplate`으로 `/topic/teams/{teamId}`에 브로드캐스트한다 — `sendMessage`,
+  `postSystemMessage` 양쪽 다 이 경로를 타므로, 나중에 챗봇/투표 결과 메시지를 추가해도
+  실시간 push를 별도로 구현할 필요 없음.
+- **전송(WebSocket)**: `domains/chat/websocket/ChatWebSocketController` —
+  STOMP `@MessageMapping("/teams/{teamId}/messages")`. 인증은 `global/websocket/
+  StompAuthChannelInterceptor`가 STOMP `CONNECT` 프레임의 `Authorization` 헤더로 처리
+  (HTTP 핸드셰이크 단계가 아님 — SecurityConfig에서 `/ws/**`는 permitAll).
+  `WebSocketConfig`가 `/topic`(브로드캐스트) · `/app`(클라이언트→서버) prefix와 엔드포인트
+  `/ws`를 등록한다.
+- **이력 조회/읽음 처리(REST 유지)**: `GET /api/teams/{teamId}/messages`,
+  `PATCH /api/teams/{teamId}/read` — 실시간성이 필요 없어 REST로 남김
+- 나가기: `DELETE /api/teams/{teamId}/members/me` (`TeamService.leaveTeam`, `TeamMember.leave()`)
+- 챗봇 on/off: `PATCH /api/teams/{teamId}/chatbot` (`TeamService.toggleChatbot`)
+- 채팅방 목록(`GET /api/teams`)에 최근 메시지 미리보기(`lastMessageContent`/`lastMessageAt`)와
+  안읽음 수(`unreadCount`)를 포함하도록 Phase 1 응답을 확장함
+- 팀 소속 검증 예외는 별도 `ChatErrorCode` 없이 `TeamErrorCode`를 그대로 재사용 (Team=채팅방
+  아키텍처 결정에 따름). STOMP 쪽 예외는 `ChatWebSocketController`의 `@MessageExceptionHandler`가
+  `/user/queue/errors`로 클라이언트에 내려준다.
+- **수동 테스트 페이지**: `resources/static/chat-test.html` — JWT 토큰 + teamId 입력 후 STOMP
+  연결/전송/수신을 브라우저에서 직접 확인 가능 (`@stomp/stompjs` CDN 사용). 상단 "빠른 준비"
+  버튼이 `POST /api/test/auth/quick-login`(이메일 인증 없이 회원+기본 프로필 생성 후
+  accessToken 발급) → `POST /api/test/teams`(1인 팀 생성)를 순서대로 호출해 토큰/teamId를
+  자동으로 채워준다. `AuthTestController`(`domains/auth/controller`)도 `TeamTestController`와
+  동일하게 `@Profile("local")` 임시 엔드포인트(명시적으로 켜야만 활성화되는 fail-safe 방식 —
+  이유는 [api.md](../api.md) 참고) — 매칭/실가입 플로우 연동 후 삭제 예정.
+- 테스트: `ChatServiceTest`(브로드캐스트 검증 포함), `TeamServiceTest`(나가기/챗봇 토글 케이스)
+
+## 미정 / 추후 확인 필요
+
+- 채팅방 "설정"(⚙️) 화면 상세 스펙 미정.
+- STOMP 엔드포인트 `allowedOriginPatterns("*")`는 개발 편의를 위한 설정 — 배포 전 실제 허용
+  origin으로 좁혀야 함.
+- 협업거리 차감(-10m, 나가기 페널티)은 이미 Phase 3에서 `leaveTeam`에 연결 완료
+  ([06-collaboration-point.md](./06-collaboration-point.md) 참고).
+
+## 관련 화면
+
+5.1 채팅목록, 5.1.1.1 메시지 입력, 5.1.2 메뉴_챗봇 삭제/추가, 5.1.2.4 채팅방 나가기

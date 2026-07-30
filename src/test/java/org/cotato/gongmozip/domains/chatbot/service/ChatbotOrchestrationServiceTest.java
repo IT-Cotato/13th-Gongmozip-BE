@@ -1,0 +1,286 @@
+package org.cotato.gongmozip.domains.chatbot.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
+import java.util.List;
+import java.util.Optional;
+import org.cotato.gongmozip.domains.chat.enums.MessageType;
+import org.cotato.gongmozip.domains.chat.service.ChatService;
+import org.cotato.gongmozip.domains.contest.entity.Contest;
+import org.cotato.gongmozip.domains.contest.repository.ContestRepository;
+import org.cotato.gongmozip.domains.member.entity.Member;
+import org.cotato.gongmozip.domains.profile.entity.Profile;
+import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
+import org.cotato.gongmozip.domains.team.entity.Team;
+import org.cotato.gongmozip.domains.team.entity.TeamMember;
+import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
+import org.cotato.gongmozip.domains.team.enums.TeamStatus;
+import org.cotato.gongmozip.domains.team.exception.TeamException;
+import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
+import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
+import org.cotato.gongmozip.domains.team.repository.TeamRepository;
+import org.cotato.gongmozip.global.ai.AiClient;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+
+@ExtendWith(MockitoExtension.class)
+class ChatbotOrchestrationServiceTest {
+
+    @Mock
+    private ChatService chatService;
+
+    @Mock
+    private TeamRepository teamRepository;
+
+    @Mock
+    private TeamMemberRepository teamMemberRepository;
+
+    @Mock
+    private ContestRepository contestRepository;
+
+    @Mock
+    private AiClient aiClient;
+
+    @InjectMocks
+    private ChatbotOrchestrationService chatbotOrchestrationService;
+
+    @DisplayName("팀 생성 직후 인사 유도를 시작하면 상태가 GREETING이 되고 챗봇 메시지가 발행된다.")
+    @Test
+    void 팀_생성_직후_인사_유도를_시작하면_상태가_GREETING이_되고_챗봇_메시지가_발행된다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.MATCHED).build();
+
+        // when
+        chatbotOrchestrationService.startGreeting(team);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.GREETING);
+        verify(chatService).postChatbotMessage(eq(team), anyString());
+    }
+
+    @DisplayName("GREETING 상태가 아니면 인사 기록을 하지 않는다.")
+    @Test
+    void GREETING_상태가_아니면_인사_기록을_하지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        chatbotOrchestrationService.recordGreetingAndAdvance(1L, 10L);
+
+        // then
+        verify(teamMemberRepository, never()).findByTeam_TeamIdAndMember_MemberId(any(), any());
+        verify(chatService, never()).postChatbotMessage(any(), anyString());
+    }
+
+    @DisplayName("일부만 인사했으면 상태를 전이하지 않고 발신자의 인사만 기록한다.")
+    @Test
+    void 일부만_인사했으면_상태를_전이하지_않고_발신자의_인사만_기록한다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
+        TeamMember sender = teamMemberOf(team, 10L, "김철수");
+        TeamMember notGreetedYet = teamMemberOf(team, 20L, "이해은");
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(sender));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(sender, notGreetedYet));
+
+        // when
+        chatbotOrchestrationService.recordGreetingAndAdvance(1L, 10L);
+
+        // then
+        assertThat(sender.getGreetedAt()).isNotNull();
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.GREETING);
+        verify(chatService, never()).postChatbotMessage(any(), anyString());
+    }
+
+    @DisplayName("전원이 인사를 마치면 팀장 선출 단계로 전이하고 챗봇 메시지가 발행된다.")
+    @Test
+    void 전원이_인사를_마치면_팀장_선출_단계로_전이하고_챗봇_메시지가_발행된다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
+        TeamMember alreadyGreeted = teamMemberOf(team, 20L, "이해은");
+        alreadyGreeted.markGreeted(java.time.LocalDateTime.now());
+        TeamMember lastToGreet = teamMemberOf(team, 10L, "김철수");
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(lastToGreet));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(alreadyGreeted, lastToGreet));
+        given(aiClient.recommendLeaderCandidates(any())).willReturn(List.of(20L));
+
+        // when
+        chatbotOrchestrationService.recordGreetingAndAdvance(1L, 10L);
+
+        // then
+        assertThat(lastToGreet.getGreetedAt()).isNotNull();
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_NOMINATION_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("이미 인사한 팀원이 다시 메시지를 보내도 중복 처리되지 않는다.")
+    @Test
+    void 이미_인사한_팀원이_다시_메시지를_보내도_중복_처리되지_않는다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
+        TeamMember sender = teamMemberOf(team, 10L, "김철수");
+        sender.markGreeted(java.time.LocalDateTime.now().minusMinutes(1));
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(sender));
+
+        // when
+        chatbotOrchestrationService.recordGreetingAndAdvance(1L, 10L);
+
+        // then
+        verify(teamMemberRepository, never()).findByTeamIdAndStatus(any(), any());
+        verify(chatService, never()).postChatbotMessage(any(), anyString());
+    }
+
+    @DisplayName("존재하지 않는 팀이면 예외가 발생한다.")
+    @Test
+    void 존재하지_않는_팀이면_예외가_발생한다() {
+        // given
+        given(teamRepository.findById(999L)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> chatbotOrchestrationService.recordGreetingAndAdvance(999L, 1L))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.TEAM_NOT_FOUND);
+    }
+
+    @DisplayName("공모전 선정 단계 진입 시 추천 공모전이 있으면 추천 카드가 발행된다.")
+    @Test
+    void 공모전_선정_단계_진입_시_추천_공모전이_있으면_추천_카드가_발행된다() {
+        // given
+        Team team = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.LEADER_DECIDED)
+                .preferredCategory(InterestCategory.IT_AI_TECH)
+                .build();
+        Contest contest = Contest.builder()
+                .contestId(100L)
+                .title("공모전")
+                .category(InterestCategory.IT_AI_TECH)
+                .build();
+        given(contestRepository.findAllWithFilterAndDeadlineAsc(any(), any(), any(), any(), any()))
+                .willReturn(new PageImpl<>(List.of(contest)));
+        given(aiClient.recommendContests(any(), any())).willReturn(List.of(100L));
+
+        // when
+        chatbotOrchestrationService.advanceToContestSelecting(team);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.CONTEST_SELECTING);
+        assertThat(team.getContestCandidateDeadlineAt()).isNotNull();
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.CONTEST_RECOMMEND_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("추천할 공모전이 없으면 일반 안내 메시지만 발행된다.")
+    @Test
+    void 추천할_공모전이_없으면_일반_안내_메시지만_발행된다() {
+        // given
+        Team team = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.LEADER_DECIDED)
+                .preferredCategory(InterestCategory.IT_AI_TECH)
+                .build();
+        given(contestRepository.findAllWithFilterAndDeadlineAsc(any(), any(), any(), any(), any()))
+                .willReturn(new PageImpl<>(List.of()));
+        given(aiClient.recommendContests(any(), any())).willReturn(List.of());
+
+        // when
+        chatbotOrchestrationService.advanceToContestSelecting(team);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.CONTEST_SELECTING);
+        verify(chatService).postChatbotMessage(eq(team), anyString());
+        verify(chatService, never())
+                .postChatbotCardMessage(any(), eq(MessageType.CONTEST_RECOMMEND_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("리뷰가 완료되면 팀이 COMPLETED로 전이되고 마무리 메시지가 발행된다.")
+    @Test
+    void 리뷰가_완료되면_팀이_COMPLETED로_전이되고_마무리_메시지가_발행된다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.SUBMITTED).build();
+
+        // when
+        chatbotOrchestrationService.completeReview(team);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.COMPLETED);
+        verify(chatService).postChatbotMessage(eq(team), anyString());
+    }
+
+    @DisplayName("@챗봇으로 말을 걸면 AI 답변이 챗봇 메시지로 발행된다.")
+    @Test
+    void 챗봇으로_말을_걸면_AI_답변이_챗봇_메시지로_발행된다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.IN_PROGRESS).build();
+        team.setChatbotEnabled(true);
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(aiClient.answerTeamQuestion("우리 역할 분담 추천해줘")).willReturn("역할 분담 추천이에요.");
+
+        // when
+        chatbotOrchestrationService.respondToMentionIfAny(1L, "@챗봇 우리 역할 분담 추천해줘");
+
+        // then
+        verify(chatService).postChatbotMessage(team, "역할 분담 추천이에요.");
+    }
+
+    @DisplayName("@챗봇으로 시작하지 않는 메시지는 무시한다.")
+    @Test
+    void 챗봇으로_시작하지_않는_메시지는_무시한다() {
+        // when
+        chatbotOrchestrationService.respondToMentionIfAny(1L, "안녕하세요 @챗봇");
+
+        // then
+        verify(teamRepository, never()).findById(any());
+        verify(chatService, never()).postChatbotMessage(any(), anyString());
+    }
+
+    @DisplayName("챗봇이 꺼져있으면 @챗봇 멘션에 응답하지 않는다.")
+    @Test
+    void 챗봇이_꺼져있으면_챗봇_멘션에_응답하지_않는다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.IN_PROGRESS).build();
+        team.setChatbotEnabled(false);
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        chatbotOrchestrationService.respondToMentionIfAny(1L, "@챗봇 타임라인 추천해줘");
+
+        // then
+        verify(chatService, never()).postChatbotMessage(any(), anyString());
+        verify(aiClient, never()).answerTeamQuestion(any());
+    }
+
+    private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {
+        Member member = Member.builder().memberId(memberId).build();
+        Profile profile = Profile.builder().nickname(nickname).build();
+        return TeamMember.builder()
+                .teamMemberId(memberId)
+                .team(team)
+                .member(member)
+                .profile(profile)
+                .status(TeamMemberStatus.ACTIVE)
+                .build();
+    }
+}
