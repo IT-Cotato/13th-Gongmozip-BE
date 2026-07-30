@@ -11,5 +11,6 @@ CREATE TABLE project_evaluations
     created_at            TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at            TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_project_evaluations_project FOREIGN KEY (project_id) REFERENCES project_experiences (project_id) ON DELETE CASCADE,
+    CONSTRAINT chk_project_evaluations_score CHECK (score IS NULL OR (score >= 0 AND score <= 100)),
     CONSTRAINT uq_project_evaluations_project UNIQUE (project_id)
 );

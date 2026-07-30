@@ -43,7 +43,7 @@ public class ProjectEvaluationService {
     @Transactional
     public void evaluateProject(Long projectId, Member member) {
         ProjectExperience project = projectExperienceRepository
-                .findById(projectId)
+                .findByIdWithLock(projectId)
                 .orElseThrow(() -> new ProfileException(ProfileErrorCode.PROJECT_NOT_FOUND));
 
         if (!project.getProfile().getMember().getMemberId().equals(member.getMemberId())) {
@@ -57,7 +57,14 @@ public class ProjectEvaluationService {
             }
         });
 
-        projectEvaluationTxService.pending(projectId);
+        ProjectEvaluation evaluation = projectEvaluationRepository
+                .findByProjectExperience(project)
+                .orElseGet(() -> ProjectEvaluation.builder()
+                        .projectExperience(project)
+                        .status(AiSummaryStatus.NOT_CREATED)
+                        .build());
+        evaluation.pending();
+        projectEvaluationRepository.save(evaluation);
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -80,6 +87,11 @@ public class ProjectEvaluationService {
             projectEvaluationTxService.startProcessing(projectId);
         } catch (Exception e) {
             log.error("Failed to start processing for projectId: {}", projectId, e);
+            try {
+                projectEvaluationTxService.fail(projectId, "Failed to start processing: " + e.getMessage());
+            } catch (Exception failure) {
+                log.error("Failed to persist failed state for projectId: {}", projectId, failure);
+            }
             return;
         }
 

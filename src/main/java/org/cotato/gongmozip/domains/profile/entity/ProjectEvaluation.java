@@ -72,6 +72,10 @@ public class ProjectEvaluation extends BaseEntity {
     }
 
     public void pending() {
+        this.score = null;
+        this.feedback = null;
+        this.errorMessage = null;
+        this.evaluatedAt = null;
         this.status = AiSummaryStatus.PENDING;
     }
 }
