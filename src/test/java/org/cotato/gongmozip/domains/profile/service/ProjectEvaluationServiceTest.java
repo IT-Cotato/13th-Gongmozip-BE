@@ -78,14 +78,14 @@ class ProjectEvaluationServiceTest {
     @Test
     void 프로젝트_AI_평가_요청_시_정상_접수된다() {
         // given
-        given(projectExperienceRepository.findById(10L)).willReturn(Optional.of(project));
+        given(projectExperienceRepository.findByIdWithLock(10L)).willReturn(Optional.of(project));
         given(projectEvaluationRepository.findByProjectExperience(project)).willReturn(Optional.empty());
 
         // when
         projectEvaluationService.evaluateProject(10L, member);
 
         // then
-        then(projectEvaluationTxService).should().pending(10L);
+        then(projectEvaluationRepository).should().save(any(ProjectEvaluation.class));
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
         then(projectEvaluationTxService).should().startProcessing(10L);
     }
@@ -98,7 +98,7 @@ class ProjectEvaluationServiceTest {
                 .projectExperience(project)
                 .status(AiSummaryStatus.PROCESSING)
                 .build();
-        given(projectExperienceRepository.findById(10L)).willReturn(Optional.of(project));
+        given(projectExperienceRepository.findByIdWithLock(10L)).willReturn(Optional.of(project));
         given(projectEvaluationRepository.findByProjectExperience(project)).willReturn(Optional.of(evaluation));
 
         // when & then
@@ -111,7 +111,7 @@ class ProjectEvaluationServiceTest {
     @Test
     void 비동기_분석_스케줄링_실패_시_실패_상태로_저장된다() {
         // given
-        given(projectExperienceRepository.findById(10L)).willReturn(Optional.of(project));
+        given(projectExperienceRepository.findByIdWithLock(10L)).willReturn(Optional.of(project));
         given(projectEvaluationRepository.findByProjectExperience(project)).willReturn(Optional.empty());
 
         // setSelf에 스레드 거부 동작 Mocking
@@ -142,5 +142,28 @@ class ProjectEvaluationServiceTest {
         // then
         then(projectEvaluationTxService).should().startProcessing(10L);
         then(projectEvaluationTxService).should().complete(10L, 95, "피드백");
+    }
+
+    @DisplayName("비동기 AI 평가 시작 실패 시 실패 상태를 저장한다.")
+    @Test
+    void 비동기_AI_평가_시작_실패_시_실패_상태를_저장한다() {
+        // given
+        doThrow(new RuntimeException("DB Error"))
+                .when(projectEvaluationTxService)
+                .startProcessing(10L);
+
+        // when
+        projectEvaluationService.evaluateProjectAsync(10L, "프로젝트", "개발자", "설명");
+
+        // then
+        then(projectEvaluationTxService).should().startProcessing(10L);
+        then(projectEvaluationTxService).should().fail(10L, "Failed to start processing: DB Error");
+    }
+
+    @DisplayName("ProjectEvaluationResult 점수가 범위를 벗어나면 예외가 발생한다.")
+    @Test
+    void ProjectEvaluationResult_점수가_범위를_벗어나면_예외가_발생한다() {
+        assertThatThrownBy(() -> new ProjectEvaluationResult(-1, "피드백")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ProjectEvaluationResult(101, "피드백")).isInstanceOf(IllegalArgumentException.class);
     }
 }
