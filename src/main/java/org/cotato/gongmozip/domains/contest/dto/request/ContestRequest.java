@@ -34,4 +34,9 @@ public final class ContestRequest {
                     Boolean isTeamParticipation,
             @Min(value = 1, message = "최소 팀 인원은 1명 이상이어야 합니다.") Integer minTeamSize,
             Integer maxTeamSize) {}
+
+    public record AddContestCandidateRequest(@NotNull(message = "공모전 id는 필수 입력 항목입니다.") Long contestId) {}
+
+    public record SubmitContestVoteRequest(
+            @NotEmpty(message = "투표할 공모전을 최소 1개 선택해주세요.") List<Long> contestCandidateIds) {}
 }

@@ -1,0 +1,253 @@
+package org.cotato.gongmozip.domains.team.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+
+import java.util.List;
+import java.util.Optional;
+import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
+import org.cotato.gongmozip.domains.chat.service.ChatService;
+import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
+import org.cotato.gongmozip.domains.collaboration.enums.CollaborationPointReason;
+import org.cotato.gongmozip.domains.collaboration.service.CollaborationPointService;
+import org.cotato.gongmozip.domains.member.entity.Member;
+import org.cotato.gongmozip.domains.member.repository.MemberRepository;
+import org.cotato.gongmozip.domains.profile.entity.Profile;
+import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
+import org.cotato.gongmozip.domains.profile.repository.ProfileRepository;
+import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamCreationRequest;
+import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamMemberInput;
+import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.ChatRoomListResponse;
+import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.TeamMembersResponse;
+import org.cotato.gongmozip.domains.team.entity.Team;
+import org.cotato.gongmozip.domains.team.entity.TeamMember;
+import org.cotato.gongmozip.domains.team.enums.LeaderSelectionMode;
+import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
+import org.cotato.gongmozip.domains.team.enums.TeamRole;
+import org.cotato.gongmozip.domains.team.enums.TeamStatus;
+import org.cotato.gongmozip.domains.team.exception.TeamException;
+import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
+import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
+import org.cotato.gongmozip.domains.team.repository.TeamRepository;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+class TeamServiceTest {
+
+    @Mock
+    private TeamRepository teamRepository;
+
+    @Mock
+    private TeamMemberRepository teamMemberRepository;
+
+    @Mock
+    private MemberRepository memberRepository;
+
+    @Mock
+    private ProfileRepository profileRepository;
+
+    @Mock
+    private MessageRepository messageRepository;
+
+    @Mock
+    private ChatService chatService;
+
+    @Mock
+    private CollaborationPointService collaborationPointService;
+
+    @Mock
+    private ChatbotOrchestrationService chatbotOrchestrationService;
+
+    @InjectMocks
+    private TeamService teamService;
+
+    @DisplayName("정상적인 입력으로 팀을 생성하면 팀원 수만큼 TeamMember가 저장된다.")
+    @Test
+    void 정상적인_입력으로_팀을_생성하면_팀원_수만큼_TeamMember가_저장된다() {
+        // given
+        Member member1 = Member.builder().memberId(1L).email("a@gongmozip.com").build();
+        Member member2 = Member.builder().memberId(2L).email("b@gongmozip.com").build();
+        Profile profile1 = Profile.builder().profileId(10L).nickname("김민정").build();
+        Profile profile2 = Profile.builder().profileId(20L).nickname("이해은").build();
+
+        TeamCreationRequest request = new TeamCreationRequest(
+                List.of(new TeamMemberInput(1L, 10L), new TeamMemberInput(2L, 20L)), InterestCategory.IT_AI_TECH);
+
+        given(teamRepository.save(any(Team.class))).willAnswer(inv -> inv.getArgument(0));
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member1));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(member2));
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile1));
+        given(profileRepository.findById(20L)).willReturn(Optional.of(profile2));
+        given(teamMemberRepository.save(any(TeamMember.class))).willAnswer(inv -> inv.getArgument(0));
+
+        // when
+        Team team = teamService.createTeam(request);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.MATCHED);
+        assertThat(team.getLeaderSelectionMode()).isEqualTo(LeaderSelectionMode.OPEN_NOMINATION);
+        assertThat(team.isChatbotEnabled()).isTrue();
+        verify(teamMemberRepository, times(2)).save(any(TeamMember.class));
+        verify(chatbotOrchestrationService).startGreeting(team);
+    }
+
+    @DisplayName("팀원이 없으면 팀 생성에 실패한다.")
+    @Test
+    void 팀원이_없으면_팀_생성에_실패한다() {
+        // given
+        TeamCreationRequest request = new TeamCreationRequest(List.of(), InterestCategory.IT_AI_TECH);
+
+        // when & then
+        assertThatThrownBy(() -> teamService.createTeam(request))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.EMPTY_TEAM_MEMBER_LIST);
+    }
+
+    @DisplayName("중복된 회원이 포함되면 팀 생성에 실패한다.")
+    @Test
+    void 중복된_회원이_포함되면_팀_생성에_실패한다() {
+        // given
+        TeamCreationRequest request = new TeamCreationRequest(
+                List.of(new TeamMemberInput(1L, 10L), new TeamMemberInput(1L, 11L)), InterestCategory.IT_AI_TECH);
+
+        // when & then
+        assertThatThrownBy(() -> teamService.createTeam(request))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.DUPLICATE_TEAM_MEMBER_INPUT);
+    }
+
+    @DisplayName("내 채팅방 목록을 조회하면 본인을 제외한 팀원 닉네임으로 방 제목이 구성된다.")
+    @Test
+    void 내_채팅방_목록을_조회하면_본인을_제외한_팀원_닉네임으로_방_제목이_구성된다() {
+        // given
+        Team team = Team.builder().teamId(100L).build();
+        TeamMember me = teamMemberOf(team, 1L, "나");
+        TeamMember other1 = teamMemberOf(team, 2L, "김민정");
+        TeamMember other2 = teamMemberOf(team, 3L, "이해은");
+
+        given(teamMemberRepository.findByMemberIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(me));
+        given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(me, other1, other2));
+        given(messageRepository.findFirstByTeam_TeamIdOrderByCreatedAtDesc(100L))
+                .willReturn(Optional.empty());
+        given(messageRepository.countByTeam_TeamIdAndCreatedAtAfter(any(Long.class), any()))
+                .willReturn(0L);
+
+        // when
+        ChatRoomListResponse response = teamService.getMyChatRooms(1L);
+
+        // then
+        assertThat(response.rooms()).hasSize(1);
+        assertThat(response.rooms().get(0).roomTitle()).isEqualTo("김민정, 이해은");
+        assertThat(response.rooms().get(0).participantCount()).isEqualTo(3);
+    }
+
+    @DisplayName("채팅방을 나가면 팀원 상태가 LEFT로 바뀌고 시스템 메시지가 발행된다.")
+    @Test
+    void 채팅방을_나가면_팀원_상태가_LEFT로_바뀌고_시스템_메시지가_발행된다() {
+        // given
+        Team team = Team.builder().teamId(100L).build();
+        TeamMember me = teamMemberOf(team, 1L, "김철수");
+        given(teamRepository.findById(100L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
+                .willReturn(Optional.of(me));
+
+        // when
+        teamService.leaveTeam(100L, 1L);
+
+        // then
+        assertThat(me.getStatus()).isEqualTo(TeamMemberStatus.LEFT);
+        verify(chatService).postSystemMessage(any(Team.class), any(String.class));
+        verify(collaborationPointService).awardPoint(me.getMember(), team, CollaborationPointReason.LEAVE_PENALTY);
+    }
+
+    @DisplayName("챗봇을 추가/삭제하면 팀의 chatbotEnabled 값이 바뀌고 시스템 메시지가 발행된다.")
+    @Test
+    void 챗봇을_추가_삭제하면_팀의_chatbotEnabled_값이_바뀌고_시스템_메시지가_발행된다() {
+        // given
+        Team team = Team.builder().teamId(100L).chatbotEnabled(true).build();
+        TeamMember me = teamMemberOf(team, 1L, "김철수");
+        given(teamRepository.findById(100L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
+                .willReturn(Optional.of(me));
+
+        // when
+        teamService.toggleChatbot(100L, 1L, false);
+
+        // then
+        assertThat(team.isChatbotEnabled()).isFalse();
+        verify(chatService).postSystemMessage(any(Team.class), any(String.class));
+    }
+
+    @DisplayName("대화상대를 조회하면 챗봇 활성화 여부와 함께 팀원 목록을 반환한다.")
+    @Test
+    void 대화상대를_조회하면_챗봇_활성화_여부와_함께_팀원_목록을_반환한다() {
+        // given
+        Team team = Team.builder().teamId(100L).chatbotEnabled(true).build();
+        TeamMember me = teamMemberOf(team, 1L, "나");
+        TeamMember other = teamMemberOf(team, 2L, "김민정");
+
+        given(teamRepository.findById(100L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
+                .willReturn(Optional.of(me));
+        given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(me, other));
+
+        // when
+        TeamMembersResponse response = teamService.getTeamMembers(100L, 1L);
+
+        // then
+        assertThat(response.chatbotEnabled()).isTrue();
+        assertThat(response.participantCount()).isEqualTo(2);
+        assertThat(response.members()).anySatisfy(m -> assertThat(m.isMe()).isTrue());
+    }
+
+    @DisplayName("팀 소속이 아닌 회원이 대화상대를 조회하면 예외가 발생한다.")
+    @Test
+    void 팀_소속이_아닌_회원이_대화상대를_조회하면_예외가_발생한다() {
+        // given
+        Team team = Team.builder().teamId(100L).build();
+        given(teamRepository.findById(100L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 999L))
+                .willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> teamService.getTeamMembers(100L, 999L))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.NOT_TEAM_MEMBER);
+    }
+
+    @DisplayName("존재하지 않는 팀을 조회하면 예외가 발생한다.")
+    @Test
+    void 존재하지_않는_팀을_조회하면_예외가_발생한다() {
+        // given
+        given(teamRepository.findById(999L)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> teamService.getTeamMembers(999L, 1L))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.TEAM_NOT_FOUND);
+    }
+
+    private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {
+        Member member = Member.builder().memberId(memberId).build();
+        Profile profile = Profile.builder().nickname(nickname).build();
+        return TeamMember.builder()
+                .team(team)
+                .member(member)
+                .profile(profile)
+                .role(TeamRole.MEMBER)
+                .status(TeamMemberStatus.ACTIVE)
+                .build();
+    }
+}

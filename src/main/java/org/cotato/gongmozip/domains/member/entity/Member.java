@@ -54,6 +54,15 @@ public class Member extends BaseEntity {
     @Column(name = "gender", length = 20)
     private Gender gender;
 
+    // 프로젝트 진행 중 이벤트로 적립/차감되는 협업거리 포인트. 매칭 신청 시 입력하는
+    // MatchingApplication.collaborationDistance(희망 거리)와는 다른 값이다.
+    // docs/decisions/06-collaboration-point.md 참고.
+    public static final int MAX_COLLABORATION_POINT = 500;
+
+    @Builder.Default
+    @Column(name = "collaboration_point", nullable = false)
+    private int collaborationPoint = 0;
+
     public void registerRequiredInfo(Gender gender, LocalDate birthDate) {
         this.gender = gender;
         this.birthDate = birthDate;
@@ -61,5 +70,9 @@ public class Member extends BaseEntity {
 
     public void changePassword(String encodedPassword) {
         this.password = encodedPassword;
+    }
+
+    public void addCollaborationPoint(int delta) {
+        this.collaborationPoint = Math.max(0, Math.min(MAX_COLLABORATION_POINT, this.collaborationPoint + delta));
     }
 }

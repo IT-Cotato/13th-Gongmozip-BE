@@ -15,14 +15,18 @@ public enum ContestSuccessCode implements BaseSuccessCode {
     CONTEST_RETRIEVED(HttpStatus.OK, "CONTEST_200_3", "공모전 상세 조회에 성공하였습니다."),
     SCRAP_STATUS_RETRIEVED(HttpStatus.OK, "CONTEST_200_4", "공모전 스크랩 여부 조회에 성공하였습니다."),
     SHARE_PREVIEW_RETRIEVED(HttpStatus.OK, "CONTEST_200_5", "공유용 공모전 정보 조회에 성공하였습니다."),
+    CONTEST_CANDIDATE_LIST_RETRIEVED(HttpStatus.OK, "CONTEST_200_6", "후보 공모전 리스트 조회에 성공하였습니다."),
+    CONTEST_VOTE_SUBMITTED(HttpStatus.OK, "CONTEST_200_7", "공모전 투표에 성공하였습니다."),
 
     // 201
     CONTEST_CREATED(HttpStatus.CREATED, "CONTEST_201_1", "공모전 등록에 성공하였습니다."),
     CONTEST_SCRAPPED(HttpStatus.CREATED, "CONTEST_201_2", "공모전 스크랩에 성공하였습니다."),
+    CONTEST_CANDIDATE_ADDED(HttpStatus.CREATED, "CONTEST_201_3", "후보 공모전 추가에 성공하였습니다."),
 
     // 204
     CONTEST_DELETED(HttpStatus.NO_CONTENT, "CONTEST_204_1", "공모전 삭제에 성공하였습니다."),
-    CONTEST_UNSCRAPPED(HttpStatus.NO_CONTENT, "CONTEST_204_2", "공모전 스크랩 취소에 성공하였습니다.");
+    CONTEST_UNSCRAPPED(HttpStatus.NO_CONTENT, "CONTEST_204_2", "공모전 스크랩 취소에 성공하였습니다."),
+    CONTEST_CANDIDATE_REMOVED(HttpStatus.NO_CONTENT, "CONTEST_204_3", "후보 공모전 삭제에 성공하였습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
