@@ -2,10 +2,10 @@
 
 ## 배경/목적
 
-화면에 노출되는 "협업거리"는 프로젝트 진행 중 이벤트에 따라 적립/차감되는 게이미피케이션
-포인트다. 매칭 신청 시점의 `MatchingApplication.collaborationDistance`(협업 희망 거리, 정적
-값 — 매칭 신청 시 입력받아 스냅샷된 값)와 **이름은 같지만 완전히 다른 개념**이므로 절대 같은
-컬럼을 재사용하지 않는다.
+화면에 노출되는 "협업거리"는 프로젝트 진행 중 이벤트에 따라 적립/차감되는 신뢰 지표다.
+현재값은 `Member.collaborationPoint`에 저장하고, 매칭 결과의 재현성을 위해 신청 당시 값을
+`MatchingApplication.collaborationDistance`에 스냅샷으로 복사한다. 따라서 두 컬럼은 같은
+지표를 나타내지만 전자는 현재값, 후자는 과거 신청 시점의 불변값이라는 차이가 있다.
 
 > 참고: 최초 설계 시 `PersonalityProfile.collaborationDistance`를 참조했으나, 해당 엔티티는
 > 현재 `MatchingApplication`으로 재구성되었다. [01-team.md](./01-team.md)의 엔티티 참조 정정
@@ -35,13 +35,15 @@
 | PROJECT_COMPLETE_MEMBER | +20m | 프로젝트 완주 (팀원) |
 | PROJECT_COMPLETE_LEADER | +30m | 프로젝트 완주 (팀장) |
 | REVIEW_WRITTEN | +10m | 팀원 리뷰 작성 (Phase 9에서 연결 완료, [09-review.md](./09-review.md) 참고) |
+| MATCHING_PASS_PENALTY | -3~-11m | 14시 이후 매칭 패스 (7일 내 반복 시 2m씩 증가) |
 
 ## 결정사항
 
 - 적립/차감을 기록하는 공용 서비스(`awardPoint(memberId, teamId, delta, reason)`)를 Phase 3에서
   먼저 만들고, 이후 각 트리거 지점(나가기, 중간점검 응답, 진행완료)에서 호출만 하도록 한다.
-- `PersonalityProfile.collaborationDistance`는 절대 이 로직에서 수정하지 않는다 (매칭 알고리즘
-  입력값 보존).
+- 초기값은 100m, 최대값은 500m로 제한한다.
+- 협업거리 변경 시 과거 `MatchingApplication.collaborationDistance`는 수정하지 않는다.
+- 최근 14일 감점 합계가 50m 이상이면 그 시점부터 7일간 매칭 신청을 제한한다.
 
 ## 구현 현황 (Phase 3 완료)
 
@@ -49,7 +51,7 @@
   `CollaborationPointHistoryRepository.java`
 - `CollaborationPointReason` enum에 사유별 delta(-10/+5/+20/+30/+10)를 내장해서, 호출부는
   `awardPoint(member, team, reason)`만 호출하면 됨 (delta를 직접 넘기지 않음 — 실수 방지)
-- `Member`에 캐시 컬럼 `collaborationPoint`(기본 0) + `MAX_COLLABORATION_POINT=500` 상수 +
+- `Member`에 캐시 컬럼 `collaborationPoint`(기본 100) + `MAX_COLLABORATION_POINT=500` 상수 +
   `addCollaborationPoint(delta)` (0~500 클램핑) 추가
 - `CollaborationPointService.awardPoint(...)` — 히스토리 저장 + Member 캐시 갱신을 한 트랜잭션에서 처리
 - 연결된 트리거: `TeamService.leaveTeam()` → `LEAVE_PENALTY`
