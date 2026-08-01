@@ -63,6 +63,15 @@ class ProfileServiceTest {
     @Mock
     private ProjectAiSummaryService projectAiSummaryService;
 
+    @Mock
+    private ProjectEvaluationRepository projectEvaluationRepository;
+
+    @Mock
+    private ProjectEvaluationService projectEvaluationService;
+
+    @Mock
+    private ProjectEvaluationTxService projectEvaluationTxService;
+
     @InjectMocks
     private ProfileService profileService;
 
