@@ -9,6 +9,7 @@ import org.cotato.gongmozip.domains.member.exception.MemberException;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.dto.request.ProfileRequest.ProjectEvaluationRequest;
+import org.cotato.gongmozip.domains.profile.dto.response.ProfileResponse.ProjectEvaluationCreateResponse;
 import org.cotato.gongmozip.domains.profile.dto.response.ProfileResponse.ProjectEvaluationResponse;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileSuccessCode;
@@ -53,12 +54,13 @@ public class ProjectEvaluationController {
                     """)
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @PostMapping
-    public ResponseEntity<BaseResponse<Void>> evaluateProject(
+    public ResponseEntity<BaseResponse<ProjectEvaluationCreateResponse>> evaluateProject(
             @RequestBody @Valid ProjectEvaluationRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
-        projectEvaluationService.evaluateProject(request.projectExperienceId(), member);
-        return BaseResponseFormatter.success(ProfileSuccessCode.PROJECT_EVALUATION_REQUESTED);
+        Long evaluationId = projectEvaluationService.evaluateProject(request.projectExperienceId(), member);
+        return BaseResponseFormatter.success(
+                ProfileSuccessCode.PROJECT_EVALUATION_REQUESTED, new ProjectEvaluationCreateResponse(evaluationId));
     }
 
     @Operation(

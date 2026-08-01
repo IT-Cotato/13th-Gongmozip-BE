@@ -3,6 +3,7 @@ package org.cotato.gongmozip.domains.profile.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.cotato.gongmozip.domains.member.entity.Member;
+import org.cotato.gongmozip.domains.profile.converter.ProjectEvaluationConverter;
 import org.cotato.gongmozip.domains.profile.dto.response.ProfileResponse.ProjectEvaluationResponse;
 import org.cotato.gongmozip.domains.profile.entity.ProjectEvaluation;
 import org.cotato.gongmozip.domains.profile.entity.ProjectExperience;
@@ -41,7 +42,7 @@ public class ProjectEvaluationService {
     }
 
     @Transactional
-    public void evaluateProject(Long projectId, Member member) {
+    public Long evaluateProject(Long projectId, Member member) {
         ProjectExperience project = projectExperienceRepository
                 .findByIdWithLock(projectId)
                 .orElseThrow(() -> new ProfileException(ProfileErrorCode.PROJECT_NOT_FOUND));
@@ -59,12 +60,9 @@ public class ProjectEvaluationService {
 
         ProjectEvaluation evaluation = projectEvaluationRepository
                 .findByProjectExperience(project)
-                .orElseGet(() -> ProjectEvaluation.builder()
-                        .projectExperience(project)
-                        .status(AiSummaryStatus.NOT_CREATED)
-                        .build());
+                .orElseGet(() -> ProjectEvaluationConverter.toProjectEvaluation(project));
         evaluation.pending();
-        projectEvaluationRepository.save(evaluation);
+        ProjectEvaluation saved = projectEvaluationRepository.save(evaluation);
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -78,6 +76,8 @@ public class ProjectEvaluationService {
                 }
             }
         });
+
+        return saved.getProjectEvaluationId();
     }
 
     @Async("aiSummaryExecutor")
@@ -126,10 +126,6 @@ public class ProjectEvaluationService {
             throw new ProfileException(ProfileErrorCode.PROFILE_ACCESS_DENIED);
         }
 
-        Integer score = evaluation.getScore();
-        String feedback = evaluation.getFeedback();
-
-        return new ProjectEvaluationResponse(
-                evaluation.getProjectEvaluationId(), evaluation.getStatus().name(), score, feedback);
+        return ProjectEvaluationConverter.toProjectEvaluationResponse(evaluation);
     }
 }

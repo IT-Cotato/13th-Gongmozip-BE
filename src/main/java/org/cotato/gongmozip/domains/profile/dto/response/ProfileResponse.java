@@ -228,4 +228,7 @@ public class ProfileResponse {
 
     // 19. 프로젝트 경험 AI 평가 조회 응답
     public record ProjectEvaluationResponse(Long evaluationId, String status, Integer score, String feedback) {}
+
+    // 20. 프로젝트 경험 AI 평가 생성 응답
+    public record ProjectEvaluationCreateResponse(Long evaluationId) {}
 }
