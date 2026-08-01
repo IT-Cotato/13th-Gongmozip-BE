@@ -11,4 +11,6 @@ public interface AwardRepository extends JpaRepository<Award, Long> {
     Page<Award> findAllByProfile(Profile profile, Pageable pageable);
 
     List<Award> findAllByProfile(Profile profile);
+
+    int countByProfile(Profile profile);
 }
