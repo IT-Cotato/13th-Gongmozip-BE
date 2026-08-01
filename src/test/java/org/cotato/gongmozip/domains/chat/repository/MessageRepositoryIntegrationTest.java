@@ -17,6 +17,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -35,6 +36,26 @@ class MessageRepositoryIntegrationTest {
 
     @Autowired
     private EntityManager entityManager;
+
+    @DisplayName("메시지 목록 조회 시 createdAt이 완전히 같아도 messageId 내림차순으로 결정적으로 정렬된다.")
+    @Test
+    void 메시지_목록_조회_시_createdAt이_같아도_messageId로_결정적으로_정렬된다() {
+        // given
+        Team team = teamRepository.save(team());
+        LocalDateTime sameInstant = LocalDateTime.now();
+        Message first = saveMessageAt(team, "1번째", sameInstant);
+        Message second = saveMessageAt(team, "2번째", sameInstant);
+        Message third = saveMessageAt(team, "3번째", sameInstant);
+
+        // when
+        List<Message> latestFirst =
+                messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(team.getTeamId(), PageRequest.of(0, 10));
+
+        // then
+        assertThat(latestFirst)
+                .extracting(Message::getMessageId)
+                .containsExactly(third.getMessageId(), second.getMessageId(), first.getMessageId());
+    }
 
     @DisplayName("여러 팀에 걸친 메시지 중 각 팀의 가장 최근 메시지만 하나씩 반환한다.")
     @Test
@@ -58,6 +79,24 @@ class MessageRepositoryIntegrationTest {
                 .extracting(Message::getMessageId)
                 .containsExactlyInAnyOrder(latestA.getMessageId(), latestB.getMessageId());
         assertThat(latestMessages).extracting(Message::getContent).containsExactlyInAnyOrder("A-최근", "B-유일");
+    }
+
+    @DisplayName("같은 팀에서 createdAt이 완전히 같은 메시지가 여러 개여도 message_id가 가장 큰(가장 나중에 삽입된) 메시지를 결정적으로 반환한다.")
+    @Test
+    void createdAt이_같아도_message_id가_가장_큰_메시지를_반환한다() {
+        // given
+        Team team = teamRepository.save(team());
+        LocalDateTime sameInstant = LocalDateTime.now();
+        saveMessageAt(team, "먼저 삽입", sameInstant);
+        Message later = saveMessageAt(team, "나중 삽입", sameInstant);
+
+        // when
+        List<Message> latestMessages = messageRepository.findLatestMessagePerTeam(List.of(team.getTeamId()));
+
+        // then
+        assertThat(latestMessages).hasSize(1);
+        assertThat(latestMessages.get(0).getMessageId()).isEqualTo(later.getMessageId());
+        assertThat(latestMessages.get(0).getContent()).isEqualTo("나중 삽입");
     }
 
     @DisplayName("대상 팀 id 목록이 비어있으면 빈 결과를 반환한다.")
