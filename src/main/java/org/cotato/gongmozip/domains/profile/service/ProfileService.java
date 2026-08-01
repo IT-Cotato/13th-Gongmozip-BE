@@ -45,6 +45,9 @@ public class ProfileService {
     private final MatchingApplicationRepository matchingApplicationRepository;
     private final ProjectAiSummaryService projectAiSummaryService;
     private final ProjectAiSummaryTxService projectAiSummaryTxService;
+    private final ProjectEvaluationRepository projectEvaluationRepository;
+    private final ProjectEvaluationService projectEvaluationService;
+    private final ProjectEvaluationTxService projectEvaluationTxService;
     private final CharacterService characterService;
 
     // 프로필 비즈니스 로직
@@ -293,6 +296,34 @@ public class ProfileService {
                         log.error("자동 AI 요약 트리거 중 쓰레드 풀 포화로 작업 제출 실패", e);
                         projectAiSummaryTxService.failSummary(project.getProjectId());
                     }
+                }
+            });
+        }
+
+        // 콘텐츠가 수정되었다면 기존 AI 요약 평가가 존재할 경우 자동으로 비동기 AI 재평가 트리거
+        if (contentChanged) {
+            projectEvaluationRepository.findByProjectExperience(project).ifPresent(evaluation -> {
+                if (evaluation.getStatus() != AiSummaryStatus.PENDING
+                        && evaluation.getStatus() != AiSummaryStatus.PROCESSING) {
+                    evaluation.pending();
+                    projectEvaluationRepository.save(evaluation);
+
+                    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            try {
+                                projectEvaluationService.evaluateProjectAsync(
+                                        project.getProjectId(),
+                                        project.getProjectName(),
+                                        project.getRole(),
+                                        project.getDescription());
+                            } catch (TaskRejectedException e) {
+                                log.error("자동 AI 요약 평가 트리거 중 쓰레드 풀 포화로 작업 제출 실패", e);
+                                projectEvaluationTxService.fail(
+                                        project.getProjectId(), "Thread pool saturation: " + e.getMessage());
+                            }
+                        }
+                    });
                 }
             });
         }

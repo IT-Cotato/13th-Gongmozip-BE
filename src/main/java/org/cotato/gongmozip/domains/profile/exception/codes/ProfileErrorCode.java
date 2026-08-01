@@ -26,13 +26,15 @@ public enum ProfileErrorCode implements BaseErrorCode {
     AWARD_NOT_FOUND(HttpStatus.NOT_FOUND, "PROFILE_404_3", "수상 경험을 찾을 수 없습니다."),
     CERTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "PROFILE_404_4", "자격증을 찾을 수 없습니다."),
     AI_SUMMARY_NOT_FOUND(HttpStatus.NOT_FOUND, "PROFILE_404_5", "프로젝트 AI 요약이 존재하지 않습니다."),
+    PROJECT_EVALUATION_NOT_FOUND(HttpStatus.NOT_FOUND, "PROFILE_404_6", "프로젝트 경험 AI 평가가 존재하지 않습니다."),
 
     // 409
     ALREADY_MAIN_PROFILE(HttpStatus.CONFLICT, "PROFILE_409_1", "이미 대표 프로필로 설정되어 있습니다."),
     DUPLICATE_CERTIFICATION(HttpStatus.CONFLICT, "PROFILE_409_2", "동일한 자격증이 중복 등록되었습니다."),
     DUPLICATE_NICKNAME(HttpStatus.CONFLICT, "PROFILE_409_3", "동일한 닉네임의 프로필이 이미 존재합니다."),
     CANNOT_DELETE_REFERENCED_PROFILE(HttpStatus.CONFLICT, "PROFILE_409_4", "매칭 신청 이력이 존재하여 삭제할 수 없는 프로필입니다."),
-    AI_SUMMARY_GENERATION_IN_PROGRESS(HttpStatus.CONFLICT, "PROFILE_409_5", "프로젝트 AI 요약 생성이 이미 진행 중입니다.");
+    AI_SUMMARY_GENERATION_IN_PROGRESS(HttpStatus.CONFLICT, "PROFILE_409_5", "프로젝트 AI 요약 생성이 이미 진행 중입니다."),
+    PROJECT_EVALUATION_GENERATION_IN_PROGRESS(HttpStatus.CONFLICT, "PROFILE_409_6", "프로젝트 경험 AI 평가가 이미 진행 중입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

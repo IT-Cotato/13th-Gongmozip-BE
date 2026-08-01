@@ -80,4 +80,6 @@ public class ProfileRequest {
             CertificationCategory categoryCode,
             @Size(max = 100) String issuer,
             LocalDate acquiredAt) {}
+
+    public record ProjectEvaluationRequest(@NotNull @Positive Long projectExperienceId) {}
 }
