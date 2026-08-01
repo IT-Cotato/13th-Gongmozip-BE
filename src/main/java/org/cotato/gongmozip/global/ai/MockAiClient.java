@@ -28,19 +28,11 @@ public class MockAiClient implements AiClient {
             Thread.currentThread().interrupt();
             throw new RuntimeException("AI summary generation was interrupted", e);
         }
-        return String.format(
-                "프로젝트 %s에서 %s 역할을 맡아 기획 및 개발을 주도적으로 수행하였습니다.",
-                projectName,
-                role
-        );
+        return String.format("프로젝트 %s에서 %s 역할을 맡아 기획 및 개발을 주도적으로 수행하였습니다.", projectName, role);
     }
 
     @Override
-    public ProjectEvaluationResult evaluateProject(
-            String projectName,
-            String role,
-            String description
-    ) {
+    public ProjectEvaluationResult evaluateProject(String projectName, String role, String description) {
         try {
             log.info("AI project evaluation simulation start for project: {}", projectName);
             // 3초간 비동기 역량 평가 처리를 시뮬레이션
@@ -51,40 +43,25 @@ public class MockAiClient implements AiClient {
             throw new RuntimeException("AI project evaluation was interrupted", e);
         }
 
-        String feedback = String.format(
-                "프로젝트 %s에서 %s 역할을 주도적으로 수행하여 문제해결력과 도전정신이 우수한 것으로 평가되었습니다.",
-                projectName,
-                role
-        );
+        String feedback = String.format("프로젝트 %s에서 %s 역할을 주도적으로 수행하여 문제해결력과 도전정신이 우수한 것으로 평가되었습니다.", projectName, role);
 
         return new ProjectEvaluationResult(85, feedback);
     }
 
     @Override
     public List<Long> recommendLeaderCandidates(List<Long> activeTeamMemberIds) {
-        log.info(
-                "AI leader candidate recommendation simulation for {} members",
-                activeTeamMemberIds.size()
-        );
+        log.info("AI leader candidate recommendation simulation for {} members", activeTeamMemberIds.size());
         return shuffledSample(activeTeamMemberIds, MAX_LEADER_RECOMMENDATIONS);
     }
 
     @Override
     public Long recommendTiebreakLeader(List<Long> tiedCandidateTeamMemberIds) {
-        log.info(
-                "AI tiebreak recommendation simulation among {} candidates",
-                tiedCandidateTeamMemberIds.size()
-        );
-        return tiedCandidateTeamMemberIds.get(
-                RANDOM.nextInt(tiedCandidateTeamMemberIds.size())
-        );
+        log.info("AI tiebreak recommendation simulation among {} candidates", tiedCandidateTeamMemberIds.size());
+        return tiedCandidateTeamMemberIds.get(RANDOM.nextInt(tiedCandidateTeamMemberIds.size()));
     }
 
     @Override
-    public List<Long> recommendContests(
-            InterestCategory category,
-            List<Long> openContestIds
-    ) {
+    public List<Long> recommendContests(InterestCategory category, List<Long> openContestIds) {
         log.info("AI contest recommendation simulation for category: {}", category);
         return shuffledSample(openContestIds, MAX_CONTEST_RECOMMENDATIONS);
     }
@@ -113,15 +90,12 @@ public class MockAiClient implements AiClient {
                     + "공모전 마감일 기준으로 역산해서 조정해보세요!";
         }
 
-        return "아직 그 질문에는 구체적으로 답하기 어려워요. "
-                + "'역할 분담'이나 '타임라인'처럼 구체적으로 물어봐주세요!";
+        return "아직 그 질문에는 구체적으로 답하기 어려워요. " + "'역할 분담'이나 '타임라인'처럼 구체적으로 물어봐주세요!";
     }
 
     private List<Long> shuffledSample(List<Long> ids, int limit) {
         List<Long> shuffled = new ArrayList<>(ids);
         Collections.shuffle(shuffled, RANDOM);
-        return shuffled.stream()
-                .limit(limit)
-                .toList();
+        return shuffled.stream().limit(limit).toList();
     }
 }
