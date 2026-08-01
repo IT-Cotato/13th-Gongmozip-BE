@@ -1,9 +1,9 @@
 package org.cotato.gongmozip.domains.profile.service;
 
 import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.domains.profile.converter.ProjectEvaluationConverter;
 import org.cotato.gongmozip.domains.profile.entity.ProjectEvaluation;
 import org.cotato.gongmozip.domains.profile.entity.ProjectExperience;
-import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
 import org.cotato.gongmozip.domains.profile.repository.ProjectEvaluationRepository;
 import org.cotato.gongmozip.domains.profile.repository.ProjectExperienceRepository;
 import org.springframework.stereotype.Service;
@@ -25,10 +25,7 @@ public class ProjectEvaluationTxService {
 
         ProjectEvaluation evaluation = projectEvaluationRepository
                 .findByProjectExperience(project)
-                .orElseGet(() -> ProjectEvaluation.builder()
-                        .projectExperience(project)
-                        .status(AiSummaryStatus.NOT_CREATED)
-                        .build());
+                .orElseGet(() -> ProjectEvaluationConverter.toProjectEvaluation(project));
 
         evaluation.startProcessing();
         ProjectEvaluation saved = projectEvaluationRepository.saveAndFlush(evaluation);
@@ -57,10 +54,7 @@ public class ProjectEvaluationTxService {
 
         ProjectEvaluation evaluation = projectEvaluationRepository
                 .findByProjectExperience(project)
-                .orElseGet(() -> ProjectEvaluation.builder()
-                        .projectExperience(project)
-                        .status(AiSummaryStatus.NOT_CREATED)
-                        .build());
+                .orElseGet(() -> ProjectEvaluationConverter.toProjectEvaluation(project));
 
         evaluation.fail(errorMessage);
         projectEvaluationRepository.saveAndFlush(evaluation);
@@ -74,10 +68,7 @@ public class ProjectEvaluationTxService {
 
         ProjectEvaluation evaluation = projectEvaluationRepository
                 .findByProjectExperience(project)
-                .orElseGet(() -> ProjectEvaluation.builder()
-                        .projectExperience(project)
-                        .status(AiSummaryStatus.NOT_CREATED)
-                        .build());
+                .orElseGet(() -> ProjectEvaluationConverter.toProjectEvaluation(project));
 
         evaluation.pending();
         projectEvaluationRepository.saveAndFlush(evaluation);
