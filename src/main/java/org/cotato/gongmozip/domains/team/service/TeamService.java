@@ -2,7 +2,12 @@ package org.cotato.gongmozip.domains.team.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.MemberAvatarResponse;
+import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.chat.entity.Message;
 import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
@@ -47,6 +52,7 @@ public class TeamService {
     private final ChatService chatService;
     private final CollaborationPointService collaborationPointService;
     private final ChatbotOrchestrationService chatbotOrchestrationService;
+    private final CharacterService characterService;
 
     /**
      * 매칭 도메인이 팀 그룹핑 결과를 확정한 뒤 호출하는 내부 계약.
@@ -81,23 +87,49 @@ public class TeamService {
         return team;
     }
 
+    /**
+     * 채팅방 목록 조회. 방 개수(N)만큼 반복 쿼리하던 걸(팀원 목록, 마지막 메시지) 배치 쿼리 2개로
+     * 묶었다 — 안 읽은 메시지 개수만 팀마다 임계값(lastReadAt)이 달라 배치가 까다로워 그대로 뒀다
+     * (가벼운 COUNT 쿼리라 N개 남아도 영향은 작음).
+     */
     public ChatRoomListResponse getMyChatRooms(Long memberId) {
         List<TeamMember> myMemberships =
                 teamMemberRepository.findByMemberIdAndStatus(memberId, TeamMemberStatus.ACTIVE);
+        List<Long> teamIds =
+                myMemberships.stream().map(tm -> tm.getTeam().getTeamId()).toList();
+        if (teamIds.isEmpty()) {
+            return TeamConverter.toChatRoomListResponse(List.of());
+        }
+
+        Map<Long, List<TeamMember>> activeMembersByTeamId =
+                teamMemberRepository.findByTeamIdInAndStatus(teamIds, TeamMemberStatus.ACTIVE).stream()
+                        .collect(Collectors.groupingBy(tm -> tm.getTeam().getTeamId()));
+        Map<Long, Message> lastMessageByTeamId = messageRepository.findLatestMessagePerTeam(teamIds).stream()
+                .collect(Collectors.toMap(
+                        message -> message.getTeam().getTeamId(), message -> message, (first, second) -> first));
+        // 아바타는 방마다 따로 조회하지 않고, 내가 속한 모든 방의 팀원을 한 번에 모아 배치 조회한다.
+        Map<Long, MemberAvatarResponse> avatarsByMemberId =
+                characterService.findAvatarsByMembers(activeMembersByTeamId.values().stream()
+                        .flatMap(List::stream)
+                        .map(TeamMember::getMember)
+                        .distinct()
+                        .toList());
 
         List<ChatRoomSummaryResponse> rooms = myMemberships.stream()
                 .map(myMembership -> {
                     Long teamId = myMembership.getTeam().getTeamId();
-                    List<TeamMember> activeMembers =
-                            teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
+                    List<TeamMember> activeMembers = activeMembersByTeamId.getOrDefault(teamId, List.of());
                     List<TeamMember> others = activeMembers.stream()
                             .filter(other -> !other.getMember().getMemberId().equals(memberId))
                             .toList();
                     String roomTitle = TeamConverter.buildRoomTitle(others);
+                    List<MemberAvatarResponse> avatars = others.stream()
+                            .map(other ->
+                                    avatarsByMemberId.get(other.getMember().getMemberId()))
+                            .filter(Objects::nonNull)
+                            .toList();
 
-                    Message lastMessage = messageRepository
-                            .findFirstByTeam_TeamIdOrderByCreatedAtDesc(teamId)
-                            .orElse(null);
+                    Message lastMessage = lastMessageByTeamId.get(teamId);
                     LocalDateTime unreadSince = myMembership.getLastReadAt() != null
                             ? myMembership.getLastReadAt()
                             : myMembership.getJoinedAt();
@@ -107,6 +139,7 @@ public class TeamService {
                             teamId,
                             roomTitle,
                             activeMembers.size(),
+                            avatars,
                             lastMessage != null ? lastMessage.getContent() : null,
                             lastMessage != null ? lastMessage.getCreatedAt() : null,
                             unreadCount);
@@ -151,9 +184,13 @@ public class TeamService {
                 .orElseThrow(() -> new TeamException(TeamErrorCode.NOT_TEAM_MEMBER));
 
         List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
+        Map<Long, MemberAvatarResponse> avatarsByMemberId = characterService.findAvatarsByMembers(
+                activeMembers.stream().map(TeamMember::getMember).toList());
         List<TeamMemberSummaryResponse> memberResponses = activeMembers.stream()
                 .map(teamMember -> TeamConverter.toTeamMemberSummaryResponse(
-                        teamMember, teamMember.getMember().getMemberId().equals(requesterMemberId)))
+                        teamMember,
+                        teamMember.getMember().getMemberId().equals(requesterMemberId),
+                        avatarsByMemberId.get(teamMember.getMember().getMemberId())))
                 .toList();
 
         return TeamConverter.toTeamMembersResponse(memberResponses, team.isChatbotEnabled());

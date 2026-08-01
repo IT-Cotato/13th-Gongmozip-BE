@@ -27,6 +27,15 @@
 > 플래그를 함께 내려주고, 프론트에서 리스트 맨 아래에 얹는 방식으로 처리한다.
 > 추가/삭제 시 `SYSTEM_NOTICE` 메시지("OOO님이 챗봇을 추가/제거했습니다")를 기록한다.
 
+> **끄면 실제로 뭐가 멈추는지 (2026-08-01, Figma 5.1.2 확인 후 결정)**: 처음엔 `respondToMentionIfAny`
+> (`@챗봇` 자유 질의)만 이 플래그를 체크하고 나머지 챗봇 메시지(인사 유도, 팀장/공모전 관련 안내,
+> 중간점검/제출확인 알림 등)는 전부 무시하고 계속 발행되고 있었다. **`chatbotEnabled=false`면
+> 챗봇이 남기는 메시지를 전부 막기로 결정** — `ChatService.postChatbotMessage`/
+> `postChatbotCardMessage`에서 중앙으로 가드한다(호출하는 쪽마다 따로 체크할 필요 없음).
+> 단, **`Team.status` 상태 전이 자체는 그대로 진행된다** — 챗봇이 꺼져있어도 팀장 선출/공모전
+> 확정 같은 로직은 정상 동작하고, 그걸 알리는 메시지만 조용히 생략된다. `SYSTEM_NOTICE`는
+> 챗봇 메시지가 아니라 전혀 다른 발신자 타입이라 이 가드와 무관하게 계속 발행된다.
+
 ### 나가기
 
 `TeamMember.status = LEFT`, `leftAt` 기록. 나가기 시 confirm 다이얼로그
@@ -41,6 +50,13 @@
 
 - 프로필 팝업은 기존 `Profile.isPublic` 그대로 사용 — 비공개면 "비공개 프로필입니다" 안내만
   노출, 신규 필드 불필요.
+- **위 결정이 실제로는 구현 안 돼 있던 걸 발견 (2026-08-01, Figma 5.1.2.2.1 확인 중)**:
+  `GET /api/public/profiles/{profileId}`가 비공개 프로필이면 존재하지 않는 리소스와 동일하게
+  `PROFILE_NOT_FOUND`(404)를 던지고 있었다 — "안내만 노출" 계획과 다르게 API 호출 자체가
+  실패하는 상태. `ProfileService.getPublicProfile`을 고쳐서 비공개일 땐 예외 대신
+  `PublicProfileResponse`에 `isPublic=false` + 닉네임/캐릭터(아바타)만 채우고 나머지(학교/학년/
+  전공/프로젝트 등)는 전부 비운 채로 정상 응답하도록 함. 이 API는 팀 채팅 전용이 아니라
+  profile 도메인 전반에서 쓰는 범용 API라 이 변경은 팀 채팅뿐 아니라 다른 화면에도 영향을 준다.
 - "팀원 이름 수정"(로컬 별칭) 기능은 **이번 스코프에서 제외**. 추후 필요 시 별도 설계 필요
   (viewer × target 조인 엔티티가 필요해 TeamMember 필드 하나로는 해결 안 됨).
 
@@ -53,6 +69,14 @@
   때마다 `SimpMessagingTemplate`으로 `/topic/teams/{teamId}`에 브로드캐스트한다 — `sendMessage`,
   `postSystemMessage` 양쪽 다 이 경로를 타므로, 나중에 챗봇/투표 결과 메시지를 추가해도
   실시간 push를 별도로 구현할 필요 없음.
+- **발신자 아바타 (2026-08-01, Figma 5.1.3.1 확인 후 추가)**: `MessageItemResponse`에
+  `senderAvatar`(`characterType`+`paletteCode`) 추가 — `getMessages`는 조회된 메시지의
+  발신 팀원들을 모아 `CharacterService.findAvatarsByMembers`로 배치 조회하고, 실시간
+  브로드캐스트(`broadcast`)는 방금 보낸 발신자 1명만 조회한다. 이걸 하면서
+  `MessageRepository.findByTeam_TeamIdOrderByCreatedAtDesc`도 `senderTeamMember`/`profile`/
+  `member`를 LEFT JOIN FETCH하도록 고쳤다 — 원래 `sender.getProfile().getNickname()` 자체가
+  메시지마다 lazy load되는 기존 N+1이었는데 이번에 같이 잡음. CHATBOT/SYSTEM 메시지나 협업
+  유형 검사를 안 한 발신자는 `senderAvatar`가 null.
 - **전송(WebSocket)**: `domains/chat/websocket/ChatWebSocketController` —
   STOMP `@MessageMapping("/teams/{teamId}/messages")`. 인증은 `global/websocket/
   StompAuthChannelInterceptor`가 STOMP `CONNECT` 프레임의 `Authorization` 헤더로 처리

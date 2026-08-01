@@ -157,22 +157,34 @@ class ProfileServiceTest {
         assertThat(response.nickname()).isEqualTo("공개");
     }
 
-    @DisplayName("비공개 프로필(isPublic = false)을 조회하면 비공개 프로필 접근 제한 에러가 발생한다.")
+    @DisplayName("비공개 프로필(isPublic = false)을 조회하면 닉네임만 채워지고 나머지는 비운 채로 응답한다.")
     @Test
-    void 비공개_프로필은_조회_시_에러가_발생한다() {
+    void 비공개_프로필은_닉네임만_채워진_채로_응답한다() {
         // given
         Profile profile = Profile.builder()
                 .profileId(10L)
                 .member(member)
                 .nickname("비공개")
+                .schoolName("학교")
+                .grade(3)
+                .major("컴공")
                 .isPublic(false)
                 .build();
         given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
 
-        // when & then
-        assertThatThrownBy(() -> profileService.getPublicProfile(10L))
-                .isInstanceOf(ProfileException.class)
-                .hasMessage(ProfileErrorCode.PROFILE_NOT_FOUND.getMessage());
+        // when
+        PublicProfileResponse response = profileService.getPublicProfile(10L);
+
+        // then
+        assertThat(response.isPublic()).isFalse();
+        assertThat(response.nickname()).isEqualTo("비공개");
+        assertThat(response.schoolName()).isNull();
+        assertThat(response.schoolRegion()).isNull();
+        assertThat(response.grade()).isNull();
+        assertThat(response.major()).isNull();
+        assertThat(response.projects()).isEmpty();
+        assertThat(response.awards()).isEmpty();
+        assertThat(response.certifications()).isEmpty();
     }
 
     // 프로필 수정 및 대표 프로필 삭제 테스트
