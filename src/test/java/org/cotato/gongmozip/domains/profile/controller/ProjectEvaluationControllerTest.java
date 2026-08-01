@@ -1,7 +1,6 @@
 package org.cotato.gongmozip.domains.profile.controller;
 
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.doNothing;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -48,7 +47,7 @@ class ProjectEvaluationControllerTest {
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
 
         ProjectEvaluationRequest request = new ProjectEvaluationRequest(10L);
-        doNothing().when(projectEvaluationService).evaluateProject(10L, member);
+        given(projectEvaluationService.evaluateProject(10L, member)).willReturn(5L);
 
         mockMvc.perform(post("/api/ai/project-evaluations")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -56,7 +55,8 @@ class ProjectEvaluationControllerTest {
                         .with(user(userDetails))
                         .with(csrf()))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.code").value("PROFILE_202_2"));
+                .andExpect(jsonPath("$.code").value("PROFILE_202_2"))
+                .andExpect(jsonPath("$.data.evaluationId").value(5L));
     }
 
     @Test

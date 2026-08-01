@@ -80,6 +80,9 @@ class ProjectEvaluationServiceTest {
         // given
         given(projectExperienceRepository.findByIdWithLock(10L)).willReturn(Optional.of(project));
         given(projectEvaluationRepository.findByProjectExperience(project)).willReturn(Optional.empty());
+        ProjectEvaluation evaluation =
+                ProjectEvaluation.builder().projectEvaluationId(5L).build();
+        given(projectEvaluationRepository.save(any(ProjectEvaluation.class))).willReturn(evaluation);
 
         // when
         projectEvaluationService.evaluateProject(10L, member);
@@ -113,6 +116,9 @@ class ProjectEvaluationServiceTest {
         // given
         given(projectExperienceRepository.findByIdWithLock(10L)).willReturn(Optional.of(project));
         given(projectEvaluationRepository.findByProjectExperience(project)).willReturn(Optional.empty());
+        ProjectEvaluation evaluation =
+                ProjectEvaluation.builder().projectEvaluationId(5L).build();
+        given(projectEvaluationRepository.save(any(ProjectEvaluation.class))).willReturn(evaluation);
 
         // setSelf에 스레드 거부 동작 Mocking
         ProjectEvaluationService mockSelf = org.mockito.Mockito.mock(ProjectEvaluationService.class);
