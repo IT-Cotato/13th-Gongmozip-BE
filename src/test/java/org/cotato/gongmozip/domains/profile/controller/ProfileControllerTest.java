@@ -44,7 +44,7 @@ class ProfileControllerTest {
 
         given(profileService.getPublicProfile(1L))
                 .willReturn(new PublicProfileResponse(
-                        1L, "러너", null, "서울 소재 대학교", "학교", 3, "컴퓨터공학", null, List.of(), List.of(), List.of()));
+                        1L, "러너", null, true, "서울 소재 대학교", "학교", 3, "컴퓨터공학", null, List.of(), List.of(), List.of()));
 
         mockMvc.perform(get("/api/public/profiles/{profileId}", 1L).with(user(userDetails)))
                 .andExpect(status().isOk())

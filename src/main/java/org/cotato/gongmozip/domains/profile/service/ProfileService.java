@@ -172,9 +172,12 @@ public class ProfileService {
                 .findById(profileId)
                 .orElseThrow(() -> new ProfileException(ProfileErrorCode.PROFILE_NOT_FOUND));
 
-        // 비공개 프로필은 존재하지 않는 리소스와 동일하게 처리 (PROFILE_NOT_FOUND)
+        // 비공개 프로필은 (팀 채팅 등에서) 닉네임/아바타만 보여주고 나머지는 비운 채로 응답한다
+        // (docs/decisions/03-chat.md의 "팀원 프로필 열람" 참고) — 존재 자체를 숨기지는 않는다.
         if (!profile.isPublic()) {
-            throw new ProfileException(ProfileErrorCode.PROFILE_NOT_FOUND);
+            CurrentCharacterResponse character =
+                    characterService.findCurrentCharacter(profile.getMember()).orElse(null);
+            return ProfileConverter.toPrivateProfileResponse(profile, character);
         }
 
         List<ProjectExperience> projects = projectExperienceRepository.findAllByProfile(profile);
