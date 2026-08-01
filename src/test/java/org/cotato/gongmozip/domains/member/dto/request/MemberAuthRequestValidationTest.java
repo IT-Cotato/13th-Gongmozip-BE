@@ -62,7 +62,8 @@ class MemberAuthRequestValidationTest {
         LocalDate minimumBirthDate = TODAY.minusYears(14);
 
         assertThat(validator.validate(signUpRequest(minimumBirthDate))).isEmpty();
-        assertThat(validator.validate(registerRequiredInfoRequest(minimumBirthDate))).isEmpty();
+        assertThat(validator.validate(registerRequiredInfoRequest(minimumBirthDate)))
+                .isEmpty();
     }
 
     private SignUpRequest signUpRequest(LocalDate birthDate) {
