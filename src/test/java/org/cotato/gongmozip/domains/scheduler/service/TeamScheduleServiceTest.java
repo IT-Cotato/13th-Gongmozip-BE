@@ -1,18 +1,23 @@
 package org.cotato.gongmozip.domains.scheduler.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.util.List;
+import java.util.Optional;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.contest.service.ContestVotingService;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.enums.TeamStatus;
+import org.cotato.gongmozip.domains.team.exception.TeamException;
+import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
 import org.cotato.gongmozip.domains.team.repository.TeamRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,9 +41,9 @@ class TeamScheduleServiceTest {
     @InjectMocks
     private TeamScheduleService teamScheduleService;
 
-    @DisplayName("공모전 투표 마감이 지난 팀들을 각각 강제 개표한다.")
+    @DisplayName("공모전 투표 마감이 지난 팀 id 목록을 조회한다.")
     @Test
-    void 공모전_투표_마감이_지난_팀들을_각각_강제_개표한다() {
+    void 공모전_투표_마감이_지난_팀_id_목록을_조회한다() {
         // given
         Team team1 =
                 Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
@@ -49,11 +54,36 @@ class TeamScheduleServiceTest {
                 .willReturn(List.of(team1, team2));
 
         // when
-        teamScheduleService.resolveDueContestVotingDeadlines();
+        List<Long> dueTeamIds = teamScheduleService.findDueContestVotingDeadlineTeamIds();
+
+        // then
+        assertThat(dueTeamIds).containsExactly(1L, 2L);
+    }
+
+    @DisplayName("팀 1개의 공모전 투표 마감을 처리하면 해당 팀만 개표를 호출한다.")
+    @Test
+    void 팀_1개의_공모전_투표_마감을_처리하면_해당_팀만_개표를_호출한다() {
+        // when
+        teamScheduleService.resolveContestVotingDeadlineForTeam(1L);
 
         // then
         verify(contestVotingService).resolveDeadlineIfDue(1L);
-        verify(contestVotingService).resolveDeadlineIfDue(2L);
+    }
+
+    @DisplayName("마감 대상 팀이 없으면 빈 목록을 반환한다.")
+    @Test
+    void 마감_대상_팀이_없으면_빈_목록을_반환한다() {
+        // given
+        given(teamRepository.findByStatusAndContestCandidateDeadlineAtLessThanEqual(
+                        eq(TeamStatus.CONTEST_SELECTING), any()))
+                .willReturn(List.of());
+
+        // when
+        List<Long> dueTeamIds = teamScheduleService.findDueContestVotingDeadlineTeamIds();
+
+        // then
+        assertThat(dueTeamIds).isEmpty();
+        verify(contestVotingService, never()).resolveDeadlineIfDue(any());
     }
 
     @DisplayName("중간점검 시각이 지난 팀에게 진행률 체크 카드를 발행하고 알림 처리한다.")
@@ -61,18 +91,42 @@ class TeamScheduleServiceTest {
     void 중간점검_시각이_지난_팀에게_진행률_체크_카드를_발행하고_알림_처리한다() {
         // given
         Team team = Team.builder().teamId(1L).status(TeamStatus.IN_PROGRESS).build();
-        given(teamRepository.findByStatusAndProgressCheckAtLessThanEqualAndProgressCheckNotifiedAtIsNull(
-                        eq(TeamStatus.IN_PROGRESS), any()))
-                .willReturn(List.of(team));
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
 
         // when
-        teamScheduleService.sendDueProgressChecks();
+        teamScheduleService.sendProgressCheckForTeam(1L);
 
         // then
-        org.assertj.core.api.Assertions.assertThat(team.getProgressCheckNotifiedAt())
-                .isNotNull();
+        assertThat(team.getProgressCheckNotifiedAt()).isNotNull();
         verify(chatService)
                 .postChatbotCardMessage(eq(team), eq(MessageType.PROGRESS_CHECK_CARD), anyString(), eq(null));
+    }
+
+    @DisplayName("이미 중간점검 알림을 보낸 팀은 다시 발행하지 않는다.")
+    @Test
+    void 이미_중간점검_알림을_보낸_팀은_다시_발행하지_않는다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.IN_PROGRESS).build();
+        team.markProgressCheckNotified(java.time.LocalDateTime.now());
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        teamScheduleService.sendProgressCheckForTeam(1L);
+
+        // then
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
+
+    @DisplayName("존재하지 않는 팀의 중간점검을 처리하려 하면 예외가 발생한다.")
+    @Test
+    void 존재하지_않는_팀의_중간점검을_처리하려_하면_예외가_발생한다() {
+        // given
+        given(teamRepository.findById(999L)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> teamScheduleService.sendProgressCheckForTeam(999L))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.TEAM_NOT_FOUND);
     }
 
     @DisplayName("제출확인 시각이 지난 팀에게 제출 여부 확인 카드를 발행하고 알림 처리한다.")
@@ -80,32 +134,29 @@ class TeamScheduleServiceTest {
     void 제출확인_시각이_지난_팀에게_제출_여부_확인_카드를_발행하고_알림_처리한다() {
         // given
         Team team = Team.builder().teamId(1L).status(TeamStatus.IN_PROGRESS).build();
-        given(teamRepository.findByStatusAndSubmissionCheckAtLessThanEqualAndSubmissionCheckNotifiedAtIsNull(
-                        eq(TeamStatus.IN_PROGRESS), any()))
-                .willReturn(List.of(team));
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
 
         // when
-        teamScheduleService.sendDueSubmissionChecks();
+        teamScheduleService.sendSubmissionCheckForTeam(1L);
 
         // then
-        org.assertj.core.api.Assertions.assertThat(team.getSubmissionCheckNotifiedAt())
-                .isNotNull();
+        assertThat(team.getSubmissionCheckNotifiedAt()).isNotNull();
         verify(chatService)
                 .postChatbotCardMessage(eq(team), eq(MessageType.SUBMISSION_CHECK_CARD), anyString(), eq(null));
     }
 
-    @DisplayName("마감 대상 팀이 없으면 아무 것도 하지 않는다.")
+    @DisplayName("이미 제출확인 알림을 보낸 팀은 다시 발행하지 않는다.")
     @Test
-    void 마감_대상_팀이_없으면_아무_것도_하지_않는다() {
+    void 이미_제출확인_알림을_보낸_팀은_다시_발행하지_않는다() {
         // given
-        given(teamRepository.findByStatusAndContestCandidateDeadlineAtLessThanEqual(
-                        eq(TeamStatus.CONTEST_SELECTING), any()))
-                .willReturn(List.of());
+        Team team = Team.builder().teamId(1L).status(TeamStatus.IN_PROGRESS).build();
+        team.markSubmissionCheckNotified(java.time.LocalDateTime.now());
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
 
         // when
-        teamScheduleService.resolveDueContestVotingDeadlines();
+        teamScheduleService.sendSubmissionCheckForTeam(1L);
 
         // then
-        verify(contestVotingService, times(0)).resolveDeadlineIfDue(any());
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
     }
 }
