@@ -2,6 +2,7 @@ package org.cotato.gongmozip.domains.team.converter;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.MemberAvatarResponse;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
@@ -52,24 +53,28 @@ public final class TeamConverter {
             Long teamId,
             String roomTitle,
             int participantCount,
+            List<MemberAvatarResponse> avatars,
             String lastMessageContent,
             LocalDateTime lastMessageAt,
             long unreadCount) {
         return new ChatRoomSummaryResponse(
-                teamId, roomTitle, participantCount, lastMessageContent, lastMessageAt, unreadCount);
+                teamId, roomTitle, participantCount, avatars, lastMessageContent, lastMessageAt, unreadCount);
     }
 
     public static ChatRoomListResponse toChatRoomListResponse(List<ChatRoomSummaryResponse> rooms) {
         return new ChatRoomListResponse(rooms);
     }
 
-    public static TeamMemberSummaryResponse toTeamMemberSummaryResponse(TeamMember teamMember, boolean isMe) {
+    public static TeamMemberSummaryResponse toTeamMemberSummaryResponse(
+            TeamMember teamMember, boolean isMe, MemberAvatarResponse avatar) {
         return new TeamMemberSummaryResponse(
                 teamMember.getTeamMemberId(),
                 teamMember.getMember().getMemberId(),
+                teamMember.getProfile().getProfileId(),
                 teamMember.getProfile().getNickname(),
                 teamMember.getRole().name(),
-                isMe);
+                isMe,
+                avatar);
     }
 
     public static TeamMembersResponse toTeamMembersResponse(

@@ -8,7 +8,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.MemberAvatarResponse;
+import org.cotato.gongmozip.domains.character.enums.CharacterPalette;
+import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
@@ -19,6 +23,7 @@ import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.profile.repository.ProfileRepository;
+import org.cotato.gongmozip.domains.survey.enums.CharacterType;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamCreationRequest;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamMemberInput;
 import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.ChatRoomListResponse;
@@ -66,6 +71,9 @@ class TeamServiceTest {
 
     @Mock
     private ChatbotOrchestrationService chatbotOrchestrationService;
+
+    @Mock
+    private CharacterService characterService;
 
     @InjectMocks
     private TeamService teamService;
@@ -136,12 +144,12 @@ class TeamServiceTest {
 
         given(teamMemberRepository.findByMemberIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(me));
-        given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
+        given(teamMemberRepository.findByTeamIdInAndStatus(List.of(100L), TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(me, other1, other2));
-        given(messageRepository.findFirstByTeam_TeamIdOrderByCreatedAtDesc(100L))
-                .willReturn(Optional.empty());
+        given(messageRepository.findLatestMessagePerTeam(List.of(100L))).willReturn(List.of());
         given(messageRepository.countByTeam_TeamIdAndCreatedAtAfter(any(Long.class), any()))
                 .willReturn(0L);
+        given(characterService.findAvatarsByMembers(any())).willReturn(Map.of());
 
         // when
         ChatRoomListResponse response = teamService.getMyChatRooms(1L);
@@ -150,6 +158,34 @@ class TeamServiceTest {
         assertThat(response.rooms()).hasSize(1);
         assertThat(response.rooms().get(0).roomTitle()).isEqualTo("김민정, 이해은");
         assertThat(response.rooms().get(0).participantCount()).isEqualTo(3);
+    }
+
+    @DisplayName("채팅방 목록의 아바타는 본인을 제외한 팀원 것만, 캐릭터가 없는 팀원은 빠진 채 채워진다.")
+    @Test
+    void 채팅방_목록의_아바타는_본인을_제외한_팀원_것만_채워진다() {
+        // given
+        Team team = Team.builder().teamId(100L).build();
+        TeamMember me = teamMemberOf(team, 1L, "나");
+        TeamMember other1 = teamMemberOf(team, 2L, "김민정");
+        TeamMember other2 = teamMemberOf(team, 3L, "이해은");
+        MemberAvatarResponse avatar =
+                new MemberAvatarResponse(2L, CharacterType.TRACK_RUNNER, CharacterPalette.SOLID_PINK, "#FFE9E7", null);
+
+        given(teamMemberRepository.findByMemberIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(me));
+        given(teamMemberRepository.findByTeamIdInAndStatus(List.of(100L), TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(me, other1, other2));
+        given(messageRepository.findLatestMessagePerTeam(List.of(100L))).willReturn(List.of());
+        given(messageRepository.countByTeam_TeamIdAndCreatedAtAfter(any(Long.class), any()))
+                .willReturn(0L);
+        // 3L(이해은)은 협업 유형 검사를 안 했다고 가정 — 결과 Map에 없음
+        given(characterService.findAvatarsByMembers(any())).willReturn(Map.of(2L, avatar));
+
+        // when
+        ChatRoomListResponse response = teamService.getMyChatRooms(1L);
+
+        // then
+        assertThat(response.rooms().get(0).avatars()).containsExactly(avatar);
     }
 
     @DisplayName("채팅방을 나가면 팀원 상태가 LEFT로 바뀌고 시스템 메시지가 발행된다.")
@@ -202,6 +238,7 @@ class TeamServiceTest {
                 .willReturn(Optional.of(me));
         given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(me, other));
+        given(characterService.findAvatarsByMembers(any())).willReturn(Map.of());
 
         // when
         TeamMembersResponse response = teamService.getTeamMembers(100L, 1L);
@@ -210,6 +247,41 @@ class TeamServiceTest {
         assertThat(response.chatbotEnabled()).isTrue();
         assertThat(response.participantCount()).isEqualTo(2);
         assertThat(response.members()).anySatisfy(m -> assertThat(m.isMe()).isTrue());
+        assertThat(response.members())
+                .filteredOn(m -> m.memberId().equals(2L))
+                .singleElement()
+                .satisfies(m -> assertThat(m.profileId()).isEqualTo(200L));
+    }
+
+    @DisplayName("대화상대 조회 시 캐릭터가 있는 팀원은 avatar가 채워지고, 없는 팀원은 null이다.")
+    @Test
+    void 대화상대_조회_시_캐릭터가_있는_팀원은_avatar가_채워진다() {
+        // given
+        Team team = Team.builder().teamId(100L).chatbotEnabled(true).build();
+        TeamMember me = teamMemberOf(team, 1L, "나");
+        TeamMember other = teamMemberOf(team, 2L, "김민정");
+        MemberAvatarResponse avatar =
+                new MemberAvatarResponse(1L, CharacterType.LEAD_RUNNER, CharacterPalette.DEFAULT, null, null);
+
+        given(teamRepository.findById(100L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
+                .willReturn(Optional.of(me));
+        given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(me, other));
+        given(characterService.findAvatarsByMembers(any())).willReturn(Map.of(1L, avatar));
+
+        // when
+        TeamMembersResponse response = teamService.getTeamMembers(100L, 1L);
+
+        // then
+        assertThat(response.members())
+                .filteredOn(m -> m.memberId().equals(1L))
+                .singleElement()
+                .satisfies(m -> assertThat(m.avatar()).isEqualTo(avatar));
+        assertThat(response.members())
+                .filteredOn(m -> m.memberId().equals(2L))
+                .singleElement()
+                .satisfies(m -> assertThat(m.avatar()).isNull());
     }
 
     @DisplayName("팀 소속이 아닌 회원이 대화상대를 조회하면 예외가 발생한다.")
@@ -241,7 +313,8 @@ class TeamServiceTest {
 
     private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {
         Member member = Member.builder().memberId(memberId).build();
-        Profile profile = Profile.builder().nickname(nickname).build();
+        Profile profile =
+                Profile.builder().profileId(memberId * 100).nickname(nickname).build();
         return TeamMember.builder()
                 .team(team)
                 .member(member)

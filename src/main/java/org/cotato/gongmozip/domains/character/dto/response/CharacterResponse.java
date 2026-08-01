@@ -33,4 +33,13 @@ public final class CharacterResponse {
             String secondaryHex,
             int displayOrder,
             boolean selected) {}
+
+    // 다른 도메인(팀 채팅 등)이 여러 회원의 아바타를 한 번에 렌더링할 때 쓰는 경량 응답.
+    // 캐릭터 이름/캐치프레이즈/태그 등 상세 설명은 필요 없어 CurrentCharacterResponse보다 가볍다.
+    public record MemberAvatarResponse(
+            Long memberId,
+            CharacterType characterType,
+            CharacterPalette paletteCode,
+            String primaryHex,
+            String secondaryHex) {}
 }
