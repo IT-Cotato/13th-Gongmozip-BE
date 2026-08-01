@@ -17,7 +17,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -48,7 +47,6 @@ class MessageRepositoryIntegrationTest {
         saveMessageAt(teamA, "A-옛날", LocalDateTime.now().minusHours(2));
         Message latestA = saveMessageAt(teamA, "A-최근", LocalDateTime.now().minusMinutes(1));
         Message latestB = saveMessageAt(teamB, "B-유일", LocalDateTime.now().minusMinutes(30));
-        entityManager.flush();
 
         // when
         List<Message> latestMessages = messageRepository.findLatestMessagePerTeam(
@@ -68,7 +66,6 @@ class MessageRepositoryIntegrationTest {
         // given
         Team team = teamRepository.save(team());
         saveMessageAt(team, "메시지", LocalDateTime.now());
-        entityManager.flush();
 
         // when
         List<Message> latestMessages = messageRepository.findLatestMessagePerTeam(List.of());
@@ -77,6 +74,10 @@ class MessageRepositoryIntegrationTest {
         assertThat(latestMessages).isEmpty();
     }
 
+    // BaseEntity.createdAt은 updatable=false라 저장 후 필드만 바꿔서는(ReflectionTestUtils 등)
+    // DB에 반영되지 않는다 — native UPDATE로 직접 DB 값을 백데이트하고, 방금 저장한 엔티티만
+    // 1차 캐시에서 detach해서 이후 조회가 stale 값이 아니라 DB에서 다시 읽도록 한다(team처럼
+    // 다른 테스트에서 계속 쓰는 엔티티까지 clear()로 통째로 떼어내지 않기 위함).
     private Message saveMessageAt(Team team, String content, LocalDateTime createdAt) {
         Message saved = messageRepository.save(Message.builder()
                 .team(team)
@@ -84,7 +85,15 @@ class MessageRepositoryIntegrationTest {
                 .messageType(MessageType.SYSTEM_NOTICE)
                 .content(content)
                 .build());
-        ReflectionTestUtils.setField(saved, "createdAt", createdAt);
+        entityManager.flush();
+
+        entityManager
+                .createNativeQuery("UPDATE messages SET created_at = :createdAt WHERE message_id = :id")
+                .setParameter("createdAt", createdAt)
+                .setParameter("id", saved.getMessageId())
+                .executeUpdate();
+        entityManager.detach(saved);
+
         return saved;
     }
 

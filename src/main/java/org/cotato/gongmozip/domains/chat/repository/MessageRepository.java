@@ -33,6 +33,16 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     // 채팅방 목록 조회에서 팀마다 따로 "마지막 메시지"를 조회하면 N+1이 되므로, 한 번에 묶어서 가져온다.
     // (같은 팀에서 createdAt이 완전히 같은 메시지가 여러 개면 그중 하나만 돌아올 수 있음 — 드문 케이스라 허용)
+    //
+    // teamIds가 비어있으면 DB까지 안 가고 바로 빈 리스트를 반환한다 — native query의 "IN ()"은
+    // MySQL에서 SQL 문법 오류다(H2는 관대하게 통과시켜서 테스트만으로는 못 잡는 차이였음).
+    default List<Message> findLatestMessagePerTeam(List<Long> teamIds) {
+        if (teamIds == null || teamIds.isEmpty()) {
+            return List.of();
+        }
+        return findLatestMessagePerTeamByTeamIds(teamIds);
+    }
+
     @Query(
             value =
                     """
@@ -45,5 +55,5 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
                     ) latest ON m.team_id = latest.team_id AND m.created_at = latest.max_created_at
                     """,
             nativeQuery = true)
-    List<Message> findLatestMessagePerTeam(@Param("teamIds") List<Long> teamIds);
+    List<Message> findLatestMessagePerTeamByTeamIds(@Param("teamIds") List<Long> teamIds);
 }
