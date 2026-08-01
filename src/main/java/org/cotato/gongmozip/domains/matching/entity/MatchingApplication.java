@@ -1,4 +1,4 @@
-package org.cotato.gongmozip.domains.survey.entity;
+package org.cotato.gongmozip.domains.matching.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,11 +12,15 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
+import org.cotato.gongmozip.domains.matching.enums.MatchingApplicationStatus;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
@@ -45,24 +49,56 @@ public class MatchingApplication extends BaseEntity {
     @JoinColumn(name = "profile_id", nullable = false)
     private Profile profile;
 
-    // 매칭 신청 시 입력받는 공모전 관심 분야
+    // 레거시 신청 행은 NULL을 유지하고, 신규 API로 생성되는 행만 날짜 유일성 정책을 적용한다.
+    @Column(name = "application_date")
+    private LocalDate applicationDate;
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 30)
+    private MatchingApplicationStatus status = MatchingApplicationStatus.WAITING;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "leader_preference", nullable = false, length = 30)
+    private LeaderPreference leaderPreference;
+
+    @Column(name = "first_matching", nullable = false)
+    private boolean firstMatching;
+
+    @Column(name = "canceled_at")
+    private LocalDateTime canceledAt;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "contest_category", nullable = false, length = 50)
     private InterestCategory contestCategory;
 
-    // 매칭 신청 시 계산되는 역량 점수
+    // 아래 구성요소 점수는 모두 가중치 적용 전 0~100 원점수다.
+    @Column(name = "gpa_score", precision = 5, scale = 2)
+    private BigDecimal gpaScore;
+
+    @Column(name = "project_score", precision = 5, scale = 2)
+    private BigDecimal projectScore;
+
+    @Column(name = "award_score", precision = 5, scale = 2)
+    private BigDecimal awardScore;
+
+    @Column(name = "certification_score", precision = 5, scale = 2)
+    private BigDecimal certificationScore;
+
+    @Column(name = "collaboration_score", precision = 5, scale = 2)
+    private BigDecimal collaborationScore;
+
     @Column(name = "skill_score", nullable = false, precision = 5, scale = 2)
     private BigDecimal skillScore;
 
-    // 매칭 신청 시 계산되는 역량 그룹
     @Column(name = "skill_group", nullable = false)
     private Integer skillGroup;
 
-    // 매칭 신청 시 입력받는 협업 거리
+    // 활동으로 변하는 회원 협업거리의 신청 시점 스냅샷이다.
     @Column(name = "collaboration_distance", nullable = false)
     private Integer collaborationDistance;
 
-    // 매칭 신청 시점의 설문 결과 스냅샷
+    // 매칭 신청 시점의 기존 협업 유형 검사 결과 스냅샷
     @Column(name = "agreeableness_score", nullable = false, precision = 5, scale = 2)
     private BigDecimal agreeablenessScore;
 
@@ -104,33 +140,15 @@ public class MatchingApplication extends BaseEntity {
     @Column(name = "character_y_score", nullable = false, precision = 5, scale = 2)
     private BigDecimal characterYScore;
 
-    public static MatchingApplication snapshotOf(
-            SurveySubmission submission,
-            Profile profile,
-            InterestCategory contestCategory,
-            BigDecimal skillScore,
-            Integer skillGroup,
-            Integer collaborationDistance) {
-        return MatchingApplication.builder()
-                .member(submission.getMember())
-                .profile(profile)
-                .contestCategory(contestCategory)
-                .skillScore(skillScore)
-                .skillGroup(skillGroup)
-                .collaborationDistance(collaborationDistance)
-                .agreeablenessScore(submission.getAgreeablenessScore())
-                .conscientiousnessScore(submission.getConscientiousnessScore())
-                .honestyHumilityScore(submission.getHonestyHumilityScore())
-                .extroversionScore(submission.getExtroversionScore())
-                .goalPreferenceScore(submission.getGoalPreferenceScore())
-                .workStyleScore(submission.getWorkStyleScore())
-                .communicationStyleScore(submission.getCommunicationStyleScore())
-                .extroversion2Score(submission.getExtroversion2Score())
-                .extroversion3Score(submission.getExtroversion3Score())
-                .extroversionType(submission.getExtroversionType())
-                .characterType(submission.getCharacterType())
-                .characterXScore(submission.getCharacterXScore())
-                .characterYScore(submission.getCharacterYScore())
-                .build();
+    // 14시 전 철회 상태 전이 — 협업거리 감점 없음
+    public void cancel(LocalDateTime canceledAt) {
+        this.status = MatchingApplicationStatus.CANCELED;
+        this.canceledAt = canceledAt;
+    }
+
+    // 14시 이후 철회 상태 전이 — 협업거리 감점은 CollaborationPointService에서 처리한다
+    public void pass(LocalDateTime canceledAt) {
+        this.status = MatchingApplicationStatus.PASSED;
+        this.canceledAt = canceledAt;
     }
 }
