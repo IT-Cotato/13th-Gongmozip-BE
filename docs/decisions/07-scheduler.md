@@ -1,9 +1,9 @@
-# 07. 스케줄러 (중간점검 / 제출확인)
+# 07. 스케줄러 (중간점검 / 제출확인 / 인사 유도 타임아웃)
 
 ## 배경/목적
 
-날짜 기반으로 챗봇이 먼저 말을 거는 두 이벤트(중간점검, 제출확인)의 트리거 타이밍과 배치
-방식을 정의한다.
+날짜/시간 기반으로 챗봇이 먼저 말을 거는 이벤트(중간점검, 제출확인, 인사 유도 타임아웃)의
+트리거 타이밍과 배치 방식을 정의한다.
 
 ## 엔티티 · 필드 정의
 
@@ -57,6 +57,18 @@
   (`resolve.../send...ForTeam`, 팀 단위 `@Transactional`)로 나누고, `TeamSchedulerJobs`가
   조회 결과를 순회하며 팀마다 별도 트랜잭션으로 처리하도록 바꿨다. 팀 하나가 실패해도 나머지
   팀은 계속 처리되도록 `TeamSchedulerJobs`에서 팀 단위로 try-catch도 추가.
+
+- **인사 유도 2시간 타임아웃 (2026-08-02, PR #56 리뷰 반영)**: 기능명세서 5.1.3.1 E1은 챗봇의
+  자기소개 안내 후 2시간 동안 응답이 없으면 자동으로 다음 단계(팀장 선출)로 넘어가야 하는데,
+  최초 구현은 팀원 전원의 응답만 계속 기다리는 구조였다(스케줄러 없음). `TeamRepository`에
+  `findByStatusAndCreatedAtLessThanEqual` 추가 — `GREETING` 진입이 `TeamService.createTeam`
+  직후 딱 한 번, 동기적으로만 일어나므로 `Team.createdAt`을 "GREETING 시작 시각"의 대용으로
+  써도 안전하다(재진입 경로 없음). `TeamScheduleService.findDueGreetingTimeoutTeamIds`/
+  `forceAdvanceGreetingForTeam`을 다른 3개 이벤트와 동일한 조회/처리 분리 패턴으로 추가하고,
+  `TeamSchedulerJobs`에 5분 간격 cron을 하나 더 추가했다.
+  `ChatbotOrchestrationService.recordGreetingAndAdvance`의 "전원 인사 완료 시 다음 단계로"
+  로직을 `advanceToLeaderSelecting(team, activeMembers)`로 추출해, 정상 경로(전원 응답)와
+  타임아웃 강제 경로(`forceAdvanceGreetingIfDue`) 둘 다 재사용한다.
 
 ## 미정 / 추후 확인 필요
 

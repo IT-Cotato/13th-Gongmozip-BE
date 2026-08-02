@@ -51,4 +51,16 @@ public class TeamSchedulerJobs {
             }
         }
     }
+
+    // 인사 유도 타임아웃도 시각 단위(팀 생성 후 2시간)라 5분 간격으로 확인한다.
+    @Scheduled(cron = "0 */5 * * * *")
+    public void forceAdvanceGreetings() {
+        for (Long teamId : teamScheduleService.findDueGreetingTimeoutTeamIds()) {
+            try {
+                teamScheduleService.forceAdvanceGreetingForTeam(teamId);
+            } catch (Exception e) {
+                log.error("인사 유도 강제 전이 실패 - teamId: {}", teamId, e);
+            }
+        }
+    }
 }

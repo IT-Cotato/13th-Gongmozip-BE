@@ -133,6 +133,45 @@ class ChatbotOrchestrationServiceTest {
                 .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_NOMINATION_CARD), anyString(), anyString());
     }
 
+    @DisplayName("타임아웃이 지나면 일부만 인사했어도 강제로 팀장 선출 단계로 전이한다.")
+    @Test
+    void 타임아웃이_지나면_일부만_인사했어도_강제로_팀장_선출_단계로_전이한다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
+        TeamMember greeted = teamMemberOf(team, 10L, "김철수");
+        greeted.markGreeted(java.time.LocalDateTime.now());
+        TeamMember neverGreeted = teamMemberOf(team, 20L, "이해은");
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(greeted, neverGreeted));
+        given(aiClient.recommendLeaderCandidates(any())).willReturn(List.of());
+
+        // when
+        chatbotOrchestrationService.forceAdvanceGreetingIfDue(1L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_NOMINATION_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("이미 GREETING을 지나 다음 단계로 넘어간 팀이면 타임아웃 강제 전이를 하지 않는다.")
+    @Test
+    void 이미_GREETING을_지나_다음_단계로_넘어간_팀이면_타임아웃_강제_전이를_하지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        chatbotOrchestrationService.forceAdvanceGreetingIfDue(1L);
+
+        // then
+        verify(teamMemberRepository, never()).findByTeamIdAndStatus(any(), any());
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
+
     @DisplayName("이미 인사한 팀원이 다시 메시지를 보내도 중복 처리되지 않는다.")
     @Test
     void 이미_인사한_팀원이_다시_메시지를_보내도_중복_처리되지_않는다() {
