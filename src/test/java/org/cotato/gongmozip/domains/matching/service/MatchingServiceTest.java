@@ -20,6 +20,8 @@ import org.cotato.gongmozip.domains.matching.entity.LeaderRecommendation;
 import org.cotato.gongmozip.domains.matching.entity.MatchingExplanation;
 import org.cotato.gongmozip.domains.matching.entity.MatchingGroup;
 import org.cotato.gongmozip.domains.matching.entity.MatchingReason;
+import org.cotato.gongmozip.domains.matching.enums.MatchingAiStatus;
+import org.cotato.gongmozip.domains.matching.enums.MatchingGroupStatus;
 import org.cotato.gongmozip.domains.matching.exception.MatchingException;
 import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
 import org.cotato.gongmozip.domains.matching.repository.LeaderRecommendationRepository;
@@ -29,7 +31,6 @@ import org.cotato.gongmozip.domains.matching.repository.MatchingGroupRepository;
 import org.cotato.gongmozip.domains.matching.repository.MatchingReasonRepository;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
-import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
@@ -123,13 +124,13 @@ class MatchingServiceTest {
                 .category(InterestCategory.IT_AI_TECH)
                 .skillGroup(1)
                 .matchingScore(BigDecimal.valueOf(80.5))
-                .status("COMPLETED")
+                .status(MatchingGroupStatus.COMPLETED)
                 .build();
 
         MatchingReason reason = MatchingReason.builder()
                 .matchingReasonId(20L)
                 .matchingGroup(group)
-                .status(AiSummaryStatus.PENDING)
+                .status(MatchingAiStatus.PENDING)
                 .build();
 
         given(matchingGroupRepository.findById(10L)).willReturn(Optional.of(group));
@@ -157,13 +158,13 @@ class MatchingServiceTest {
                 .matchingGroupId(10L)
                 .category(InterestCategory.IT_AI_TECH)
                 .skillGroup(1)
-                .status("COMPLETED")
+                .status(MatchingGroupStatus.COMPLETED)
                 .build();
 
         MatchingReason reason = MatchingReason.builder()
                 .matchingReasonId(20L)
                 .matchingGroup(group)
-                .status(AiSummaryStatus.PROCESSING)
+                .status(MatchingAiStatus.PROCESSING)
                 .build();
 
         given(matchingGroupRepository.findById(10L)).willReturn(Optional.of(group));
@@ -185,7 +186,7 @@ class MatchingServiceTest {
         MatchingReason reason = MatchingReason.builder()
                 .matchingReasonId(20L)
                 .matchingGroup(group)
-                .status(AiSummaryStatus.COMPLETED)
+                .status(MatchingAiStatus.COMPLETED)
                 .headline("헤드라인")
                 .summary("요약")
                 .build();
@@ -218,7 +219,7 @@ class MatchingServiceTest {
         LeaderRecommendation rec = LeaderRecommendation.builder()
                 .leaderRecommendationId(40L)
                 .team(team)
-                .status(AiSummaryStatus.PENDING)
+                .status(MatchingAiStatus.PENDING)
                 .build();
 
         given(teamRepository.findById(30L)).willReturn(Optional.of(team));
@@ -256,7 +257,7 @@ class MatchingServiceTest {
         LeaderRecommendation rec = LeaderRecommendation.builder()
                 .leaderRecommendationId(40L)
                 .team(team)
-                .status(AiSummaryStatus.COMPLETED)
+                .status(MatchingAiStatus.COMPLETED)
                 .recommendedMember(member)
                 .recommendationReason("이유")
                 .candidates(List.of(new LeaderCandidateResponse(1L, "채영", 1, 90, "추천이유")))
@@ -275,5 +276,74 @@ class MatchingServiceTest {
         assertThat(response.recommendationId()).isEqualTo(40L);
         assertThat(response.recommendedMemberNickname()).isEqualTo("채영");
         assertThat(response.candidates().get(0).nickname()).isEqualTo("채영");
+    }
+
+    @DisplayName("소속 멤버가 아닌 경우 매칭 추천 사유 생성 요청 시 예외가 발생한다")
+    @Test
+    void 소속_멤버가_아닌_경우_매칭_추천_사유_생성_요청_시_예외가_발생한다() {
+        // given
+        MatchingGroup group = MatchingGroup.builder()
+                .matchingGroupId(10L)
+                .category(InterestCategory.IT_AI_TECH)
+                .skillGroup(1)
+                .status(MatchingGroupStatus.COMPLETED)
+                .build();
+
+        given(matchingGroupRepository.findById(10L)).willReturn(Optional.of(group));
+        given(matchingGroupMemberRepository.existsByMatchingGroupAndMember(group, otherMember))
+                .willReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> matchingService.createMatchingReason(10L, otherMember))
+                .isInstanceOf(MatchingException.class)
+                .hasMessage(MatchingErrorCode.MATCHING_GROUP_ACCESS_DENIED.getMessage());
+    }
+
+    @DisplayName("활성 팀원이 아닌 경우 팀장 추천 생성 요청 시 예외가 발생한다")
+    @Test
+    void 활성_팀원이_아닌_경우_팀장_추천_생성_요청_시_예외가_발생한다() {
+        // given
+        Team team = Team.builder().teamId(30L).build();
+        TeamMember inactiveMember = TeamMember.builder()
+                .team(team)
+                .member(otherMember)
+                .status(TeamMemberStatus.LEFT)
+                .build();
+
+        given(teamRepository.findById(30L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(30L, 2L))
+                .willReturn(Optional.of(inactiveMember));
+
+        // when & then
+        assertThatThrownBy(() -> matchingService.createLeaderRecommendation(30L, otherMember))
+                .isInstanceOf(MatchingException.class)
+                .hasMessage(MatchingErrorCode.TEAM_ACCESS_DENIED.getMessage());
+    }
+
+    @DisplayName("AI 팀장 추천 이미 진행 중일 때 생성 요청 시 예외가 발생한다")
+    @Test
+    void AI_팀장_추천_이미_진행_중일_때_생성_요청_시_예외가_발생한다() {
+        // given
+        Team team = Team.builder().teamId(30L).build();
+        TeamMember teamMember = TeamMember.builder()
+                .team(team)
+                .member(member)
+                .status(TeamMemberStatus.ACTIVE)
+                .build();
+
+        LeaderRecommendation rec = LeaderRecommendation.builder()
+                .leaderRecommendationId(40L)
+                .team(team)
+                .status(MatchingAiStatus.PROCESSING)
+                .build();
+
+        given(teamRepository.findById(30L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(30L, 1L)).willReturn(Optional.of(teamMember));
+        given(leaderRecommendationRepository.findByTeam(team)).willReturn(Optional.of(rec));
+
+        // when & then
+        assertThatThrownBy(() -> matchingService.createLeaderRecommendation(30L, member))
+                .isInstanceOf(MatchingException.class)
+                .hasMessage(MatchingErrorCode.LEADER_RECOMMENDATION_IN_PROGRESS.getMessage());
     }
 }

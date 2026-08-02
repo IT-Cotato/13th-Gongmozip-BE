@@ -171,4 +171,63 @@ class MatchingControllerTest {
                 .andExpect(jsonPath("$.code").value("MATCHING_200_6"))
                 .andExpect(jsonPath("$.data.recommendedMemberNickname").value("닉네임"));
     }
+
+    @DisplayName("인증되지 않은 사용자가 AI 매칭 설명을 요청하면 401 Unauthorized를 반환한다")
+    @Test
+    void 인증되지_않은_사용자가_AI_매칭_설명을_요청하면_401_Unauthorized를_반환한다() throws Exception {
+        mockMvc.perform(get("/api/matching-explanations")).andExpect(status().isUnauthorized());
+    }
+
+    @DisplayName("매칭 결과에 권한이 없는 사용자가 추천 사유 조회를 요청하면 403 Forbidden을 반환한다")
+    @Test
+    void 매칭_결과에_권한이_없는_사용자가_추천_사유_조회를_요청하면_403_Forbidden을_반환한다() throws Exception {
+        // given
+        given(memberRepository.findById(any())).willReturn(Optional.of(member));
+        given(matchingService.getMatchingReason(any(), any()))
+                .willThrow(new org.cotato.gongmozip.domains.matching.exception.MatchingException(
+                        org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode
+                                .MATCHING_GROUP_ACCESS_DENIED));
+
+        // when & then
+        mockMvc.perform(get("/api/ai/matching-results/10/reason").with(user(userDetails)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.code").value("MATCHING_403_3"));
+    }
+
+    @DisplayName("추천 사유가 이미 생성 중일 때 생성 요청하면 409 Conflict를 반환한다")
+    @Test
+    void 추천_사유가_이미_생성_중일_때_생성_요청하면_409_Conflict를_반환한다() throws Exception {
+        // given
+        given(memberRepository.findById(any())).willReturn(Optional.of(member));
+        given(matchingService.createMatchingReason(any(), any()))
+                .willThrow(new org.cotato.gongmozip.domains.matching.exception.MatchingException(
+                        org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode
+                                .MATCHING_REASON_IN_PROGRESS));
+
+        // when & then
+        mockMvc.perform(post("/api/ai/matching-results/10/reason")
+                        .with(user(userDetails))
+                        .with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.code").value("MATCHING_409_3"));
+    }
+
+    @DisplayName("존재하지 않는 매칭 그룹에 대한 추천 사유를 조회 요청하면 404 Not Found를 반환한다")
+    @Test
+    void 존재하지_않는_매칭_그룹에_대한_추천_사유를_조회_요청하면_404_Not_Found를_반환한다() throws Exception {
+        // given
+        given(memberRepository.findById(any())).willReturn(Optional.of(member));
+        given(matchingService.getMatchingReason(any(), any()))
+                .willThrow(new org.cotato.gongmozip.domains.matching.exception.MatchingException(
+                        org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode
+                                .MATCHING_GROUP_NOT_FOUND));
+
+        // when & then
+        mockMvc.perform(get("/api/ai/matching-results/999/reason").with(user(userDetails)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.code").value("MATCHING_404_2"));
+    }
 }
