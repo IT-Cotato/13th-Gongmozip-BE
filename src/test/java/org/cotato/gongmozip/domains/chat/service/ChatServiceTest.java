@@ -3,17 +3,28 @@ package org.cotato.gongmozip.domains.chat.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.MemberAvatarResponse;
+import org.cotato.gongmozip.domains.character.enums.CharacterPalette;
+import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.chat.dto.request.ChatRequest.SendMessageRequest;
 import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageItemResponse;
+import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageListResponse;
 import org.cotato.gongmozip.domains.chat.entity.Message;
+import org.cotato.gongmozip.domains.chat.enums.MessageSenderType;
+import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
+import org.cotato.gongmozip.domains.survey.enums.CharacterType;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
@@ -28,6 +39,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class ChatServiceTest {
@@ -44,6 +56,9 @@ class ChatServiceTest {
     @Mock
     private SimpMessagingTemplate messagingTemplate;
 
+    @Mock
+    private CharacterService characterService;
+
     @InjectMocks
     private ChatService chatService;
 
@@ -54,11 +69,15 @@ class ChatServiceTest {
         Team team = Team.builder().teamId(100L).build();
         TeamMember sender = teamMemberOf(team, 1L, "김철수");
         SendMessageRequest request = new SendMessageRequest("안녕하세요.");
+        MemberAvatarResponse avatar =
+                new MemberAvatarResponse(1L, CharacterType.LEAD_RUNNER, CharacterPalette.DEFAULT, null, null);
 
         given(teamRepository.findById(100L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
                 .willReturn(Optional.of(sender));
         given(messageRepository.save(any(Message.class))).willAnswer(inv -> inv.getArgument(0));
+        given(characterService.findAvatarsByMembers(List.of(sender.getMember())))
+                .willReturn(Map.of(1L, avatar));
 
         // when
         MessageItemResponse response = chatService.sendMessage(100L, 1L, request);
@@ -66,6 +85,7 @@ class ChatServiceTest {
         // then
         assertThat(response.content()).isEqualTo("안녕하세요.");
         assertThat(response.senderType()).isEqualTo("MEMBER");
+        assertThat(response.senderAvatar()).isEqualTo(avatar);
         verify(messagingTemplate).convertAndSend(eq("/topic/teams/100"), any(MessageItemResponse.class));
     }
 
@@ -96,6 +116,83 @@ class ChatServiceTest {
         assertThatThrownBy(() -> chatService.sendMessage(100L, 999L, request))
                 .isInstanceOf(TeamException.class)
                 .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.NOT_TEAM_MEMBER);
+    }
+
+    @DisplayName("메시지 목록을 조회하면 발신 팀원의 아바타가 함께 채워진다.")
+    @Test
+    void 메시지_목록을_조회하면_발신_팀원의_아바타가_함께_채워진다() {
+        // given
+        Team team = Team.builder().teamId(100L).build();
+        TeamMember me = teamMemberOf(team, 1L, "김철수");
+        TeamMember other = teamMemberOf(team, 2L, "이해은");
+        Message memberMessage = Message.builder()
+                .team(team)
+                .senderType(MessageSenderType.MEMBER)
+                .senderTeamMember(other)
+                .messageType(MessageType.TEXT)
+                .content("안녕하세요.")
+                .build();
+        Message chatbotMessage = Message.builder()
+                .team(team)
+                .senderType(MessageSenderType.CHATBOT)
+                .messageType(MessageType.TEXT)
+                .content("반가워요!")
+                .build();
+        ReflectionTestUtils.setField(
+                chatbotMessage, "createdAt", java.time.LocalDateTime.now().minusMinutes(1));
+        ReflectionTestUtils.setField(memberMessage, "createdAt", java.time.LocalDateTime.now());
+        MemberAvatarResponse otherAvatar =
+                new MemberAvatarResponse(2L, CharacterType.TRACK_RUNNER, CharacterPalette.DEFAULT, null, null);
+
+        given(teamRepository.findById(100L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
+                .willReturn(Optional.of(me));
+        given(messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(any(Long.class), any()))
+                .willReturn(List.of(chatbotMessage, memberMessage));
+        given(characterService.findAvatarsByMembers(List.of(other.getMember()))).willReturn(Map.of(2L, otherAvatar));
+
+        // when
+        MessageListResponse response = chatService.getMessages(100L, 1L);
+
+        // then
+        assertThat(response.messages())
+                .filteredOn(m -> "MEMBER".equals(m.senderType()))
+                .singleElement()
+                .satisfies(m -> assertThat(m.senderAvatar()).isEqualTo(otherAvatar));
+        assertThat(response.messages())
+                .filteredOn(m -> "CHATBOT".equals(m.senderType()))
+                .singleElement()
+                .satisfies(m -> assertThat(m.senderAvatar()).isNull());
+    }
+
+    @DisplayName("챗봇이 꺼져있으면 챗봇 메시지를 남기지 않는다.")
+    @Test
+    void 챗봇이_꺼져있으면_챗봇_메시지를_남기지_않는다() {
+        // given
+        Team team = Team.builder().teamId(100L).chatbotEnabled(false).build();
+
+        // when
+        chatService.postChatbotMessage(team, "안녕하세요!");
+        chatService.postChatbotCardMessage(team, MessageType.LEADER_VOTE_CARD, "투표해주세요", null);
+
+        // then
+        verify(messageRepository, never()).save(any(Message.class));
+        verify(messagingTemplate, never()).convertAndSend(anyString(), any(MessageItemResponse.class));
+    }
+
+    @DisplayName("챗봇이 켜져있으면 챗봇 메시지가 저장되고 브로드캐스트된다.")
+    @Test
+    void 챗봇이_켜져있으면_챗봇_메시지가_저장되고_브로드캐스트된다() {
+        // given
+        Team team = Team.builder().teamId(100L).chatbotEnabled(true).build();
+        given(messageRepository.save(any(Message.class))).willAnswer(inv -> inv.getArgument(0));
+
+        // when
+        chatService.postChatbotMessage(team, "안녕하세요!");
+
+        // then
+        verify(messageRepository).save(any(Message.class));
+        verify(messagingTemplate).convertAndSend(eq("/topic/teams/100"), any(MessageItemResponse.class));
     }
 
     @DisplayName("읽음 처리를 하면 lastReadAt이 갱신된다.")

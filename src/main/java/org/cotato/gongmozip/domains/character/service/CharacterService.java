@@ -1,10 +1,14 @@
 package org.cotato.gongmozip.domains.character.service;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.character.converter.CharacterConverter;
 import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.MemberAvatarResponse;
 import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.PaletteListResponse;
 import org.cotato.gongmozip.domains.character.entity.CharacterDefinition;
 import org.cotato.gongmozip.domains.character.entity.CharacterDefinitionFeature;
@@ -91,6 +95,40 @@ public class CharacterService {
                 .orElseThrow(() -> new CharacterException(CharacterErrorCode.CHARACTER_NOT_FOUND));
         memberCharacter.changePalette(palette);
         return createCurrentCharacterResponse(submission, memberCharacter);
+    }
+
+    /**
+     * 다른 도메인(팀 채팅 등)이 여러 회원의 아바타(캐릭터 타입+팔레트)를 한 번에 조회할 때 쓴다.
+     * {@link #findCurrentCharacter}와 달리 캐릭터 정의/태그/특징을 join하지 않아 훨씬 가볍고,
+     * member 수만큼 반복 조회하지 않도록 배치로 처리한다. 협업 유형 검사를 안 한 회원은 결과
+     * Map에 아예 포함되지 않는다(예외 없음 — 프론트가 없으면 기본 아바타를 보여주면 됨).
+     */
+    public Map<Long, MemberAvatarResponse> findAvatarsByMembers(List<Member> members) {
+        if (members.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, MemberCharacter> memberCharacterByMemberId =
+                memberCharacterRepository.findByMemberIn(members).stream()
+                        .collect(Collectors.toMap(mc -> mc.getMember().getMemberId(), mc -> mc));
+
+        Map<Long, MemberAvatarResponse> avatarsByMemberId = new HashMap<>();
+        for (SurveySubmission submission :
+                surveySubmissionRepository.findByMemberInAndStatus(members, SubmissionStatus.SUBMITTED)) {
+            Long memberId = submission.getMember().getMemberId();
+            CharacterPalette palette = Optional.ofNullable(memberCharacterByMemberId.get(memberId))
+                    .map(MemberCharacter::getPalette)
+                    .orElse(CharacterPalette.DEFAULT);
+            avatarsByMemberId.put(
+                    memberId,
+                    new MemberAvatarResponse(
+                            memberId,
+                            submission.getCharacterType(),
+                            palette,
+                            palette.getPrimaryHex(),
+                            palette.getSecondaryHex()));
+        }
+        return avatarsByMemberId;
     }
 
     // ------ 내부 메서드 -------

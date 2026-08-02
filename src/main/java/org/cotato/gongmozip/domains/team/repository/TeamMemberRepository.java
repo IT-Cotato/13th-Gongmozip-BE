@@ -10,13 +10,26 @@ import org.springframework.data.repository.query.Param;
 
 public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 
+    // profile뿐 아니라 member도 함께 fetch join한다 — 협업거리 포인트 지급 등에서
+    // teamMember.getMember()를 호출하는 곳이 많아, 안 그러면 팀원 수만큼 추가 SELECT가 나간다.
     @Query(
             """
             SELECT tm FROM TeamMember tm
             JOIN FETCH tm.profile
+            JOIN FETCH tm.member
             WHERE tm.team.teamId = :teamId AND tm.status = :status
             """)
     List<TeamMember> findByTeamIdAndStatus(@Param("teamId") Long teamId, @Param("status") TeamMemberStatus status);
+
+    @Query(
+            """
+            SELECT tm FROM TeamMember tm
+            JOIN FETCH tm.profile
+            JOIN FETCH tm.member
+            WHERE tm.team.teamId IN :teamIds AND tm.status = :status
+            """)
+    List<TeamMember> findByTeamIdInAndStatus(
+            @Param("teamIds") List<Long> teamIds, @Param("status") TeamMemberStatus status);
 
     @Query(
             """

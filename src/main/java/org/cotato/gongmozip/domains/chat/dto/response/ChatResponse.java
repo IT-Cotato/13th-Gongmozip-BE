@@ -2,6 +2,7 @@ package org.cotato.gongmozip.domains.chat.dto.response;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.MemberAvatarResponse;
 
 public final class ChatResponse {
 
@@ -15,7 +16,8 @@ public final class ChatResponse {
             String messageType,
             String content,
             String metadata,
-            LocalDateTime createdAt) {}
+            LocalDateTime createdAt,
+            MemberAvatarResponse senderAvatar) {}
 
     public record MessageListResponse(List<MessageItemResponse> messages) {}
 }
