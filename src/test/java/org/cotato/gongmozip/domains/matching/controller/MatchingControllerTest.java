@@ -68,7 +68,7 @@ class MatchingControllerTest {
         mockMvc.perform(get("/api/matching-explanations").with(user(userDetails)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(200))
-                .andExpect(jsonPath("$.code").value("MATCHING_200_1"))
+                .andExpect(jsonPath("$.code").value("MATCHING_200_4"))
                 .andExpect(jsonPath("$.data.title").value("제목"));
     }
 
@@ -120,7 +120,7 @@ class MatchingControllerTest {
         mockMvc.perform(get("/api/ai/matching-results/10/reason").with(user(userDetails)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(200))
-                .andExpect(jsonPath("$.code").value("MATCHING_200_2"))
+                .andExpect(jsonPath("$.code").value("MATCHING_200_5"))
                 .andExpect(jsonPath("$.data.headline").value("헤드라인"));
     }
 
@@ -168,7 +168,7 @@ class MatchingControllerTest {
         mockMvc.perform(get("/api/ai/teams/30/leader-recommendation").with(user(userDetails)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(200))
-                .andExpect(jsonPath("$.code").value("MATCHING_200_3"))
+                .andExpect(jsonPath("$.code").value("MATCHING_200_6"))
                 .andExpect(jsonPath("$.data.recommendedMemberNickname").value("닉네임"));
     }
 }
