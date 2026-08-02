@@ -108,6 +108,19 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
   않도록 함(이번에 방금 고친 N+1을 다시 만들지 않기 위해).
 - 컨트롤러: `GET /api/teams`, `GET /api/teams/{teamId}/members`
 - 테스트: `domains/team/service/TeamServiceTest.java`
+- **`leaveTeam` 중도 이탈 시 PENDING 정체 수정 (2026-08-02, PR #56 리뷰 반영)**: 팀원이 팀장/
+  공모전 투표나 리뷰 진행 도중 나가면 `activeMembers` 분모가 줄어드는데, 자동 개표/완료 조건
+  (`LeaderElectionService.tally`, `ContestVotingService.tally`, `ReviewService.completeReviewIfAllDone`)은
+  원래 새 투표/리뷰가 "제출"되는 시점에만 확인된다. 나간 사람이 마지막 미제출자였던 경우
+  아무도 다시 확인하지 않아 팀이 다음 단계로 못 넘어가고 계속 PENDING 상태에 머무는 버그가
+  있었다. `TeamService.leaveTeam`이 나간 시점의 `Team.status`에 따라 해당 서비스의
+  `recheckAfterMemberLeft`를 호출해 즉시 재확인하도록 고쳤다. 개표 로직은 동률 시 재투표
+  라운드를 DB에 명시적으로 기록하지 않아 "이미 개표했는지" 여부를 안전하게 재현할 수 없는데,
+  "나간 사람이 해당 라운드에 아직 투표하지 않았을 때만 재확인"하는 조건으로 이 모호성을
+  피했다 — 나간 사람이 이미 투표했었다면 개표는 이미 실행됐거나 다른 미투표자가 남아있는
+  것이므로 중복 개표 위험이 없다. GREETING/팀장 여부 투표 단계는 이번 수정 범위에 포함하지
+  않음(리뷰에서 지목된 범위가 "투표/리뷰"였고, GREETING은 별도로 추가한 2시간 타임아웃
+  스케줄러가 최종 안전망 역할을 함).
 - ⚠️ **임시**: `domains/team/controller/TeamTestController.java` (`POST /api/test/teams`,
   `@Profile("local")`) — 매칭 연동 전까지 수동 테스트(WebSocket 채팅 등)를 위해 `createTeam`을
   직접 호출할 수 있게 열어둔 개발용 엔드포인트. `local` 프로필을 명시적으로 켰을 때만 활성화되는

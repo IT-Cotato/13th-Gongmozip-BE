@@ -141,6 +141,44 @@ public class LeaderElectionService {
         }
     }
 
+    /**
+     * 팀원이 팀장 투표 도중 나갔을 때(TeamService.leaveTeam) 호출된다. castVote는 투표가
+     * 제출되는 시점에만 개표 조건을 확인하므로, 나간 사람이 그 라운드에 아직 투표하지 않은
+     * 상태였다면(=개표를 막고 있던 사람이었다면) 남은 활성 팀원 수 기준으로 이미 조건이
+     * 충족됐는지 즉시 재확인한다. 나간 사람이 이미 투표했었다면 개표는 이미 실행됐거나 다른
+     * 미투표자가 남아있는 것이므로 아무 것도 하지 않는다(중복 개표 방지).
+     */
+    @Transactional
+    public void recheckAfterMemberLeft(Team team, Long leftTeamMemberId) {
+        if (team.getStatus() != TeamStatus.LEADER_SELECTING
+                || !leaderVoteRepository.existsByTeam_TeamId(team.getTeamId())) {
+            return;
+        }
+
+        List<TeamMember> activeMembers =
+                teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE);
+        if (activeMembers.isEmpty()) {
+            return;
+        }
+
+        Integer maxRound = leaderVoteRepository.findMaxRoundByTeamId(team.getTeamId());
+        if (maxRound == null) {
+            return;
+        }
+        boolean leaverAlreadyVoted = leaderVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(
+                team.getTeamId(), leftTeamMemberId, maxRound);
+        if (leaverAlreadyVoted) {
+            return;
+        }
+
+        long votesInRound = leaderVoteRepository
+                .findByTeam_TeamIdAndRound(team.getTeamId(), maxRound)
+                .size();
+        if (votesInRound >= activeMembers.size()) {
+            tally(team, maxRound, activeMembers);
+        }
+    }
+
     private void tally(Team team, int round, List<TeamMember> activeMembers) {
         List<LeaderVote> votes = leaderVoteRepository.findByTeam_TeamIdAndRound(team.getTeamId(), round);
         Map<Long, Long> voteCountByCandidateId = votes.stream()

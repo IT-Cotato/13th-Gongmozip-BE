@@ -63,6 +63,11 @@ unique(team_id, reviewer_team_member_id, reviewee_team_member_id) — 같은 팀
 - `ChatbotOrchestrationService.completeReview(Team)` 추가 — `COMPLETED` 전이 + 마무리 챗봇 메시지.
 - 컨트롤러: `domains/review/controller/ReviewController` — `POST /api/teams/{teamId}/reviews`.
 - 테스트: `ReviewServiceTest`(7개 케이스), `ChatbotOrchestrationServiceTest`(completeReview 1개 추가).
+- **`leaveTeam` 중 리뷰 완료 재확인 (2026-08-02, PR #56 리뷰 반영)**: 리뷰 진행 중 팀원이
+  나가면 남은 활성 팀원 기준으로 완료 조건이 뒤늦게 충족돼도 아무도 재확인하지 않는 버그가
+  있었다. `ReviewService.recheckAfterMemberLeft(Team)`를 추가해 `TeamService.leaveTeam`이
+  나가는 시점의 `Team.status == SUBMITTED`일 때 호출한다. 자세한 내용은
+  [01-team.md](./01-team.md) 참고.
 
 ## 미정 / 추후 확인 필요
 

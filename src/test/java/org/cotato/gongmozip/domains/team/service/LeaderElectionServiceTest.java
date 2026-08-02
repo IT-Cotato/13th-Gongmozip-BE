@@ -3,6 +3,7 @@ package org.cotato.gongmozip.domains.team.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -473,6 +474,81 @@ class LeaderElectionServiceTest {
         assertThatThrownBy(() -> leaderElectionService.submitCandidacy(999L, 1L, true))
                 .isInstanceOf(TeamException.class)
                 .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.TEAM_NOT_FOUND);
+    }
+
+    @DisplayName("나간 사람이 투표를 안 한 상태였고, 남은 인원 기준으로 이미 다 찼으면 즉시 개표한다.")
+    @Test
+    void 나간_사람이_투표를_안_한_상태였고_남은_인원_기준으로_이미_다_찼으면_즉시_개표한다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember voter1 = teamMemberOf(team, 10L, "김철수");
+        TeamMember voter2 = teamMemberOf(team, 20L, "이해은");
+
+        given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(true);
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(voter1, voter2));
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);
+        given(leaderVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(1L, 30L, 1))
+                .willReturn(false);
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(voter1)
+                                .candidateTeamMember(voter1)
+                                .round(1)
+                                .build(),
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(voter2)
+                                .candidateTeamMember(voter1)
+                                .round(1)
+                                .build()));
+
+        // when
+        leaderElectionService.recheckAfterMemberLeft(team, 30L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
+        assertThat(voter1.getRole()).isEqualTo(TeamRole.LEADER);
+    }
+
+    @DisplayName("나간 사람이 이미 투표했었다면 재확인해도 다시 개표하지 않는다.")
+    @Test
+    void 나간_사람이_이미_투표했었다면_재확인해도_다시_개표하지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+
+        given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(true);
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(teamMemberOf(team, 10L, "김철수")));
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);
+        given(leaderVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(1L, 30L, 1))
+                .willReturn(true);
+
+        // when
+        leaderElectionService.recheckAfterMemberLeft(team, 30L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
+        verify(leaderVoteRepository, never()).findByTeam_TeamIdAndRound(any(), anyInt());
+    }
+
+    @DisplayName("아직 팀장 투표가 시작되지 않았으면 재확인하지 않는다.")
+    @Test
+    void 아직_팀장_투표가_시작되지_않았으면_재확인하지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(false);
+
+        // when
+        leaderElectionService.recheckAfterMemberLeft(team, 30L);
+
+        // then
+        verify(teamMemberRepository, never()).findByTeamIdAndStatus(any(), any());
     }
 
     private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {

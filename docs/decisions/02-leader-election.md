@@ -92,6 +92,12 @@ survey/matching 담당자 확인 필요 (아래 "임시 처리" 참고).**
   안 붙는지 원인을 봐야 함.
 - 마이그레이션: V14 (unique 제약 버그 수정, 위 참고)
 - 테스트: `LeaderElectionServiceTest`(12개 케이스), `ChatbotOrchestrationServiceTest` 갱신
+- **`leaveTeam` 중 팀장 투표 재확인 (2026-08-02, PR #56 리뷰 반영)**:
+  `LeaderElectionService.recheckAfterMemberLeft(team, leftTeamMemberId)` 추가. 팀원이 팀장
+  투표 도중 나가면 남은 활성 팀원 기준으로 개표 조건이 뒤늦게 충족돼도 `castVote` 안에서만
+  확인하던 `tally`가 다시 호출되지 않는 버그가 있었다. `TeamService.leaveTeam`이 나가는
+  시점 호출한다. 자세한 내용/설계 근거는 [01-team.md](./01-team.md) 참고. "팀장 여부 투표"
+  단계(`submitCandidacy`)는 이번 수정 범위 밖.
 
 ## 미정 / 추후 확인 필요
 

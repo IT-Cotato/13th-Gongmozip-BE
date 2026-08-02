@@ -14,6 +14,7 @@ import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
 import org.cotato.gongmozip.domains.collaboration.enums.CollaborationPointReason;
 import org.cotato.gongmozip.domains.collaboration.service.CollaborationPointService;
+import org.cotato.gongmozip.domains.contest.service.ContestVotingService;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.exception.MemberException;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
@@ -22,6 +23,7 @@ import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.exception.ProfileException;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.repository.ProfileRepository;
+import org.cotato.gongmozip.domains.review.service.ReviewService;
 import org.cotato.gongmozip.domains.team.converter.TeamConverter;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamCreationRequest;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamMemberInput;
@@ -53,6 +55,9 @@ public class TeamService {
     private final CollaborationPointService collaborationPointService;
     private final ChatbotOrchestrationService chatbotOrchestrationService;
     private final CharacterService characterService;
+    private final LeaderElectionService leaderElectionService;
+    private final ContestVotingService contestVotingService;
+    private final ReviewService reviewService;
 
     /**
      * 매칭 도메인이 팀 그룹핑 결과를 확정한 뒤 호출하는 내부 계약.
@@ -160,6 +165,24 @@ public class TeamService {
         teamMember.leave(LocalDateTime.now());
         collaborationPointService.awardPoint(teamMember.getMember(), team, CollaborationPointReason.LEAVE_PENALTY);
         chatService.postSystemMessage(team, teamMember.getProfile().getNickname() + "님이 채팅방을 나갔습니다.");
+        recheckPendingStageAfterLeave(team, teamMember);
+    }
+
+    // 투표/리뷰 진행 중이던 팀원이 나가면 activeMembers 분모가 줄어들어, 남은 팀원들이
+    // 이미 제출을 마쳤는데도 자동 개표/완료 조건이 뒤늦게 충족되는 경우가 생긴다. 이 조건은
+    // 원래 새 투표/리뷰가 제출되는 시점에만 확인되므로, 나가는 시점에 현재 단계에 맞춰
+    // 직접 재확인해준다.
+    private void recheckPendingStageAfterLeave(Team team, TeamMember leftTeamMember) {
+        switch (team.getStatus()) {
+            case LEADER_SELECTING -> leaderElectionService.recheckAfterMemberLeft(
+                    team, leftTeamMember.getTeamMemberId());
+            case CONTEST_SELECTING -> contestVotingService.recheckAfterMemberLeft(
+                    team, leftTeamMember.getTeamMemberId());
+            case SUBMITTED -> reviewService.recheckAfterMemberLeft(team);
+            default -> {
+                // 다른 단계는 재확인이 필요한 자동 완료 조건이 없다.
+            }
+        }
     }
 
     @Transactional

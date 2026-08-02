@@ -394,6 +394,90 @@ class ContestVotingServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.TEAM_NOT_FOUND);
     }
 
+    @DisplayName("나간 사람이 투표를 안 한 상태였고, 남은 인원 기준으로 이미 다 찼으면 즉시 개표한다.")
+    @Test
+    void 나간_사람이_투표를_안_한_상태였고_남은_인원_기준으로_이미_다_찼으면_즉시_개표한다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
+        ReflectionTestUtils.setField(
+                team, "createdAt", java.time.LocalDateTime.now().minusDays(3));
+        TeamMember voter1 = teamMemberOf(team, 10L, "김철수");
+        Contest contestA = Contest.builder()
+                .contestId(100L)
+                .title("A공모전")
+                .applyEndAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+        ContestCandidate candidateA = ContestCandidate.builder()
+                .contestCandidateId(1L)
+                .team(team)
+                .contest(contestA)
+                .addedByTeamMember(voter1)
+                .build();
+
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(voter1));
+        given(contestVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);
+        given(contestVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(1L, 30L, 1))
+                .willReturn(false);
+        given(contestVoteRepository.countDistinctVotersByTeamIdAndRound(1L, 1)).willReturn(1L);
+        given(contestVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(ContestVote.builder()
+                        .team(team)
+                        .contestCandidate(candidateA)
+                        .voterTeamMember(voter1)
+                        .round(1)
+                        .build()));
+
+        // when
+        contestVotingService.recheckAfterMemberLeft(team, 30L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.CONTEST_DECIDED);
+        assertThat(team.getContest()).isEqualTo(contestA);
+        verify(chatbotOrchestrationService).advanceToInProgress(team);
+    }
+
+    @DisplayName("나간 사람이 이미 투표했었다면 재확인해도 다시 개표하지 않는다.")
+    @Test
+    void 나간_사람이_이미_투표했었다면_재확인해도_다시_개표하지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
+
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(teamMemberOf(team, 10L, "김철수")));
+        given(contestVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);
+        given(contestVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(1L, 30L, 1))
+                .willReturn(true);
+
+        // when
+        contestVotingService.recheckAfterMemberLeft(team, 30L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.CONTEST_SELECTING);
+        verify(contestVoteRepository, never()).findByTeam_TeamIdAndRound(any(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @DisplayName("아직 아무도 투표하지 않았으면 재확인하지 않는다.")
+    @Test
+    void 아직_아무도_투표하지_않았으면_재확인하지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(teamMemberOf(team, 10L, "김철수")));
+        given(contestVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
+
+        // when
+        contestVotingService.recheckAfterMemberLeft(team, 30L);
+
+        // then
+        verify(contestVoteRepository, never())
+                .existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(
+                        any(), any(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
     private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {
         Member member = Member.builder().memberId(memberId).build();
         Profile profile = Profile.builder().nickname(nickname).build();

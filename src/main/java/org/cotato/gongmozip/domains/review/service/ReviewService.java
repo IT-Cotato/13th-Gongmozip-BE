@@ -62,6 +62,22 @@ public class ReviewService {
         return ReviewConverter.toReviewResultResponse(saved);
     }
 
+    /**
+     * 팀원이 리뷰 진행 중(SUBMITTED) 나갔을 때(TeamService.leaveTeam) 호출된다. 남은 활성
+     * 팀원들이 이미 서로에 대한 리뷰를 모두 마쳤더라도, 이 완료 확인은 원래 새 리뷰가 제출되는
+     * 시점에만 실행되므로 나간 사람 때문에 막혀있던 완료 조건이 뒤늦게 충족돼도 아무도 다시
+     * 확인하지 않는다. 나가기 이후 기준으로 즉시 재확인한다.
+     */
+    @Transactional
+    public void recheckAfterMemberLeft(Team team) {
+        if (team.getStatus() != TeamStatus.SUBMITTED) {
+            return;
+        }
+        List<TeamMember> activeMembers =
+                teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE);
+        completeReviewIfAllDone(team, activeMembers);
+    }
+
     // 리뷰어 본인이 나머지 활성 팀원 전원에 대한 리뷰를 방금 다 썼을 때만(=이 리뷰가 그 마지막
     // 리뷰일 때만) 협업거리 포인트를 1회 지급한다. 리뷰 1건마다 지급하면 안 된다
     // (기능명세서 5.1.3.6.1 — 리뷰 최종 완료 시점에 총 10m를 딱 한 번 지급).
