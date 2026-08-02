@@ -114,29 +114,50 @@ public class ReviewService {
         }
         List<TeamMember> activeMembers =
                 teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE);
+        // 나간 사람 때문에 "남은 활성 팀원 전원"의 정의(분모)가 줄어들면, 이미 그 줄어든 대상을
+        // 전부 리뷰해뒀던 팀원은 새로 리뷰를 쓰지 않고도 지급 조건을 방금 막 충족한 셈이 된다
+        // (writeReview 안에서만 지급을 확인하던 기존 구조로는 이 경우를 놓친다). 남은 팀원 전원을
+        // 다시 확인한다 — awardPointIfReviewerJustCompleted 자체가 중복 지급 방지 가드를 갖고
+        // 있어(collaborationPointService.hasAwarded) 여러 번 나가도 안전하다.
+        for (TeamMember member : activeMembers) {
+            awardPointIfReviewerJustCompleted(team, member, activeMembers);
+        }
         completeReviewIfAllDone(team, activeMembers);
     }
 
-    // 리뷰어 본인이 나머지 활성 팀원 전원에 대한 리뷰를 방금 다 썼을 때만(=이 리뷰가 그 마지막
-    // 리뷰일 때만) 협업거리 포인트를 1회 지급한다. 리뷰 1건마다 지급하면 안 된다
-    // (기능명세서 5.1.3.6.1 — 리뷰 최종 완료 시점에 총 10m를 딱 한 번 지급).
+    // 리뷰어 본인이 나머지 활성 팀원 전원에 대한 리뷰를 다 썼으면 협업거리 포인트를 1회 지급한다
+    // (기능명세서 5.1.3.6.1 — 리뷰 최종 완료 시점에 총 10m를 딱 한 번 지급). writeReview 호출
+    // 시점뿐 아니라 recheckAfterMemberLeft에서도 여러 번 호출될 수 있어, 이미 지급된 적이
+    // 있는지 collaborationPointService.hasAwarded로 먼저 확인해 중복 지급을 막는다.
     private void awardPointIfReviewerJustCompleted(Team team, TeamMember reviewer, List<TeamMember> activeMembers) {
         long expectedReviewsByReviewer = activeMembers.size() - 1L;
         if (expectedReviewsByReviewer <= 0) {
             return;
         }
 
-        long writtenByReviewer = reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberId(
-                team.getTeamId(), reviewer.getTeamMemberId());
-        if (writtenByReviewer == expectedReviewsByReviewer) {
-            collaborationPointService.awardPoint(reviewer.getMember(), team, CollaborationPointReason.REVIEW_WRITTEN);
+        // 이탈한 팀원에게 과거에 써둔 리뷰까지 세면 분모(activeMembers)는 줄었는데 분자는 그대로라
+        // 실제로는 아직 다 안 썼는데도 "완료"로 잘못 판정될 수 있어, 대상(reviewee)이 현재도
+        // 활성 상태인 리뷰만 센다.
+        long writtenByReviewer = reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberIdAndReviewee_Status(
+                team.getTeamId(), reviewer.getTeamMemberId(), TeamMemberStatus.ACTIVE);
+        if (writtenByReviewer < expectedReviewsByReviewer) {
+            return;
         }
+        if (collaborationPointService.hasAwarded(reviewer.getMember(), team, CollaborationPointReason.REVIEW_WRITTEN)) {
+            return;
+        }
+        collaborationPointService.awardPoint(reviewer.getMember(), team, CollaborationPointReason.REVIEW_WRITTEN);
     }
 
-    // 활성 팀원 전원이 서로(자기 자신 제외)를 리뷰했으면 팀을 COMPLETED로 전이시킨다.
+    // 활성 팀원 전원이 서로(자기 자신 제외)를 리뷰했으면 팀을 COMPLETED로 전이시킨다. 활성
+    // 팀원이 나가서 1명 이하로 줄면(필요 리뷰 쌍이 0건) 더 이상 쓸 리뷰가 없으므로 그 자체로
+    // 완료 처리한다 — writeReview 경로에서는 리뷰어/대상이 모두 활성 상태여야 하므로 이 분기가
+    // 절대 실행되지 않고(활성 팀원 2명 미만일 수 없음), recheckAfterMemberLeft에서 팀이 1명
+    // 이하로 줄었을 때만 실행된다.
     private void completeReviewIfAllDone(Team team, List<TeamMember> activeMembers) {
         long expectedPairs = (long) activeMembers.size() * (activeMembers.size() - 1);
         if (expectedPairs == 0) {
+            chatbotOrchestrationService.completeReview(team);
             return;
         }
 

@@ -3,6 +3,7 @@ package org.cotato.gongmozip.domains.review.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -161,7 +162,8 @@ class ReviewServiceTest {
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(reviewer, reviewee, other));
         // 활성 팀원이 3명이라 reviewer는 총 2건을 써야 하는데, 지금까지 이 1건뿐이다.
-        given(reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberId(1L, reviewer.getTeamMemberId()))
+        given(reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberIdAndReviewee_Status(
+                        1L, reviewer.getTeamMemberId(), TeamMemberStatus.ACTIVE))
                 .willReturn(1L);
         given(reviewRepository.countByTeam_TeamIdAndReviewer_StatusAndReviewee_Status(
                         1L, TeamMemberStatus.ACTIVE, TeamMemberStatus.ACTIVE))
@@ -195,7 +197,8 @@ class ReviewServiceTest {
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(reviewer, reviewee, other));
         // 활성 팀원이 3명이라 reviewer는 총 2건을 써야 하는데, 이 리뷰가 그 2번째(마지막)다.
-        given(reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberId(1L, reviewer.getTeamMemberId()))
+        given(reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberIdAndReviewee_Status(
+                        1L, reviewer.getTeamMemberId(), TeamMemberStatus.ACTIVE))
                 .willReturn(2L);
         given(reviewRepository.countByTeam_TeamIdAndReviewer_StatusAndReviewee_Status(
                         1L, TeamMemberStatus.ACTIVE, TeamMemberStatus.ACTIVE))
@@ -207,6 +210,83 @@ class ReviewServiceTest {
         // then
         verify(collaborationPointService)
                 .awardPoint(reviewer.getMember(), team, CollaborationPointReason.REVIEW_WRITTEN);
+    }
+
+    @DisplayName("이미 포인트를 지급받은 적이 있으면 조건을 다시 충족해도 중복 지급하지 않는다.")
+    @Test
+    void 이미_포인트를_지급받은_적이_있으면_조건을_다시_충족해도_중복_지급하지_않는다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.SUBMITTED).build();
+        TeamMember reviewer = teamMemberOf(team, 10L, "김철수");
+        TeamMember reviewee = teamMemberOf(team, 20L, "이해은");
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(reviewer));
+        given(teamMemberRepository.findById(20L)).willReturn(Optional.of(reviewee));
+        given(reviewRepository.existsByTeam_TeamIdAndReviewer_TeamMemberIdAndReviewee_TeamMemberId(1L, 10L, 20L))
+                .willReturn(false);
+        given(reviewRepository.save(any(Review.class))).willAnswer(inv -> inv.getArgument(0));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(reviewer, reviewee));
+        given(reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberIdAndReviewee_Status(
+                        1L, reviewer.getTeamMemberId(), TeamMemberStatus.ACTIVE))
+                .willReturn(1L);
+        given(collaborationPointService.hasAwarded(reviewer.getMember(), team, CollaborationPointReason.REVIEW_WRITTEN))
+                .willReturn(true);
+
+        // when
+        reviewService.writeReview(1L, 10L, new WriteReviewRequest(20L, "잘했어요"));
+
+        // then
+        verify(collaborationPointService, never()).awardPoint(any(), any(), any());
+    }
+
+    @DisplayName("리뷰 진행 중 팀원이 나가 남은 팀원이 이미 대상을 다 리뷰해뒀으면, 새로 리뷰를 쓰지 않아도 포인트가 지급된다.")
+    @Test
+    void 리뷰_진행_중_팀원이_나가_남은_팀원이_이미_대상을_다_리뷰해뒀으면_포인트가_지급된다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.SUBMITTED).build();
+        TeamMember reviewer = teamMemberOf(team, 10L, "김철수");
+        TeamMember reviewee = teamMemberOf(team, 20L, "이해은");
+        // C(30L)는 이미 나가서 findByTeamIdAndStatus(ACTIVE) 결과에는 더 이상 잡히지 않는다.
+
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(reviewer, reviewee));
+        // reviewer는 C가 나가기 전 이미 reviewee 1명을 리뷰해뒀다 — 이제 활성 팀원 기준 필요
+        // 리뷰(1건)를 이미 다 쓴 상태지만, 새로 리뷰를 쓴 적은 없어 writeReview는 호출되지 않는다.
+        given(reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberIdAndReviewee_Status(
+                        1L, reviewer.getTeamMemberId(), TeamMemberStatus.ACTIVE))
+                .willReturn(1L);
+        given(reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberIdAndReviewee_Status(
+                        1L, reviewee.getTeamMemberId(), TeamMemberStatus.ACTIVE))
+                .willReturn(0L);
+        given(reviewRepository.countByTeam_TeamIdAndReviewer_StatusAndReviewee_Status(
+                        1L, TeamMemberStatus.ACTIVE, TeamMemberStatus.ACTIVE))
+                .willReturn(1L);
+
+        // when
+        reviewService.recheckAfterMemberLeft(team);
+
+        // then
+        verify(collaborationPointService)
+                .awardPoint(reviewer.getMember(), team, CollaborationPointReason.REVIEW_WRITTEN);
+        verify(collaborationPointService, never()).awardPoint(eq(reviewee.getMember()), any(), any());
+    }
+
+    @DisplayName("이탈로 활성 팀원이 1명 이하로 줄면 더 쓸 리뷰가 없으므로 팀이 바로 COMPLETED로 전이된다.")
+    @Test
+    void 이탈로_활성_팀원이_1명_이하로_줄면_팀이_바로_COMPLETED로_전이된다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.SUBMITTED).build();
+        TeamMember lastMember = teamMemberOf(team, 10L, "김철수");
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(lastMember));
+
+        // when
+        reviewService.recheckAfterMemberLeft(team);
+
+        // then
+        verify(chatbotOrchestrationService).completeReview(team);
     }
 
     @DisplayName("활성 팀원 전원이 서로를 다 리뷰하면 팀이 COMPLETED로 전이된다.")
@@ -225,7 +305,8 @@ class ReviewServiceTest {
         given(reviewRepository.save(any(Review.class))).willAnswer(inv -> inv.getArgument(0));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(reviewer, reviewee));
-        given(reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberId(1L, reviewer.getTeamMemberId()))
+        given(reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberIdAndReviewee_Status(
+                        1L, reviewer.getTeamMemberId(), TeamMemberStatus.ACTIVE))
                 .willReturn(1L);
         given(reviewRepository.countByTeam_TeamIdAndReviewer_StatusAndReviewee_Status(
                         1L, TeamMemberStatus.ACTIVE, TeamMemberStatus.ACTIVE))

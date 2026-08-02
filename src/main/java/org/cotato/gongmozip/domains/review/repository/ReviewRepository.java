@@ -13,7 +13,8 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     long countByTeam_TeamIdAndReviewer_StatusAndReviewee_Status(
             Long teamId, TeamMemberStatus reviewerStatus, TeamMemberStatus revieweeStatus);
 
-    long countByTeam_TeamIdAndReviewer_TeamMemberId(Long teamId, Long reviewerTeamMemberId);
+    long countByTeam_TeamIdAndReviewer_TeamMemberIdAndReviewee_Status(
+            Long teamId, Long reviewerTeamMemberId, TeamMemberStatus revieweeStatus);
 
     List<Review> findByTeam_TeamIdAndReviewer_TeamMemberId(Long teamId, Long reviewerTeamMemberId);
 }

@@ -32,4 +32,11 @@ public class CollaborationPointService {
                 .reasonCode(reason)
                 .build());
     }
+
+    // 팀원 이탈 재확인처럼 같은 지급 조건이 여러 번 재평가될 수 있는 호출부에서, 이미 지급된
+    // 사유인지 미리 확인해 중복 지급을 막을 때 쓴다.
+    public boolean hasAwarded(Member member, Team team, CollaborationPointReason reason) {
+        return collaborationPointHistoryRepository.existsByMember_MemberIdAndTeam_TeamIdAndReasonCode(
+                member.getMemberId(), team.getTeamId(), reason);
+    }
 }
