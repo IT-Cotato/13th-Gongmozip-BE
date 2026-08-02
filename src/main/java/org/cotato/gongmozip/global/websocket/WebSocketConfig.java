@@ -27,6 +27,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // 순수 WebSocket 엔드포인트. 인증은 SockJS/HTTP 필터가 아니라
         // StompAuthChannelInterceptor에서 CONNECT 프레임 헤더로 처리한다.
+        // TODO: setAllowedOriginPatterns("*")는 모든 오리진을 허용한다 - 배포 전 실제 프론트엔드
+        // 도메인으로 제한해야 한다.
         registry.addEndpoint("/ws").setAllowedOriginPatterns("*");
     }
 
