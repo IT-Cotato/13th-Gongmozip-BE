@@ -59,23 +59,23 @@ public class MatchingController {
                     기존 결과가 있을 시 재생성하여 덮어씁니다. 진행 중일 시 409 Conflict 예외가 발생합니다.
                     """)
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = MatchingErrorCode.class)
-    @PostMapping("/api/ai/matching-results/{matchingResultId}/reason")
+    @PostMapping("/api/ai/matching-results/{matchingGroupId}/reason")
     public ResponseEntity<BaseResponse<MatchingReasonCreateResponse>> createReason(
-            @PathVariable("matchingResultId") Long matchingResultId,
+            @PathVariable("matchingGroupId") Long matchingGroupId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
-        MatchingReasonCreateResponse response = matchingService.createMatchingReason(matchingResultId, member);
+        MatchingReasonCreateResponse response = matchingService.createMatchingReason(matchingGroupId, member);
         return BaseResponseFormatter.success(MatchingSuccessCode.MATCHING_REASON_REQUESTED, response);
     }
 
     @Operation(summary = "매칭 추천 사유 조회", description = "지정된 매칭 결과에 생성된 AI 추천 사유 상세 내용 및 진행 상태를 조회합니다.")
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = MatchingErrorCode.class)
-    @GetMapping("/api/ai/matching-results/{matchingResultId}/reason")
+    @GetMapping("/api/ai/matching-results/{matchingGroupId}/reason")
     public ResponseEntity<BaseResponse<MatchingReasonDetailResponse>> getReason(
-            @PathVariable("matchingResultId") Long matchingResultId,
+            @PathVariable("matchingGroupId") Long matchingGroupId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         Member member = getAuthenticatedMember(userDetails);
-        MatchingReasonDetailResponse response = matchingService.getMatchingReason(matchingResultId, member);
+        MatchingReasonDetailResponse response = matchingService.getMatchingReason(matchingGroupId, member);
         return BaseResponseFormatter.success(MatchingSuccessCode.MATCHING_REASON_RETRIEVED, response);
     }
 

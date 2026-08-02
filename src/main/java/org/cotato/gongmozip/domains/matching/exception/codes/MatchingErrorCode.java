@@ -19,6 +19,7 @@ public enum MatchingErrorCode implements BaseErrorCode {
     PROFILE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "MATCHING_403_1", "본인의 프로필만 매칭에 사용할 수 있습니다."),
     MATCHING_RESTRICTED(HttpStatus.FORBIDDEN, "MATCHING_403_2", "협업거리 감소로 인해 현재 매칭 참여가 제한되어 있습니다."),
     MATCHING_GROUP_ACCESS_DENIED(HttpStatus.FORBIDDEN, "MATCHING_403_3", "해당 매칭 결과에 접근할 권한이 없습니다."),
+    TEAM_ACCESS_DENIED(HttpStatus.FORBIDDEN, "MATCHING_403_4", "해당 팀에 대한 접근 권한이 없습니다."),
 
     // 404 Not Found
     APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "MATCHING_404_1", "매칭 신청을 찾을 수 없습니다."),
@@ -26,6 +27,7 @@ public enum MatchingErrorCode implements BaseErrorCode {
     MATCHING_REASON_NOT_FOUND(HttpStatus.NOT_FOUND, "MATCHING_404_3", "AI 추천 사유를 찾을 수 없습니다."),
     EXPLANATION_NOT_FOUND(HttpStatus.NOT_FOUND, "MATCHING_404_4", "AI 분석 매칭 설명을 찾을 수 없습니다."),
     LEADER_RECOMMENDATION_NOT_FOUND(HttpStatus.NOT_FOUND, "MATCHING_404_5", "팀 또는 팀장 추천 결과를 찾을 수 없습니다."),
+    TEAM_NOT_FOUND(HttpStatus.NOT_FOUND, "MATCHING_404_6", "팀을 찾을 수 없습니다."),
 
     // 409 Conflict
     ALREADY_APPLIED_TODAY(HttpStatus.CONFLICT, "MATCHING_409_1", "매칭풀에는 하루에 한 번만 입장할 수 있습니다."),

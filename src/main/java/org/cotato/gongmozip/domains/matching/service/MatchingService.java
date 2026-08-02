@@ -1,6 +1,8 @@
 package org.cotato.gongmozip.domains.matching.service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.cotato.gongmozip.domains.matching.converter.MatchingConverter;
@@ -14,6 +16,7 @@ import org.cotato.gongmozip.domains.matching.entity.LeaderRecommendation;
 import org.cotato.gongmozip.domains.matching.entity.MatchingExplanation;
 import org.cotato.gongmozip.domains.matching.entity.MatchingGroup;
 import org.cotato.gongmozip.domains.matching.entity.MatchingReason;
+import org.cotato.gongmozip.domains.matching.enums.MatchingAiStatus;
 import org.cotato.gongmozip.domains.matching.exception.MatchingException;
 import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
 import org.cotato.gongmozip.domains.matching.repository.LeaderRecommendationRepository;
@@ -22,7 +25,6 @@ import org.cotato.gongmozip.domains.matching.repository.MatchingGroupMemberRepos
 import org.cotato.gongmozip.domains.matching.repository.MatchingGroupRepository;
 import org.cotato.gongmozip.domains.matching.repository.MatchingReasonRepository;
 import org.cotato.gongmozip.domains.member.entity.Member;
-import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
@@ -55,30 +57,49 @@ public class MatchingService {
         return MatchingConverter.toExplanationResponse(explanation);
     }
 
-    @Transactional
-    public MatchingReasonCreateResponse createMatchingReason(Long matchingGroupId, Member member) {
+    private MatchingGroup getAuthorizedGroup(Long matchingGroupId, Member member) {
         MatchingGroup matchingGroup = matchingGroupRepository
                 .findById(matchingGroupId)
                 .orElseThrow(() -> new MatchingException(MatchingErrorCode.MATCHING_GROUP_NOT_FOUND));
 
-        // 해당 매칭 그룹에 접근 권한이 있는지 체크 (그룹 멤버 여부)
         boolean isMember = matchingGroupMemberRepository.existsByMatchingGroupAndMember(matchingGroup, member);
         if (!isMember) {
             throw new MatchingException(MatchingErrorCode.MATCHING_GROUP_ACCESS_DENIED);
         }
+        return matchingGroup;
+    }
+
+    private Team getAuthorizedTeam(Long teamId, Member member) {
+        Team team = teamRepository
+                .findById(teamId)
+                .orElseThrow(() -> new MatchingException(MatchingErrorCode.TEAM_NOT_FOUND));
+
+        TeamMember teamMember = teamMemberRepository
+                .findByTeam_TeamIdAndMember_MemberId(teamId, member.getMemberId())
+                .orElseThrow(() -> new MatchingException(MatchingErrorCode.TEAM_ACCESS_DENIED));
+
+        if (teamMember.getStatus() != TeamMemberStatus.ACTIVE) {
+            throw new MatchingException(MatchingErrorCode.TEAM_ACCESS_DENIED);
+        }
+        return team;
+    }
+
+    @Transactional
+    public MatchingReasonCreateResponse createMatchingReason(Long matchingGroupId, Member member) {
+        MatchingGroup matchingGroup = getAuthorizedGroup(matchingGroupId, member);
 
         MatchingReason reason =
                 matchingReasonRepository.findByMatchingGroup(matchingGroup).orElse(null);
 
         if (reason != null) {
-            if (reason.getStatus() == AiSummaryStatus.PROCESSING) {
+            if (reason.getStatus() == MatchingAiStatus.PROCESSING || reason.getStatus() == MatchingAiStatus.PENDING) {
                 throw new MatchingException(MatchingErrorCode.MATCHING_REASON_IN_PROGRESS);
             }
             reason.reset();
         } else {
             reason = MatchingReason.builder()
                     .matchingGroup(matchingGroup)
-                    .status(AiSummaryStatus.PENDING)
+                    .status(MatchingAiStatus.PENDING)
                     .build();
         }
 
@@ -95,14 +116,7 @@ public class MatchingService {
     }
 
     public MatchingReasonDetailResponse getMatchingReason(Long matchingGroupId, Member member) {
-        MatchingGroup matchingGroup = matchingGroupRepository
-                .findById(matchingGroupId)
-                .orElseThrow(() -> new MatchingException(MatchingErrorCode.MATCHING_GROUP_NOT_FOUND));
-
-        boolean isMember = matchingGroupMemberRepository.existsByMatchingGroupAndMember(matchingGroup, member);
-        if (!isMember) {
-            throw new MatchingException(MatchingErrorCode.MATCHING_GROUP_ACCESS_DENIED);
-        }
+        MatchingGroup matchingGroup = getAuthorizedGroup(matchingGroupId, member);
 
         MatchingReason reason = matchingReasonRepository
                 .findByMatchingGroup(matchingGroup)
@@ -113,31 +127,20 @@ public class MatchingService {
 
     @Transactional
     public LeaderRecommendationCreateResponse createLeaderRecommendation(Long teamId, Member member) {
-        Team team = teamRepository
-                .findById(teamId)
-                .orElseThrow(() -> new MatchingException(MatchingErrorCode.LEADER_RECOMMENDATION_NOT_FOUND));
-
-        // 팀원 권한 체크
-        TeamMember teamMember = teamMemberRepository
-                .findByTeam_TeamIdAndMember_MemberId(teamId, member.getMemberId())
-                .orElseThrow(() -> new MatchingException(MatchingErrorCode.MATCHING_GROUP_ACCESS_DENIED));
-
-        if (teamMember.getStatus() != TeamMemberStatus.ACTIVE) {
-            throw new MatchingException(MatchingErrorCode.MATCHING_GROUP_ACCESS_DENIED);
-        }
+        Team team = getAuthorizedTeam(teamId, member);
 
         LeaderRecommendation rec =
                 leaderRecommendationRepository.findByTeam(team).orElse(null);
 
         if (rec != null) {
-            if (rec.getStatus() == AiSummaryStatus.PROCESSING) {
+            if (rec.getStatus() == MatchingAiStatus.PROCESSING || rec.getStatus() == MatchingAiStatus.PENDING) {
                 throw new MatchingException(MatchingErrorCode.LEADER_RECOMMENDATION_IN_PROGRESS);
             }
             rec.reset();
         } else {
             rec = LeaderRecommendation.builder()
                     .team(team)
-                    .status(AiSummaryStatus.PENDING)
+                    .status(MatchingAiStatus.PENDING)
                     .build();
         }
 
@@ -154,17 +157,7 @@ public class MatchingService {
     }
 
     public LeaderRecommendationDetailResponse getLeaderRecommendation(Long teamId, Member member) {
-        Team team = teamRepository
-                .findById(teamId)
-                .orElseThrow(() -> new MatchingException(MatchingErrorCode.LEADER_RECOMMENDATION_NOT_FOUND));
-
-        TeamMember teamMember = teamMemberRepository
-                .findByTeam_TeamIdAndMember_MemberId(teamId, member.getMemberId())
-                .orElseThrow(() -> new MatchingException(MatchingErrorCode.MATCHING_GROUP_ACCESS_DENIED));
-
-        if (teamMember.getStatus() != TeamMemberStatus.ACTIVE) {
-            throw new MatchingException(MatchingErrorCode.MATCHING_GROUP_ACCESS_DENIED);
-        }
+        Team team = getAuthorizedTeam(teamId, member);
 
         LeaderRecommendation rec = leaderRecommendationRepository
                 .findByTeam(team)
@@ -172,29 +165,35 @@ public class MatchingService {
 
         List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
 
-        String recommendedNickname = null;
-        if (rec.getRecommendedMember() != null) {
-            recommendedNickname = activeMembers.stream()
-                    .filter(tm -> tm.getMember()
-                            .getMemberId()
-                            .equals(rec.getRecommendedMember().getMemberId()))
-                    .map(tm -> tm.getProfile().getNickname())
-                    .findFirst()
-                    .orElse(null);
-        }
+        Map<Long, String> nicknameByMemberId = activeMembers.stream()
+                .collect(Collectors.toMap(
+                        tm -> tm.getMember().getMemberId(),
+                        tm -> tm.getProfile().getNickname(),
+                        (a, b) -> a));
 
         List<LeaderCandidateResponse> resolvedCandidates = null;
         if (rec.getCandidates() != null) {
             resolvedCandidates = rec.getCandidates().stream()
-                    .map(c -> {
-                        String nickname = activeMembers.stream()
-                                .filter(tm -> tm.getMember().getMemberId().equals(c.memberId()))
-                                .map(tm -> tm.getProfile().getNickname())
-                                .findFirst()
-                                .orElse(c.nickname());
-                        return new LeaderCandidateResponse(c.memberId(), nickname, c.rank(), c.score(), c.reason());
-                    })
+                    .map(c -> new LeaderCandidateResponse(
+                            c.memberId(),
+                            nicknameByMemberId.getOrDefault(c.memberId(), c.nickname()),
+                            c.rank(),
+                            c.score(),
+                            c.reason()))
                     .toList();
+        }
+
+        String recommendedNickname = null;
+        if (rec.getRecommendedMember() != null) {
+            Long recommendedMemberId = rec.getRecommendedMember().getMemberId();
+            recommendedNickname = nicknameByMemberId.get(recommendedMemberId);
+            if (recommendedNickname == null && resolvedCandidates != null) {
+                recommendedNickname = resolvedCandidates.stream()
+                        .filter(c -> c.memberId().equals(recommendedMemberId))
+                        .map(LeaderCandidateResponse::nickname)
+                        .findFirst()
+                        .orElse(null);
+            }
         }
 
         return MatchingConverter.toLeaderRecDetailResponse(rec, recommendedNickname, resolvedCandidates);
