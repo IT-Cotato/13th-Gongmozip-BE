@@ -78,7 +78,7 @@ public final class TeamConverter {
     }
 
     public static TeamMembersResponse toTeamMembersResponse(
-            List<TeamMemberSummaryResponse> members, boolean chatbotEnabled) {
-        return new TeamMembersResponse(members, chatbotEnabled, members.size());
+            List<TeamMemberSummaryResponse> members, boolean chatbotEnabled, TeamStatus status) {
+        return new TeamMembersResponse(members, chatbotEnabled, members.size(), status.name());
     }
 }

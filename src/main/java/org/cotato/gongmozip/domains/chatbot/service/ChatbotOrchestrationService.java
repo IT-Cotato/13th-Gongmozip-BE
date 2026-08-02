@@ -81,25 +81,45 @@ public class ChatbotOrchestrationService {
         List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
         boolean allGreeted = activeMembers.stream().allMatch(teamMember -> teamMember.getGreetedAt() != null);
         if (allGreeted) {
-            team.advanceStatus(TeamStatus.LEADER_SELECTING);
-
-            List<Long> activeMemberIds =
-                    activeMembers.stream().map(TeamMember::getTeamMemberId).toList();
-            List<Long> recommendedIds = aiClient.recommendLeaderCandidates(activeMemberIds);
-            String recommendedNames = activeMembers.stream()
-                    .filter(member -> recommendedIds.contains(member.getTeamMemberId()))
-                    .map(member -> member.getProfile().getNickname())
-                    .collect(Collectors.joining(", "));
-            String content = recommendedNames.isBlank()
-                    ? LEADER_SELECTION_PROMPT
-                    : LEADER_SELECTION_PROMPT + "\n\nAI 추천: " + recommendedNames + "님이 팀장으로 잘 어울릴 것 같아요!";
-
-            chatService.postChatbotCardMessage(
-                    team,
-                    MessageType.LEADER_NOMINATION_CARD,
-                    content,
-                    toIdsMetadata("aiRecommendedTeamMemberIds", recommendedIds));
+            advanceToLeaderSelecting(team, activeMembers);
         }
+    }
+
+    /**
+     * GREETING 시작(=팀 생성) 후 2시간이 지나도록 인사를 마치지 않은 팀원이 있으면 스케줄러가
+     * 호출해 강제로 다음 단계로 넘긴다 (기능명세서 5.1.3.1 팀 인사 유도 E1). 정상적으로 전원이
+     * 인사를 마쳐 이미 다음 단계로 넘어간 팀이면 아무 것도 하지 않는다.
+     */
+    @Transactional
+    public void forceAdvanceGreetingIfDue(Long teamId) {
+        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        if (team.getStatus() != TeamStatus.GREETING) {
+            return;
+        }
+
+        List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
+        advanceToLeaderSelecting(team, activeMembers);
+    }
+
+    private void advanceToLeaderSelecting(Team team, List<TeamMember> activeMembers) {
+        team.advanceStatus(TeamStatus.LEADER_SELECTING);
+
+        List<Long> activeMemberIds =
+                activeMembers.stream().map(TeamMember::getTeamMemberId).toList();
+        List<Long> recommendedIds = aiClient.recommendLeaderCandidates(activeMemberIds);
+        String recommendedNames = activeMembers.stream()
+                .filter(member -> recommendedIds.contains(member.getTeamMemberId()))
+                .map(member -> member.getProfile().getNickname())
+                .collect(Collectors.joining(", "));
+        String content = recommendedNames.isBlank()
+                ? LEADER_SELECTION_PROMPT
+                : LEADER_SELECTION_PROMPT + "\n\nAI 추천: " + recommendedNames + "님이 팀장으로 잘 어울릴 것 같아요!";
+
+        chatService.postChatbotCardMessage(
+                team,
+                MessageType.LEADER_NOMINATION_CARD,
+                content,
+                toIdsMetadata("aiRecommendedTeamMemberIds", recommendedIds));
     }
 
     /**

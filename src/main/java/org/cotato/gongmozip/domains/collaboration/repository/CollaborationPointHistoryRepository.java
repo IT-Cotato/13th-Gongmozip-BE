@@ -2,12 +2,16 @@ package org.cotato.gongmozip.domains.collaboration.repository;
 
 import java.time.LocalDateTime;
 import org.cotato.gongmozip.domains.collaboration.entity.CollaborationPointHistory;
+import org.cotato.gongmozip.domains.collaboration.enums.CollaborationPointReason;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface CollaborationPointHistoryRepository extends JpaRepository<CollaborationPointHistory, Long> {
+
+    boolean existsByMember_MemberIdAndTeam_TeamIdAndReasonCode(
+            Long memberId, Long teamId, CollaborationPointReason reasonCode);
 
     // 변경 이력이 하나도 없는 회원을 첫 매칭 사용자로 판정할 때 사용한다
     boolean existsByMember(Member member);

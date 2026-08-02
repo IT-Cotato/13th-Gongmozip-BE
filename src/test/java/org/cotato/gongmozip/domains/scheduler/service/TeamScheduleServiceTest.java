@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Optional;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
+import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
 import org.cotato.gongmozip.domains.contest.service.ContestVotingService;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.enums.TeamStatus;
@@ -37,6 +38,9 @@ class TeamScheduleServiceTest {
 
     @Mock
     private ChatService chatService;
+
+    @Mock
+    private ChatbotOrchestrationService chatbotOrchestrationService;
 
     @InjectMocks
     private TeamScheduleService teamScheduleService;
@@ -158,5 +162,30 @@ class TeamScheduleServiceTest {
 
         // then
         verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
+
+    @DisplayName("인사 유도 타임아웃이 지난 팀 id 목록을 조회한다.")
+    @Test
+    void 인사_유도_타임아웃이_지난_팀_id_목록을_조회한다() {
+        // given
+        Team team1 = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
+        given(teamRepository.findByStatusAndCreatedAtLessThanEqual(eq(TeamStatus.GREETING), any()))
+                .willReturn(List.of(team1));
+
+        // when
+        List<Long> dueTeamIds = teamScheduleService.findDueGreetingTimeoutTeamIds();
+
+        // then
+        assertThat(dueTeamIds).containsExactly(1L);
+    }
+
+    @DisplayName("팀 1개의 인사 유도 타임아웃을 처리하면 해당 팀의 강제 전이만 호출한다.")
+    @Test
+    void 팀_1개의_인사_유도_타임아웃을_처리하면_해당_팀의_강제_전이만_호출한다() {
+        // when
+        teamScheduleService.forceAdvanceGreetingForTeam(1L);
+
+        // then
+        verify(chatbotOrchestrationService).forceAdvanceGreetingIfDue(1L);
     }
 }

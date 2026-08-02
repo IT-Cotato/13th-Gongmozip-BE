@@ -5,6 +5,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
+import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
 import org.cotato.gongmozip.domains.contest.service.ContestVotingService;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.enums.TeamStatus;
@@ -34,9 +35,13 @@ public class TeamScheduleService {
     private static final String SUBMISSION_CHECK_MESSAGE = "공모전 마감일 하루 전입니다. 공모전 제출을 완료했다면 '진행 완료'를, 완료하지 못했다면 '미완료'를 "
             + "선택해주세요. 해당 버튼은 팀장님만 선택할 수 있습니다. 팀장님이 '진행 완료'를 선택하면 본 공모전 "
             + "프로젝트가 종료되며, 팀원 리뷰 단계로 이동합니다.";
+    // 인사 유도 시작(=팀 생성) 후 이 시간 안에 전원이 인사를 마치지 않으면 강제로 다음 단계로 넘긴다
+    // (기능명세서 5.1.3.1 E1).
+    private static final int GREETING_TIMEOUT_HOURS = 2;
 
     private final TeamRepository teamRepository;
     private final ContestVotingService contestVotingService;
+    private final ChatbotOrchestrationService chatbotOrchestrationService;
     private final ChatService chatService;
 
     /** 공모전 후보/투표 마감이 지났는데도 CONTEST_SELECTING인 팀 id 목록을 조회한다. */
@@ -95,5 +100,21 @@ public class TeamScheduleService {
         }
         team.markSubmissionCheckNotified(LocalDateTime.now());
         chatService.postChatbotCardMessage(team, MessageType.SUBMISSION_CHECK_CARD, SUBMISSION_CHECK_MESSAGE, null);
+    }
+
+    /** 인사 유도 시작(팀 생성) 후 타임아웃이 지났는데도 여전히 GREETING인 팀 id 목록을 조회한다. */
+    public List<Long> findDueGreetingTimeoutTeamIds() {
+        return teamRepository
+                .findByStatusAndCreatedAtLessThanEqual(
+                        TeamStatus.GREETING, LocalDateTime.now().minusHours(GREETING_TIMEOUT_HOURS))
+                .stream()
+                .map(Team::getTeamId)
+                .toList();
+    }
+
+    /** 한 팀의 인사 유도 단계를 강제로 다음 단계로 넘긴다(팀 단위 트랜잭션). */
+    @Transactional
+    public void forceAdvanceGreetingForTeam(Long teamId) {
+        chatbotOrchestrationService.forceAdvanceGreetingIfDue(teamId);
     }
 }

@@ -18,11 +18,13 @@ import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
 import org.cotato.gongmozip.domains.collaboration.enums.CollaborationPointReason;
 import org.cotato.gongmozip.domains.collaboration.service.CollaborationPointService;
+import org.cotato.gongmozip.domains.contest.service.ContestVotingService;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.profile.repository.ProfileRepository;
+import org.cotato.gongmozip.domains.review.service.ReviewService;
 import org.cotato.gongmozip.domains.survey.enums.CharacterType;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamCreationRequest;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamMemberInput;
@@ -74,6 +76,15 @@ class TeamServiceTest {
 
     @Mock
     private CharacterService characterService;
+
+    @Mock
+    private LeaderElectionService leaderElectionService;
+
+    @Mock
+    private ContestVotingService contestVotingService;
+
+    @Mock
+    private ReviewService reviewService;
 
     @InjectMocks
     private TeamService teamService;
@@ -192,7 +203,7 @@ class TeamServiceTest {
     @Test
     void 채팅방을_나가면_팀원_상태가_LEFT로_바뀌고_시스템_메시지가_발행된다() {
         // given
-        Team team = Team.builder().teamId(100L).build();
+        Team team = Team.builder().teamId(100L).status(TeamStatus.IN_PROGRESS).build();
         TeamMember me = teamMemberOf(team, 1L, "김철수");
         given(teamRepository.findById(100L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
@@ -205,6 +216,68 @@ class TeamServiceTest {
         assertThat(me.getStatus()).isEqualTo(TeamMemberStatus.LEFT);
         verify(chatService).postSystemMessage(any(Team.class), any(String.class));
         verify(collaborationPointService).awardPoint(me.getMember(), team, CollaborationPointReason.LEAVE_PENALTY);
+        verify(leaderElectionService, org.mockito.Mockito.never()).recheckAfterMemberLeft(any(), any());
+        verify(contestVotingService, org.mockito.Mockito.never()).recheckAfterMemberLeft(any(), any());
+        verify(reviewService, org.mockito.Mockito.never()).recheckAfterMemberLeft(any());
+    }
+
+    @DisplayName("팀장 투표 중 나가면 남은 인원 기준으로 재확인한다.")
+    @Test
+    void 팀장_투표_중_나가면_남은_인원_기준으로_재확인한다() {
+        // given
+        Team team =
+                Team.builder().teamId(100L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember me = teamMemberOf(team, 1L, "김철수");
+        given(teamRepository.findById(100L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
+                .willReturn(Optional.of(me));
+
+        // when
+        teamService.leaveTeam(100L, 1L);
+
+        // then
+        verify(leaderElectionService).recheckAfterMemberLeft(team, me.getTeamMemberId());
+        verify(contestVotingService, org.mockito.Mockito.never()).recheckAfterMemberLeft(any(), any());
+        verify(reviewService, org.mockito.Mockito.never()).recheckAfterMemberLeft(any());
+    }
+
+    @DisplayName("공모전 투표 중 나가면 남은 인원 기준으로 재확인한다.")
+    @Test
+    void 공모전_투표_중_나가면_남은_인원_기준으로_재확인한다() {
+        // given
+        Team team =
+                Team.builder().teamId(100L).status(TeamStatus.CONTEST_SELECTING).build();
+        TeamMember me = teamMemberOf(team, 1L, "김철수");
+        given(teamRepository.findById(100L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
+                .willReturn(Optional.of(me));
+
+        // when
+        teamService.leaveTeam(100L, 1L);
+
+        // then
+        verify(contestVotingService).recheckAfterMemberLeft(team, me.getTeamMemberId());
+        verify(leaderElectionService, org.mockito.Mockito.never()).recheckAfterMemberLeft(any(), any());
+        verify(reviewService, org.mockito.Mockito.never()).recheckAfterMemberLeft(any());
+    }
+
+    @DisplayName("리뷰 작성 중 나가면 남은 인원 기준으로 완료 여부를 재확인한다.")
+    @Test
+    void 리뷰_작성_중_나가면_남은_인원_기준으로_완료_여부를_재확인한다() {
+        // given
+        Team team = Team.builder().teamId(100L).status(TeamStatus.SUBMITTED).build();
+        TeamMember me = teamMemberOf(team, 1L, "김철수");
+        given(teamRepository.findById(100L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
+                .willReturn(Optional.of(me));
+
+        // when
+        teamService.leaveTeam(100L, 1L);
+
+        // then
+        verify(reviewService).recheckAfterMemberLeft(team);
+        verify(leaderElectionService, org.mockito.Mockito.never()).recheckAfterMemberLeft(any(), any());
+        verify(contestVotingService, org.mockito.Mockito.never()).recheckAfterMemberLeft(any(), any());
     }
 
     @DisplayName("챗봇을 추가/삭제하면 팀의 chatbotEnabled 값이 바뀌고 시스템 메시지가 발행된다.")
@@ -229,7 +302,11 @@ class TeamServiceTest {
     @Test
     void 대화상대를_조회하면_챗봇_활성화_여부와_함께_팀원_목록을_반환한다() {
         // given
-        Team team = Team.builder().teamId(100L).chatbotEnabled(true).build();
+        Team team = Team.builder()
+                .teamId(100L)
+                .chatbotEnabled(true)
+                .status(TeamStatus.IN_PROGRESS)
+                .build();
         TeamMember me = teamMemberOf(team, 1L, "나");
         TeamMember other = teamMemberOf(team, 2L, "김민정");
 
@@ -245,6 +322,7 @@ class TeamServiceTest {
 
         // then
         assertThat(response.chatbotEnabled()).isTrue();
+        assertThat(response.status()).isEqualTo("IN_PROGRESS");
         assertThat(response.participantCount()).isEqualTo(2);
         assertThat(response.members()).anySatisfy(m -> assertThat(m.isMe()).isTrue());
         assertThat(response.members())
@@ -257,7 +335,11 @@ class TeamServiceTest {
     @Test
     void 대화상대_조회_시_캐릭터가_있는_팀원은_avatar가_채워진다() {
         // given
-        Team team = Team.builder().teamId(100L).chatbotEnabled(true).build();
+        Team team = Team.builder()
+                .teamId(100L)
+                .chatbotEnabled(true)
+                .status(TeamStatus.IN_PROGRESS)
+                .build();
         TeamMember me = teamMemberOf(team, 1L, "나");
         TeamMember other = teamMemberOf(team, 2L, "김민정");
         MemberAvatarResponse avatar =

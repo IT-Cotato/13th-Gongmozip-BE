@@ -67,4 +67,19 @@ class TeamSchedulerJobsTest {
         verify(teamScheduleService).sendSubmissionCheckForTeam(1L);
         verify(teamScheduleService).sendSubmissionCheckForTeam(2L);
     }
+
+    @DisplayName("한 팀의 인사 유도 강제 전이가 실패해도 나머지 팀은 계속 처리된다.")
+    @Test
+    void 한_팀의_인사_유도_강제_전이가_실패해도_나머지_팀은_계속_처리된다() {
+        // given
+        given(teamScheduleService.findDueGreetingTimeoutTeamIds()).willReturn(List.of(1L, 2L));
+        willThrow(new RuntimeException("boom")).given(teamScheduleService).forceAdvanceGreetingForTeam(1L);
+
+        // when
+        teamSchedulerJobs.forceAdvanceGreetings();
+
+        // then
+        verify(teamScheduleService).forceAdvanceGreetingForTeam(1L);
+        verify(teamScheduleService).forceAdvanceGreetingForTeam(2L);
+    }
 }

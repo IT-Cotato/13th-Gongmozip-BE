@@ -54,6 +54,11 @@
 - `Member`에 캐시 컬럼 `collaborationPoint`(기본 100) + `MAX_COLLABORATION_POINT=500` 상수 +
   `addCollaborationPoint(delta)` (0~500 클램핑) 추가
 - `CollaborationPointService.awardPoint(...)` — 히스토리 저장 + Member 캐시 갱신을 한 트랜잭션에서 처리
+- **`hasAwarded(member, team, reason)` 추가 (2026-08-02, CodeRabbit PR #61 리뷰 반영)**:
+  `CollaborationPointHistoryRepository.existsByMember_MemberIdAndTeam_TeamIdAndReasonCode`로
+  특정 사유의 지급 이력이 이미 있는지 확인한다. 팀원 이탈 재확인처럼 같은 지급 조건이 여러
+  번 재평가될 수 있는 호출부(`ReviewService.recheckAfterMemberLeft`)에서, 지급 전에 먼저
+  확인해 중복 지급을 막는 용도. 자세한 내용은 [09-review.md](./09-review.md) 참고.
 - 연결된 트리거: `TeamService.leaveTeam()` → `LEAVE_PENALTY`
 - **MyPage 연동**: `MyPageConverter.toMyPageMainResponse`가 하드코딩했던
   `CollaborationDistanceSummary(100, 500, 20)`를 실제 `member.getCollaborationPoint()` 기반

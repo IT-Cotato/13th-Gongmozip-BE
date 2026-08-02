@@ -143,6 +143,41 @@ public class ContestVotingService {
         }
     }
 
+    /**
+     * 팀원이 공모전 투표 도중 나갔을 때(TeamService.leaveTeam) 호출된다. submitVote는 투표가
+     * 제출되는 시점에만 개표 조건을 확인하므로, 나간 사람이 그 라운드에 아직 투표하지 않은
+     * 상태였다면(=개표를 막고 있던 사람이었다면) 남은 활성 팀원 수 기준으로 이미 조건이
+     * 충족됐는지 즉시 재확인한다. 나간 사람이 이미 투표했었다면 개표가 이미 실행됐거나 다른
+     * 미투표자가 남아있는 것이므로 아무 것도 하지 않는다(중복 개표 방지).
+     */
+    @Transactional
+    public void recheckAfterMemberLeft(Team team, Long leftTeamMemberId) {
+        if (team.getStatus() != TeamStatus.CONTEST_SELECTING) {
+            return;
+        }
+
+        List<TeamMember> activeMembers =
+                teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE);
+        if (activeMembers.isEmpty()) {
+            return;
+        }
+
+        Integer maxRound = contestVoteRepository.findMaxRoundByTeamId(team.getTeamId());
+        if (maxRound == null) {
+            return;
+        }
+        boolean leaverAlreadyVoted = contestVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(
+                team.getTeamId(), leftTeamMemberId, maxRound);
+        if (leaverAlreadyVoted) {
+            return;
+        }
+
+        long distinctVoters = contestVoteRepository.countDistinctVotersByTeamIdAndRound(team.getTeamId(), maxRound);
+        if (distinctVoters >= activeMembers.size()) {
+            tally(team, maxRound);
+        }
+    }
+
     private void tally(Team team, int round) {
         List<ContestVote> votes = contestVoteRepository.findByTeam_TeamIdAndRound(team.getTeamId(), round);
         Map<Long, Long> voteCountByCandidateId = votes.stream()

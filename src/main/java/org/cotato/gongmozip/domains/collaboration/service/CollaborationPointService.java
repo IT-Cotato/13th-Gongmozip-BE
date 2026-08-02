@@ -53,6 +53,13 @@ public class CollaborationPointService {
                 .build());
     }
 
+    // 팀원 이탈 재확인처럼 같은 지급 조건이 여러 번 재평가될 수 있는 호출부에서, 이미 지급된
+    // 사유인지 미리 확인해 중복 지급을 막을 때 쓴다.
+    public boolean hasAwarded(Member member, Team team, CollaborationPointReason reason) {
+        return collaborationPointHistoryRepository.existsByMember_MemberIdAndTeam_TeamIdAndReasonCode(
+                member.getMemberId(), team.getTeamId(), reason);
+    }
+
     // 최근 14일 실제 감점 합계가 이번 변경으로 50m 이상이면 그 시점부터 7일간 매칭을 제한한다
     private void applyMatchingRestrictionIfNeeded(Member member, int delta) {
         LocalDateTime now = LocalDateTime.now(clock);

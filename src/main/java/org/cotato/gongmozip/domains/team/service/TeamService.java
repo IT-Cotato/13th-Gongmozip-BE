@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.MemberAvatarResponse;
 import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.chat.entity.Message;
@@ -14,6 +15,7 @@ import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
 import org.cotato.gongmozip.domains.collaboration.enums.CollaborationPointReason;
 import org.cotato.gongmozip.domains.collaboration.service.CollaborationPointService;
+import org.cotato.gongmozip.domains.contest.service.ContestVotingService;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.exception.MemberException;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
@@ -22,6 +24,7 @@ import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.exception.ProfileException;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.repository.ProfileRepository;
+import org.cotato.gongmozip.domains.review.service.ReviewService;
 import org.cotato.gongmozip.domains.team.converter.TeamConverter;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamCreationRequest;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamMemberInput;
@@ -39,6 +42,7 @@ import org.cotato.gongmozip.domains.team.repository.TeamRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -53,6 +57,9 @@ public class TeamService {
     private final CollaborationPointService collaborationPointService;
     private final ChatbotOrchestrationService chatbotOrchestrationService;
     private final CharacterService characterService;
+    private final LeaderElectionService leaderElectionService;
+    private final ContestVotingService contestVotingService;
+    private final ReviewService reviewService;
 
     /**
      * 매칭 도메인이 팀 그룹핑 결과를 확정한 뒤 호출하는 내부 계약.
@@ -160,6 +167,30 @@ public class TeamService {
         teamMember.leave(LocalDateTime.now());
         collaborationPointService.awardPoint(teamMember.getMember(), team, CollaborationPointReason.LEAVE_PENALTY);
         chatService.postSystemMessage(team, teamMember.getProfile().getNickname() + "님이 채팅방을 나갔습니다.");
+        recheckPendingStageAfterLeave(team, teamMember);
+    }
+
+    // 투표/리뷰 진행 중이던 팀원이 나가면 activeMembers 분모가 줄어들어, 남은 팀원들이
+    // 이미 제출을 마쳤는데도 자동 개표/완료 조건이 뒤늦게 충족되는 경우가 생긴다. 이 조건은
+    // 원래 새 투표/리뷰가 제출되는 시점에만 확인되므로, 나가는 시점에 현재 단계에 맞춰
+    // 직접 재확인해준다. 이 재확인은 나가기라는 핵심 동작에 곁들이는 부가 동작이라, 여기서
+    // 예외가 나더라도 팀원 상태 변경(teamMember.leave)과 시스템 메시지 발행까지 함께 롤백되면
+    // 안 된다 — try-catch로 격리하고 실패는 로그만 남긴다.
+    private void recheckPendingStageAfterLeave(Team team, TeamMember leftTeamMember) {
+        try {
+            switch (team.getStatus()) {
+                case LEADER_SELECTING -> leaderElectionService.recheckAfterMemberLeft(
+                        team, leftTeamMember.getTeamMemberId());
+                case CONTEST_SELECTING -> contestVotingService.recheckAfterMemberLeft(
+                        team, leftTeamMember.getTeamMemberId());
+                case SUBMITTED -> reviewService.recheckAfterMemberLeft(team);
+                default -> {
+                    // 다른 단계는 재확인이 필요한 자동 완료 조건이 없다.
+                }
+            }
+        } catch (Exception e) {
+            log.error("팀원 이탈 후 단계 재확인 실패 - teamId: {}", team.getTeamId(), e);
+        }
     }
 
     @Transactional
@@ -193,6 +224,6 @@ public class TeamService {
                         avatarsByMemberId.get(teamMember.getMember().getMemberId())))
                 .toList();
 
-        return TeamConverter.toTeamMembersResponse(memberResponses, team.isChatbotEnabled());
+        return TeamConverter.toTeamMembersResponse(memberResponses, team.isChatbotEnabled(), team.getStatus());
     }
 }

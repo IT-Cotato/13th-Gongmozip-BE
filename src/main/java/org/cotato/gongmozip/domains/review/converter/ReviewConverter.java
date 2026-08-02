@@ -1,6 +1,8 @@
 package org.cotato.gongmozip.domains.review.converter;
 
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.MemberAvatarResponse;
 import org.cotato.gongmozip.domains.review.dto.response.ReviewResponse.ReviewResultResponse;
+import org.cotato.gongmozip.domains.review.dto.response.ReviewResponse.ReviewTargetResponse;
 import org.cotato.gongmozip.domains.review.entity.Review;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
@@ -24,5 +26,17 @@ public final class ReviewConverter {
                 review.getReviewee().getTeamMemberId(),
                 review.getContent(),
                 review.getCreatedAt());
+    }
+
+    public static ReviewTargetResponse toReviewTargetResponse(
+            TeamMember target, boolean alreadyReviewed, MemberAvatarResponse avatar) {
+        return new ReviewTargetResponse(
+                target.getTeamMemberId(),
+                target.getMember().getMemberId(),
+                target.getProfile().getProfileId(),
+                target.getProfile().getNickname(),
+                target.getRole().name(),
+                avatar,
+                alreadyReviewed);
     }
 }
