@@ -96,8 +96,25 @@ survey/matching 담당자 확인 필요 (아래 "임시 처리" 참고).**
   `LeaderElectionService.recheckAfterMemberLeft(team, leftTeamMemberId)` 추가. 팀원이 팀장
   투표 도중 나가면 남은 활성 팀원 기준으로 개표 조건이 뒤늦게 충족돼도 `castVote` 안에서만
   확인하던 `tally`가 다시 호출되지 않는 버그가 있었다. `TeamService.leaveTeam`이 나가는
-  시점 호출한다. 자세한 내용/설계 근거는 [01-team.md](./01-team.md) 참고. "팀장 여부 투표"
-  단계(`submitCandidacy`)는 이번 수정 범위 밖.
+  시점 호출한다. 자세한 내용/설계 근거는 [01-team.md](./01-team.md) 참고.
+  > ⚠️ **"팀장 여부 투표" 단계 확장 (2026-08-02, CodeRabbit PR #61 리뷰 반영)**: 처음엔
+  > `LeaderVote`가 아직 없는 candidacy 단계(`submitCandidacy`)는 범위 밖으로 남겨뒀는데,
+  > CodeRabbit이 이 단계도 동일한 PENDING 정체 버그가 있다고 지적해 추가로 수정했다.
+  > `recheckAfterMemberLeft`가 `!leaderVoteRepository.existsByTeam_TeamId(...)`인 경우
+  > (=아직 투표 시작 전) `resolveCandidacyPhase`와 동일한 경로로 재확인하되, 나간 사람의
+  > `LeaderCandidacyStatus`가 `UNDECIDED`(=아직 응답 안 함)였을 때만 재확인한다 — 이미
+  > 응답을 마친 사람이 나간 경우는 "전원 응답 완료" 조건에 영향이 없으므로(다른 미응답자가
+  > 남아있거나 이미 다음 단계로 넘어갔거나) 재확인이 필요 없고, 잘못 재확인하면 이미 발행된
+  > `LEADER_VOTE_CARD` 메시지를 중복 발행할 위험이 있다.
+  > ⚠️ **득표 1위 후보 이탈 시 크래시 수정 (2026-08-02, CodeRabbit PR #61 리뷰 반영)**:
+  > `recheckAfterMemberLeft`가 개표 조건 충족을 감지해 `tally`를 호출할 때, 마침 득표 1위
+  > 후보 본인이 나간 사람이면 `tally`의 우승자 조회(`activeMembers`에서 후보를 찾는 로직)가
+  > 실패해 `TeamException(INVALID_LEADER_CANDIDATE)`를 던졌다 — 이 예외가
+  > `TeamService.leaveTeam`과 같은 트랜잭션에서 전파돼 나가기 자체가 롤백되는 심각한 버그였다.
+  > `tally`가 득표 집계 전에 현재 활성 상태인 후보의 표만 먼저 걸러내도록 수정 — 나간 후보의
+  > 표는 집계에서 제외되어 남은 활성 후보들 사이에서 다시 우승자가 결정된다. 유효한(=활성)
+  > 후보가 아무도 안 남으면(득표했던 후보가 전부 나간 경우) 후보가 아예 없었을 때와 동일하게
+  > 활성 팀원 중 1명을 임시 팀장으로 무작위 지정한다.
 
 ## 미정 / 추후 확인 필요
 

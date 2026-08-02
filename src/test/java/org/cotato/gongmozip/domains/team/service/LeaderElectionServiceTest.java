@@ -514,6 +514,45 @@ class LeaderElectionServiceTest {
         assertThat(voter1.getRole()).isEqualTo(TeamRole.LEADER);
     }
 
+    @DisplayName("득표 1위 후보 본인이 나가면 크래시 없이 남은 활성 팀원 중 1명을 임시 팀장으로 지정한다.")
+    @Test
+    void 득표_1위_후보_본인이_나가면_크래시_없이_남은_활성_팀원_중_1명을_임시_팀장으로_지정한다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember a = teamMemberOf(team, 10L, "김철수");
+        TeamMember b = teamMemberOf(team, 20L, "이해은");
+        TeamMember leavingCandidate = teamMemberOf(team, 30L, "박준수"); // 득표 1위였지만 나간 사람
+
+        given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(true);
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(a, b));
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);
+        given(leaderVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(1L, 30L, 1))
+                .willReturn(false);
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(a)
+                                .candidateTeamMember(leavingCandidate)
+                                .round(1)
+                                .build(),
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(b)
+                                .candidateTeamMember(leavingCandidate)
+                                .round(1)
+                                .build()));
+
+        // when
+        leaderElectionService.recheckAfterMemberLeft(team, 30L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
+        assertThat(List.of(a.getRole(), b.getRole())).contains(TeamRole.LEADER);
+    }
+
     @DisplayName("나간 사람이 이미 투표했었다면 재확인해도 다시 개표하지 않는다.")
     @Test
     void 나간_사람이_이미_투표했었다면_재확인해도_다시_개표하지_않는다() {
@@ -536,19 +575,54 @@ class LeaderElectionServiceTest {
         verify(leaderVoteRepository, never()).findByTeam_TeamIdAndRound(any(), anyInt());
     }
 
-    @DisplayName("아직 팀장 투표가 시작되지 않았으면 재확인하지 않는다.")
+    @DisplayName("투표 시작 전(팀장 여부 응답 단계)에 나간 사람이 응답 전이었고 남은 인원이 모두 응답을 마쳤으면 다음 단계로 진행한다.")
     @Test
-    void 아직_팀장_투표가_시작되지_않았으면_재확인하지_않는다() {
+    void 투표_시작_전_나간_사람이_응답_전이었고_남은_인원이_모두_응답을_마쳤으면_다음_단계로_진행한다() {
         // given
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember a = teamMemberOf(team, 10L, "김철수");
+        a.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember b = teamMemberOf(team, 20L, "이해은");
+        b.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember leavingMember = teamMemberOf(team, 30L, "박준수"); // 기본값 UNDECIDED, 즉 응답 전
+
         given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(false);
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(a, b));
+        given(teamMemberRepository.findById(30L)).willReturn(Optional.of(leavingMember));
 
         // when
         leaderElectionService.recheckAfterMemberLeft(team, 30L);
 
         // then
-        verify(teamMemberRepository, never()).findByTeamIdAndStatus(any(), any());
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_VOTE_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("투표 시작 전에 나간 사람이 이미 응답했었다면 재확인하지 않는다.")
+    @Test
+    void 투표_시작_전에_나간_사람이_이미_응답했었다면_재확인하지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember stillUndecided = teamMemberOf(team, 10L, "김철수");
+        TeamMember leavingMember = teamMemberOf(team, 30L, "박준수");
+        leavingMember.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
+
+        given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(false);
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(stillUndecided));
+        given(teamMemberRepository.findById(30L)).willReturn(Optional.of(leavingMember));
+
+        // when
+        leaderElectionService.recheckAfterMemberLeft(team, 30L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
+        verify(chatService, never()).postChatbotMessage(any(), anyString());
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
     }
 
     private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {

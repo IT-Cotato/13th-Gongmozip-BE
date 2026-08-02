@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.chat.entity.Message;
@@ -150,14 +151,18 @@ public class LeaderElectionService {
      */
     @Transactional
     public void recheckAfterMemberLeft(Team team, Long leftTeamMemberId) {
-        if (team.getStatus() != TeamStatus.LEADER_SELECTING
-                || !leaderVoteRepository.existsByTeam_TeamId(team.getTeamId())) {
+        if (team.getStatus() != TeamStatus.LEADER_SELECTING) {
             return;
         }
 
         List<TeamMember> activeMembers =
                 teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE);
         if (activeMembers.isEmpty()) {
+            return;
+        }
+
+        if (!leaderVoteRepository.existsByTeam_TeamId(team.getTeamId())) {
+            recheckCandidacyPhaseAfterMemberLeft(team, leftTeamMemberId, activeMembers);
             return;
         }
 
@@ -179,11 +184,55 @@ public class LeaderElectionService {
         }
     }
 
+    /**
+     * 아직 "팀장 여부 투표"(candidacy) 단계라 {@code LeaderVote}가 하나도 없는 상태에서 팀원이
+     * 나간 경우를 처리한다. {@code submitCandidacy}도 새 응답이 제출되는 시점에만 전원 응답
+     * 여부를 확인하므로, 마지막으로 응답이 없던(UNDECIDED) 사람이 나가버리면 아무도 다시
+     * 확인하지 않아 계속 LEADER_SELECTING에 머무를 수 있다. 나간 사람이 응답 전이었을 때만
+     * 재확인한다 — 이미 응답을 마친 사람이 나간 경우는 이 단계의 완료 조건에 영향이 없으므로
+     * (다른 미응답자가 남아있거나, 이미 다음 단계로 넘어갔거나) 재확인이 필요 없다.
+     */
+    private void recheckCandidacyPhaseAfterMemberLeft(
+            Team team, Long leftTeamMemberId, List<TeamMember> activeMembers) {
+        LeaderCandidacyStatus leaverCandidacy = teamMemberRepository
+                .findById(leftTeamMemberId)
+                .map(TeamMember::getLeaderCandidacy)
+                .orElse(null);
+        if (leaverCandidacy != LeaderCandidacyStatus.UNDECIDED) {
+            return;
+        }
+
+        boolean allResolved =
+                activeMembers.stream().allMatch(tm -> tm.getLeaderCandidacy() != LeaderCandidacyStatus.UNDECIDED);
+        if (allResolved) {
+            resolveCandidacyPhase(team, activeMembers);
+        }
+    }
+
     private void tally(Team team, int round, List<TeamMember> activeMembers) {
         List<LeaderVote> votes = leaderVoteRepository.findByTeam_TeamIdAndRound(team.getTeamId(), round);
+        // 투표 이후 득표 후보가 나갔을 수 있으므로, 현재도 활성 상태인 후보를 대상으로 한 표만
+        // 집계한다 — 나간 후보가 최다 득표자였다는 이유로 팀장 선출(및 그 트랜잭션에 함께 묶인
+        // TeamService.leaveTeam)이 예외로 실패해서는 안 된다.
+        Set<Long> activeMemberIds =
+                activeMembers.stream().map(TeamMember::getTeamMemberId).collect(Collectors.toSet());
         Map<Long, Long> voteCountByCandidateId = votes.stream()
+                .filter(vote ->
+                        activeMemberIds.contains(vote.getCandidateTeamMember().getTeamMemberId()))
                 .collect(Collectors.groupingBy(
                         vote -> vote.getCandidateTeamMember().getTeamMemberId(), Collectors.counting()));
+
+        if (voteCountByCandidateId.isEmpty()) {
+            // 득표했던 후보가 전부 나가 유효 후보가 없으면, 후보가 아예 없었을 때와 동일하게
+            // 활성 팀원 중 1명을 임시 팀장으로 무작위 지정한다.
+            TeamMember randomLeader = activeMembers.get(RANDOM.nextInt(activeMembers.size()));
+            assignLeader(
+                    team,
+                    randomLeader,
+                    "투표했던 후보가 모두 팀을 나가서, 팀원 중 1명을 임시 팀장으로 무작위 지정했어요. "
+                            + randomLeader.getProfile().getNickname() + "님이 임시 팀장으로 선정되었습니다.");
+            return;
+        }
 
         long maxVotes =
                 voteCountByCandidateId.values().stream().max(Long::compareTo).orElse(0L);
