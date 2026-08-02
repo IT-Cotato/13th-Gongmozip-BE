@@ -195,12 +195,8 @@ public class MatchingApplicationService {
         // 회원과 신청을 같은 트랜잭션에서 잠가 중복 철회와 협업거리 중복 차감을 막는다
         Member member = getMemberWithLock(memberId);
         MatchingApplication application = matchingApplicationRepository
-                .findByIdWithLock(applicationId)
+                .findByIdAndMemberIdWithLock(applicationId, memberId)
                 .orElseThrow(() -> new MatchingException(MatchingErrorCode.APPLICATION_NOT_FOUND));
-        // 다른 회원의 신청 존재 여부를 노출하지 않도록 소유자가 아니어도 NOT_FOUND로 응답 통일
-        if (!application.getMember().getMemberId().equals(memberId)) {
-            throw new MatchingException(MatchingErrorCode.APPLICATION_NOT_FOUND);
-        }
         if (!WITHDRAWABLE_STATUSES.contains(application.getStatus())) {
             throw new MatchingException(MatchingErrorCode.INVALID_APPLICATION_STATUS);
         }

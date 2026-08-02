@@ -195,7 +195,8 @@ class MatchingApplicationServiceTest {
         Member member = Member.builder().memberId(1L).collaborationPoint(100).build();
         MatchingApplication application = waitingApplication(100L, member);
         given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
-        given(matchingApplicationRepository.findByIdWithLock(100L)).willReturn(Optional.of(application));
+        given(matchingApplicationRepository.findByIdAndMemberIdWithLock(100L, member.getMemberId()))
+                .willReturn(Optional.of(application));
         given(matchingTimePolicy.now()).willReturn(NOW);
         given(matchingTimePolicy.resolveWithdrawalType(TODAY)).willReturn(WithdrawalType.FREE_CANCEL);
 
@@ -213,7 +214,8 @@ class MatchingApplicationServiceTest {
         Member member = Member.builder().memberId(1L).collaborationPoint(100).build();
         MatchingApplication application = waitingApplication(100L, member);
         given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
-        given(matchingApplicationRepository.findByIdWithLock(100L)).willReturn(Optional.of(application));
+        given(matchingApplicationRepository.findByIdAndMemberIdWithLock(100L, member.getMemberId()))
+                .willReturn(Optional.of(application));
         given(matchingTimePolicy.now()).willReturn(NOW);
         given(matchingTimePolicy.resolveWithdrawalType(TODAY)).willReturn(WithdrawalType.PENALIZED_PASS);
         given(matchingApplicationRepository.countByMemberAndStatusAndCanceledAtGreaterThanEqual(
@@ -225,6 +227,19 @@ class MatchingApplicationServiceTest {
         assertThat(application.getStatus()).isEqualTo(MatchingApplicationStatus.PASSED);
         assertThat(response.collaborationPenalty()).isEqualTo(7);
         verify(collaborationPointService).changePoint(member, null, CollaborationPointReason.MATCHING_PASS_PENALTY, -7);
+    }
+
+    @DisplayName("타인의 신청은 잠그지 않고 찾을 수 없는 신청으로 처리한다.")
+    @Test
+    void withdrawDoesNotLockAnotherMembersApplication() {
+        Member member = Member.builder().memberId(1L).build();
+        given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
+        given(matchingApplicationRepository.findByIdAndMemberIdWithLock(100L, member.getMemberId()))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> matchingApplicationService.withdraw(member.getMemberId(), 100L))
+                .isInstanceOf(MatchingException.class)
+                .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.APPLICATION_NOT_FOUND);
     }
 
     private SurveySubmission submittedSurvey(Member member) {

@@ -30,8 +30,15 @@ public interface MatchingApplicationRepository extends JpaRepository<MatchingApp
     long countByMemberAndStatusAndCanceledAtGreaterThanEqual(
             Member member, MatchingApplicationStatus status, LocalDateTime since);
 
-    // 같은 신청에 철회 요청이 동시에 들어와 패널티가 중복 적용되는 것을 막는다
+    // 본인 신청에 대한 동시 철회만 잠가 패널티 중복 적용과 타인 신청의 불필요한 락 경합을 막는다
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT ma FROM MatchingApplication ma WHERE ma.matchingApplicationId = :applicationId")
-    Optional<MatchingApplication> findByIdWithLock(@Param("applicationId") Long applicationId);
+    @Query(
+            """
+            SELECT ma
+            FROM MatchingApplication ma
+            WHERE ma.matchingApplicationId = :applicationId
+              AND ma.member.memberId = :memberId
+            """)
+    Optional<MatchingApplication> findByIdAndMemberIdWithLock(
+            @Param("applicationId") Long applicationId, @Param("memberId") Long memberId);
 }
