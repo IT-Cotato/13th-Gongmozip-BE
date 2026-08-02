@@ -21,8 +21,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.cotato.gongmozip.domains.matching.converter.TitleDescriptionListConverter;
 import org.cotato.gongmozip.domains.matching.dto.MatchingResponse.TitleDescriptionInfo;
+import org.cotato.gongmozip.domains.matching.enums.MatchingAiStatus;
 import org.cotato.gongmozip.domains.profile.entity.StringListConverter;
-import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
 import org.cotato.gongmozip.global.entity.BaseEntity;
 
 @Getter
@@ -44,7 +44,7 @@ public class MatchingReason extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
-    private AiSummaryStatus status;
+    private MatchingAiStatus status;
 
     @Column(name = "headline")
     private String headline;
@@ -91,7 +91,7 @@ public class MatchingReason extends BaseEntity {
     private LocalDateTime evaluatedAt;
 
     public void startProcessing() {
-        this.status = AiSummaryStatus.PROCESSING;
+        this.status = MatchingAiStatus.PROCESSING;
     }
 
     public void complete(
@@ -105,7 +105,7 @@ public class MatchingReason extends BaseEntity {
             Integer teamGoalScore,
             Integer personalityScore,
             Integer extraversionComplementScore) {
-        this.status = AiSummaryStatus.COMPLETED;
+        this.status = MatchingAiStatus.COMPLETED;
         this.headline = headline;
         this.summary = summary;
         this.strengths = strengths;
@@ -121,14 +121,24 @@ public class MatchingReason extends BaseEntity {
     }
 
     public void fail(String failureMessage) {
-        this.status = AiSummaryStatus.FAILED;
+        this.status = MatchingAiStatus.FAILED;
         this.failureMessage = failureMessage;
         this.evaluatedAt = LocalDateTime.now();
     }
 
     public void reset() {
-        this.status = AiSummaryStatus.PENDING;
+        this.status = MatchingAiStatus.PENDING;
         this.failureMessage = null;
         this.evaluatedAt = null;
+        this.headline = null;
+        this.summary = null;
+        this.strengths = null;
+        this.commonPoints = null;
+        this.complementaryPoints = null;
+        this.cautions = null;
+        this.totalCompatibilityScore = 0;
+        this.teamGoalScore = 0;
+        this.personalityScore = 0;
+        this.extraversionComplementScore = 0;
     }
 }

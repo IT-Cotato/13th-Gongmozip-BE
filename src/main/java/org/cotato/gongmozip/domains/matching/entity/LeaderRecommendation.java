@@ -22,8 +22,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.cotato.gongmozip.domains.matching.converter.LeaderCandidateListConverter;
 import org.cotato.gongmozip.domains.matching.dto.MatchingResponse.LeaderCandidateResponse;
+import org.cotato.gongmozip.domains.matching.enums.MatchingAiStatus;
 import org.cotato.gongmozip.domains.member.entity.Member;
-import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.global.entity.BaseEntity;
 
@@ -46,7 +46,7 @@ public class LeaderRecommendation extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
-    private AiSummaryStatus status;
+    private MatchingAiStatus status;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "recommended_member_id")
@@ -72,7 +72,7 @@ public class LeaderRecommendation extends BaseEntity {
     private LocalDateTime evaluatedAt;
 
     public void startProcessing() {
-        this.status = AiSummaryStatus.PROCESSING;
+        this.status = MatchingAiStatus.PROCESSING;
     }
 
     public void complete(
@@ -81,7 +81,7 @@ public class LeaderRecommendation extends BaseEntity {
             List<LeaderCandidateResponse> candidates,
             String teamSummary,
             String caution) {
-        this.status = AiSummaryStatus.COMPLETED;
+        this.status = MatchingAiStatus.COMPLETED;
         this.recommendedMember = recommendedMember;
         this.recommendationReason = recommendationReason;
         this.candidates = candidates;
@@ -92,13 +92,13 @@ public class LeaderRecommendation extends BaseEntity {
     }
 
     public void fail(String failureMessage) {
-        this.status = AiSummaryStatus.FAILED;
+        this.status = MatchingAiStatus.FAILED;
         this.failureMessage = failureMessage;
         this.evaluatedAt = LocalDateTime.now();
     }
 
     public void reset() {
-        this.status = AiSummaryStatus.PENDING;
+        this.status = MatchingAiStatus.PENDING;
         this.recommendedMember = null;
         this.recommendationReason = null;
         this.candidates = null;

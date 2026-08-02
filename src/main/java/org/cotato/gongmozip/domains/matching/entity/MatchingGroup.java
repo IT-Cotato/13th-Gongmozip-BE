@@ -14,6 +14,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.cotato.gongmozip.domains.matching.enums.MatchingGroupStatus;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.global.entity.BaseEntity;
 
@@ -40,6 +41,7 @@ public class MatchingGroup extends BaseEntity {
     @Column(name = "matching_score", nullable = false, precision = 5, scale = 2)
     private BigDecimal matchingScore;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
-    private String status;
+    private MatchingGroupStatus status;
 }
