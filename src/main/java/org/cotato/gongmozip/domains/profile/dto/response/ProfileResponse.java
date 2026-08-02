@@ -86,11 +86,12 @@ public class ProfileResponse {
             Long profileId,
             String nickname,
             @Schema(nullable = true, description = "성향 검사 미완료 시 null") CharacterSummary character,
-            String schoolRegion,
-            String schoolName,
-            Integer grade,
-            String major,
-            String secondaryMajor,
+            boolean isPublic,
+            @Schema(nullable = true, description = "비공개 프로필이면 null") String schoolRegion,
+            @Schema(nullable = true, description = "비공개 프로필이면 null") String schoolName,
+            @Schema(nullable = true, description = "비공개 프로필이면 null") Integer grade,
+            @Schema(nullable = true, description = "비공개 프로필이면 null") String major,
+            @Schema(nullable = true, description = "비공개 프로필이면 null") String secondaryMajor,
             List<PublicProjectResponse> projects,
             List<PublicAwardResponse> awards,
             List<PublicCertificationResponse> certifications) {}
@@ -225,4 +226,10 @@ public class ProfileResponse {
 
     // 18. 프로젝트 AI 요약 조회 응답
     public record ProjectAiSummaryResponse(String summary, String status, LocalDateTime generatedAt) {}
+
+    // 19. 프로젝트 경험 AI 평가 조회 응답
+    public record ProjectEvaluationResponse(Long evaluationId, String status, Integer score, String feedback) {}
+
+    // 20. 프로젝트 경험 AI 평가 생성 응답
+    public record ProjectEvaluationCreateResponse(Long evaluationId) {}
 }

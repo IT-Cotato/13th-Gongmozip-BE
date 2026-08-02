@@ -48,7 +48,15 @@
   포인트 지급(`progressCheckRespondedAt`으로 멱등성 보장), 제출 완료 시 팀장은
   `PROJECT_COMPLETE_LEADER`(+30m), 나머지 활성 팀원은 `PROJECT_COMPLETE_MEMBER`(+20m) 지급 후
   `Team.status = SUBMITTED`.
-- 테스트: `TeamScheduleServiceTest`, `TeamProgressServiceTest`
+- 테스트: `TeamScheduleServiceTest`, `TeamProgressServiceTest`, `TeamSchedulerJobsTest`
+- **트랜잭션 분리 (2026-08-01)**: 처음엔 `TeamScheduleService`의 3개
+  메서드(`resolveDueContestVotingDeadlines`/`sendDueProgressChecks`/`sendDueSubmissionChecks`)가
+  대상 팀 전체를 하나의 `@Transactional` 안에서 for 루프로 처리했다 — 팀이 많아지면 그만큼
+  커넥션을 오래 점유하고, 루프 중 한 팀에서 예외가 나면 이미 처리된 다른 팀들까지 롤백되는
+  문제가 있었다. "대상 팀 id 조회"(`findDue...TeamIds`, 논트랜잭션)와 "팀 1개 처리"
+  (`resolve.../send...ForTeam`, 팀 단위 `@Transactional`)로 나누고, `TeamSchedulerJobs`가
+  조회 결과를 순회하며 팀마다 별도 트랜잭션으로 처리하도록 바꿨다. 팀 하나가 실패해도 나머지
+  팀은 계속 처리되도록 `TeamSchedulerJobs`에서 팀 단위로 try-catch도 추가.
 
 ## 미정 / 추후 확인 필요
 

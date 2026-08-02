@@ -31,11 +31,9 @@ public class SwaggerConfig {
 
         return new OpenAPI()
                 .info(info)
-                // Swagger UI는 servers 목록의 첫 번째 항목을 기본 선택하므로 로컬 개발 편의를 위해
-                // 로컬을 먼저 등록한다. 배포 서버로 테스트하려면 Swagger UI 상단 드롭다운에서 수동 선택.
-                .addServersItem(new Server().url("http://localhost:8080").description("로컬"))
                 .addServersItem(
                         new Server().url("https://13.209.254.149.nip.io").description("배포 서버"))
+                .addServersItem(new Server().url("http://localhost:8080").description("로컬"))
                 .addSecurityItem(securityRequirement)
                 .components(components);
     }

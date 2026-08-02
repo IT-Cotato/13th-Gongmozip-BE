@@ -171,6 +171,7 @@ public class ProfileConverter {
                 profile.getProfileId(),
                 profile.getNickname(),
                 character,
+                true,
                 schoolRegion,
                 maskedSchoolName,
                 profile.getGrade(),
@@ -179,6 +180,24 @@ public class ProfileConverter {
                 projectDetails,
                 awardDetails,
                 certDetails);
+    }
+
+    // 비공개 프로필 — 닉네임/캐릭터(아바타)만 채우고 나머지는 전부 비워서 내려준다.
+    public static PublicProfileResponse toPrivateProfileResponse(
+            Profile profile, CurrentCharacterResponse currentCharacter) {
+        return new PublicProfileResponse(
+                profile.getProfileId(),
+                profile.getNickname(),
+                toCharacterSummary(currentCharacter),
+                false,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of(),
+                List.of());
     }
 
     private static CharacterSummary toCharacterSummary(CurrentCharacterResponse currentCharacter) {

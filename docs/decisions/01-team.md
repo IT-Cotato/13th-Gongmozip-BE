@@ -86,6 +86,26 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
 - 리포지토리: `domains/team/repository/TeamRepository.java`, `TeamMemberRepository.java`
 - 서비스: `domains/team/service/TeamService.java` — `createTeam`(내부 계약, 컨트롤러 미노출),
   `getMyChatRooms`(채팅방 목록), `getTeamMembers`(대화상대 조회, 팀 소속 검증 포함)
+- **성능 개선 (2026-08-01)**: `getMyChatRooms`가 원래 채팅방 개수(N)만큼
+  팀원 목록/마지막 메시지 조회 쿼리를 반복하고, 팀원의 `member`가 fetch join 안 돼있어 팀원
+  수만큼 추가 lazy load까지 겹치는 N+1이었다. `TeamMemberRepository.findByTeamIdInAndStatus`
+  (배치, member까지 JOIN FETCH)와 `MessageRepository.findLatestMessagePerTeam`(배치, native
+  query)로 쿼리 수를 앱 실행당 상수 개로 줄였다. 안 읽은 메시지 개수만 팀마다 기준 시각
+  (`lastReadAt`)이 달라 배치가 까다로워 그대로 팀 수만큼 남겨뒀다(가벼운 COUNT라 영향은 작음).
+  `findByTeamIdAndStatus`(단건)도 같은 김에 `member` JOIN FETCH를 추가해
+  `TeamProgressService.submitCompletion`의 N+1도 같이 해결됨.
+- **`profileId` 노출 (2026-08-01, Figma 5.1.2.2.3 확인 후 추가)**: 채팅방에서 팀원 프로필로
+  진입하려면(`GET /api/public/profiles/{profileId}` 등 기존 profile 도메인 API) profileId가
+  필요한데 `TeamMemberSummaryResponse`에 없었다. `TeamMemberSummaryResponse.profileId` 추가.
+- **아바타 데이터 연동 (2026-08-01, Figma 5.1 확인 후 추가)**: 채팅방 목록/팀원 목록 화면에
+  캐릭터 아바타가 필요한데, 기존 응답에는 memberId조차 없어서 프론트가 아바타를 그릴 방법이
+  없었다. `character` 도메인의 `CharacterService.findAvatarsByMembers(List<Member>)`(신규,
+  캐릭터 정의/태그/특징 join 없이 `characterType`+`paletteCode`만 가볍게 배치 조회)를 호출해
+  `ChatRoomSummaryResponse.avatars`(방 안 "나 제외 팀원"의 아바타 목록)와
+  `TeamMemberSummaryResponse.avatar`(팀원 개별 아바타, 없으면 null)에 채워 넣는다. 협업 유형
+  검사를 안 한 팀원은 결과에서 빠진다(예외 아님). `SurveySubmissionRepository`/
+  `MemberCharacterRepository`에 `...In` 배치 조회 메서드를 추가해 팀원 수만큼 반복 쿼리하지
+  않도록 함(이번에 방금 고친 N+1을 다시 만들지 않기 위해).
 - 컨트롤러: `GET /api/teams`, `GET /api/teams/{teamId}/members`
 - 테스트: `domains/team/service/TeamServiceTest.java`
 - ⚠️ **임시**: `domains/team/controller/TeamTestController.java` (`POST /api/test/teams`,

@@ -2,7 +2,11 @@ package org.cotato.gongmozip.domains.chat.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.MemberAvatarResponse;
+import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.chat.converter.ChatConverter;
 import org.cotato.gongmozip.domains.chat.dto.request.ChatRequest.SendMessageRequest;
 import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageItemResponse;
@@ -10,6 +14,7 @@ import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageListRe
 import org.cotato.gongmozip.domains.chat.entity.Message;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
+import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
@@ -38,6 +43,7 @@ public class ChatService {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final CharacterService characterService;
 
     @Transactional
     public MessageItemResponse sendMessage(Long teamId, Long senderMemberId, SendMessageRequest request) {
@@ -54,7 +60,15 @@ public class ChatService {
 
         List<Message> latestFirst = messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(
                 teamId, PageRequest.of(0, DEFAULT_MESSAGE_PAGE_SIZE));
-        return ChatConverter.toMessageListResponse(latestFirst);
+        List<Member> senders = latestFirst.stream()
+                .map(Message::getSenderTeamMember)
+                .filter(Objects::nonNull)
+                .map(TeamMember::getMember)
+                .distinct()
+                .toList();
+        Map<Long, MemberAvatarResponse> avatarsByMemberId = characterService.findAvatarsByMembers(senders);
+
+        return ChatConverter.toMessageListResponse(latestFirst, avatarsByMemberId);
     }
 
     @Transactional
@@ -71,16 +85,26 @@ public class ChatService {
         broadcast(team.getTeamId(), saved);
     }
 
-    /** 챗봇 상태머신(ChatbotOrchestrationService)이 대화형 안내 메시지를 남길 때 사용한다. */
+    /**
+     * 챗봇 상태머신(ChatbotOrchestrationService)이 대화형 안내 메시지를 남길 때 사용한다.
+     * {@code Team.chatbotEnabled}가 꺼져있으면(챗봇 삭제) 아무 메시지도 남기지 않는다 — 상태
+     * 전이 자체는 그대로 진행되고, 그 사실을 알리는 챗봇 메시지만 조용히 생략된다.
+     */
     @Transactional
     public void postChatbotMessage(Team team, String content) {
+        if (!team.isChatbotEnabled()) {
+            return;
+        }
         Message saved = messageRepository.save(ChatConverter.toChatbotMessage(team, content));
         broadcast(team.getTeamId(), saved);
     }
 
-    /** 팀장 투표 카드 등 metadata가 필요한 챗봇 카드형 메시지를 남길 때 사용한다. */
+    /** 팀장 투표 카드 등 metadata가 필요한 챗봇 카드형 메시지를 남길 때 사용한다. 동작은 {@link #postChatbotMessage}와 동일. */
     @Transactional
     public void postChatbotCardMessage(Team team, MessageType messageType, String content, String metadata) {
+        if (!team.isChatbotEnabled()) {
+            return;
+        }
         Message saved =
                 messageRepository.save(ChatConverter.toChatbotCardMessage(team, messageType, content, metadata));
         broadcast(team.getTeamId(), saved);
@@ -88,7 +112,14 @@ public class ChatService {
 
     // 저장된 메시지를 구독 중인 클라이언트에게 실시간으로 내려준다.
     private MessageItemResponse broadcast(Long teamId, Message saved) {
-        MessageItemResponse response = ChatConverter.toMessageItemResponse(saved);
+        TeamMember sender = saved.getSenderTeamMember();
+        MemberAvatarResponse avatar = sender != null
+                ? characterService
+                        .findAvatarsByMembers(List.of(sender.getMember()))
+                        .get(sender.getMember().getMemberId())
+                : null;
+
+        MessageItemResponse response = ChatConverter.toMessageItemResponse(saved, avatar);
         messagingTemplate.convertAndSend(TEAM_TOPIC_PREFIX + teamId, response);
         return response;
     }
