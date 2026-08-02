@@ -6,6 +6,7 @@ import org.cotato.gongmozip.domains.matching.dto.MatchingResponse.LeaderCandidat
 import org.cotato.gongmozip.domains.matching.dto.MatchingResponse.TitleDescriptionInfo;
 import org.cotato.gongmozip.domains.matching.entity.LeaderRecommendation;
 import org.cotato.gongmozip.domains.matching.entity.MatchingReason;
+import org.cotato.gongmozip.domains.matching.enums.MatchingAiStatus;
 import org.cotato.gongmozip.domains.matching.repository.LeaderRecommendationRepository;
 import org.cotato.gongmozip.domains.matching.repository.MatchingReasonRepository;
 import org.cotato.gongmozip.domains.member.entity.Member;
@@ -27,6 +28,9 @@ public class MatchingTxService {
         MatchingReason reason = matchingReasonRepository
                 .findById(reasonId)
                 .orElseThrow(() -> new IllegalArgumentException("MatchingReason not found: " + reasonId));
+        if (reason.getStatus() == MatchingAiStatus.PROCESSING || reason.getStatus() == MatchingAiStatus.COMPLETED) {
+            throw new IllegalStateException("MatchingReason is already processing or completed: " + reasonId);
+        }
         reason.startProcessing();
         matchingReasonRepository.saveAndFlush(reason);
     }
@@ -76,6 +80,9 @@ public class MatchingTxService {
         LeaderRecommendation rec = leaderRecommendationRepository
                 .findById(recId)
                 .orElseThrow(() -> new IllegalArgumentException("LeaderRecommendation not found: " + recId));
+        if (rec.getStatus() == MatchingAiStatus.PROCESSING || rec.getStatus() == MatchingAiStatus.COMPLETED) {
+            throw new IllegalStateException("LeaderRecommendation is already processing or completed: " + recId);
+        }
         rec.startProcessing();
         leaderRecommendationRepository.saveAndFlush(rec);
     }

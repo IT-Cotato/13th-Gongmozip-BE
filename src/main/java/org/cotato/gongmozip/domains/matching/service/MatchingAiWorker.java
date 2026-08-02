@@ -40,7 +40,11 @@ public class MatchingAiWorker {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("AI matching reason generation was interrupted", e);
-            matchingTxService.failReason(reasonId, "Interrupted: " + e.getMessage());
+            try {
+                matchingTxService.failReason(reasonId, "Interrupted: " + e.getMessage());
+            } catch (Exception failEx) {
+                log.error("Failed to mark AI matching reason as FAILED for reasonId: {}", reasonId, failEx);
+            }
             return;
         }
 
@@ -70,7 +74,11 @@ public class MatchingAiWorker {
             log.info("Successfully completed AI matching reason generation for reasonId: {}", reasonId);
         } catch (Exception e) {
             log.error("Failed to generate/save AI matching reason for reasonId: {}", reasonId, e);
-            matchingTxService.failReason(reasonId, "Exception: " + e.getMessage());
+            try {
+                matchingTxService.failReason(reasonId, "Exception: " + e.getMessage());
+            } catch (Exception failEx) {
+                log.error("Failed to mark AI matching reason as FAILED for reasonId: {}", reasonId, failEx);
+            }
         }
     }
 
@@ -91,7 +99,11 @@ public class MatchingAiWorker {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("AI leader recommendation generation was interrupted", e);
-            matchingTxService.failLeaderRec(recId, "Interrupted: " + e.getMessage());
+            try {
+                matchingTxService.failLeaderRec(recId, "Interrupted: " + e.getMessage());
+            } catch (Exception failEx) {
+                log.error("Failed to mark AI leader recommendation as FAILED for recId: {}", recId, failEx);
+            }
             return;
         }
 
@@ -104,7 +116,11 @@ public class MatchingAiWorker {
             List<TeamMember> activeMembers =
                     teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
             if (activeMembers.isEmpty()) {
-                matchingTxService.failLeaderRec(recId, "No active members found in team: " + teamId);
+                try {
+                    matchingTxService.failLeaderRec(recId, "No active members found in team: " + teamId);
+                } catch (Exception failEx) {
+                    log.error("Failed to mark AI leader recommendation as FAILED for recId: {}", recId, failEx);
+                }
                 return;
             }
 
@@ -136,7 +152,11 @@ public class MatchingAiWorker {
             log.info("Successfully completed AI leader recommendation for recId: {}", recId);
         } catch (Exception e) {
             log.error("Failed to generate/save AI leader recommendation for recId: {}", recId, e);
-            matchingTxService.failLeaderRec(recId, "Exception: " + e.getMessage());
+            try {
+                matchingTxService.failLeaderRec(recId, "Exception: " + e.getMessage());
+            } catch (Exception failEx) {
+                log.error("Failed to mark AI leader recommendation as FAILED for recId: {}", recId, failEx);
+            }
         }
     }
 }
