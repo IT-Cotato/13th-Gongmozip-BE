@@ -302,7 +302,11 @@ class TeamServiceTest {
     @Test
     void 대화상대를_조회하면_챗봇_활성화_여부와_함께_팀원_목록을_반환한다() {
         // given
-        Team team = Team.builder().teamId(100L).chatbotEnabled(true).build();
+        Team team = Team.builder()
+                .teamId(100L)
+                .chatbotEnabled(true)
+                .status(TeamStatus.IN_PROGRESS)
+                .build();
         TeamMember me = teamMemberOf(team, 1L, "나");
         TeamMember other = teamMemberOf(team, 2L, "김민정");
 
@@ -318,6 +322,7 @@ class TeamServiceTest {
 
         // then
         assertThat(response.chatbotEnabled()).isTrue();
+        assertThat(response.status()).isEqualTo("IN_PROGRESS");
         assertThat(response.participantCount()).isEqualTo(2);
         assertThat(response.members()).anySatisfy(m -> assertThat(m.isMe()).isTrue());
         assertThat(response.members())
@@ -330,7 +335,11 @@ class TeamServiceTest {
     @Test
     void 대화상대_조회_시_캐릭터가_있는_팀원은_avatar가_채워진다() {
         // given
-        Team team = Team.builder().teamId(100L).chatbotEnabled(true).build();
+        Team team = Team.builder()
+                .teamId(100L)
+                .chatbotEnabled(true)
+                .status(TeamStatus.IN_PROGRESS)
+                .build();
         TeamMember me = teamMemberOf(team, 1L, "나");
         TeamMember other = teamMemberOf(team, 2L, "김민정");
         MemberAvatarResponse avatar =

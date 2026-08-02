@@ -48,9 +48,12 @@ unique(team_id, reviewer_team_member_id, reviewee_team_member_id) — 같은 팀
 - 팀/멤버십 관련 예외는 기존 관례대로 별도 `ReviewErrorCode`를 두지 않고 `TeamErrorCode`
   (`TEAM_NOT_FOUND`, `NOT_TEAM_MEMBER`, `INVALID_TEAM_STATUS`)를 재사용. `ReviewErrorCode`는
   리뷰 도메인 고유 규칙(본인 리뷰 금지, 중복 리뷰 금지)만 갖는다.
-- 리뷰 조회(읽기) API는 만들지 않았다 — `CollaborationPointHistory`와 동일하게 이 프로젝트의
-  기존 관례가 "쓰기 전용 이력성 도메인은 조회 API를 굳이 만들지 않는다"였고, 요구사항에도
-  리뷰 목록 조회 화면이 명시되지 않아 범위를 넓히지 않았다.
+- ~~리뷰 조회(읽기) API는 만들지 않았다~~ → 2026-08-02 정정. "쓰기 전용 이력성 도메인은 조회
+  API를 굳이 만들지 않는다"는 기존 관례를 따랐던 결정이었는데, 실제 Figma 팀원 리뷰 팝업
+  화면(5.1.3.6.1~6.5)을 확인해보니 이미 리뷰를 쓴 팀원은 회색으로 비활성화해서 보여줘야
+  했다 — 조회 API 없이는 프론트가 이걸 판단할 방법이 없어서(중복 제출을 시도해봐야 에러로만
+  알 수 있음) `GET /api/teams/{teamId}/reviews/targets`를 추가했다. 아래 "리뷰 대상 목록 조회"
+  참고.
 
 ## 구현 현황 (Phase 9 완료)
 
@@ -68,6 +71,13 @@ unique(team_id, reviewer_team_member_id, reviewee_team_member_id) — 같은 팀
   있었다. `ReviewService.recheckAfterMemberLeft(Team)`를 추가해 `TeamService.leaveTeam`이
   나가는 시점의 `Team.status == SUBMITTED`일 때 호출한다. 자세한 내용은
   [01-team.md](./01-team.md) 참고.
+- **리뷰 대상 목록 조회 (2026-08-02, Figma 5.1.3.6.1~6.5 확인 후 추가)**: `GET
+  /api/teams/{teamId}/reviews/targets` — 나를 제외한 활성 팀원 목록을, 내가 이미 리뷰를 쓴
+  대상은 `alreadyReviewed=true`로 표시해서 반환한다(`ReviewResponse.ReviewTargetResponse`).
+  팀/채팅 화면과 동일하게 아바타(`CharacterService.findAvatarsByMembers`)도 함께 채워준다.
+  `ReviewRepository.findByTeam_TeamIdAndReviewer_TeamMemberId`(리뷰어 기준 작성 목록) 추가.
+  팀 상태로 제한하지 않는다(아직 SUBMITTED 전이라 대상이 없거나, 이미 COMPLETED로 넘어가
+  과거 이력을 보는 경우에도 조회 자체는 막을 이유가 없어서).
 
 ## 미정 / 추후 확인 필요
 

@@ -1,5 +1,6 @@
 package org.cotato.gongmozip.domains.review.repository;
 
+import java.util.List;
 import org.cotato.gongmozip.domains.review.entity.Review;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,4 +14,6 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
             Long teamId, TeamMemberStatus reviewerStatus, TeamMemberStatus revieweeStatus);
 
     long countByTeam_TeamIdAndReviewer_TeamMemberId(Long teamId, Long reviewerTeamMemberId);
+
+    List<Review> findByTeam_TeamIdAndReviewer_TeamMemberId(Long teamId, Long reviewerTeamMemberId);
 }

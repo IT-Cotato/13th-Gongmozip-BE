@@ -1,13 +1,20 @@
 package org.cotato.gongmozip.domains.review.service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.MemberAvatarResponse;
+import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
 import org.cotato.gongmozip.domains.collaboration.enums.CollaborationPointReason;
 import org.cotato.gongmozip.domains.collaboration.service.CollaborationPointService;
 import org.cotato.gongmozip.domains.review.converter.ReviewConverter;
 import org.cotato.gongmozip.domains.review.dto.request.ReviewRequest.WriteReviewRequest;
 import org.cotato.gongmozip.domains.review.dto.response.ReviewResponse.ReviewResultResponse;
+import org.cotato.gongmozip.domains.review.dto.response.ReviewResponse.ReviewTargetListResponse;
+import org.cotato.gongmozip.domains.review.dto.response.ReviewResponse.ReviewTargetResponse;
 import org.cotato.gongmozip.domains.review.entity.Review;
 import org.cotato.gongmozip.domains.review.exception.ReviewException;
 import org.cotato.gongmozip.domains.review.exception.codes.ReviewErrorCode;
@@ -38,6 +45,7 @@ public class ReviewService {
     private final TeamMemberRepository teamMemberRepository;
     private final CollaborationPointService collaborationPointService;
     private final ChatbotOrchestrationService chatbotOrchestrationService;
+    private final CharacterService characterService;
 
     @Transactional
     public ReviewResultResponse writeReview(Long teamId, Long reviewerMemberId, WriteReviewRequest request) {
@@ -60,6 +68,37 @@ public class ReviewService {
         completeReviewIfAllDone(team, activeMembers);
 
         return ReviewConverter.toReviewResultResponse(saved);
+    }
+
+    /**
+     * 리뷰할 팀원 목록을 조회한다. 활성 팀원 중 나를 제외한 전원을 반환하며, 이미 리뷰를 쓴
+     * 대상은 {@code alreadyReviewed=true}로 표시한다 — 프론트가 리뷰 대상 선택 화면에서 이미
+     * 작성한 팀원을 비활성화해서 보여줄 수 있도록 하기 위함(기존에는 조회 API가 없어 프론트가
+     * 중복 제출을 시도해봐야만 알 수 있었음).
+     */
+    public ReviewTargetListResponse getReviewTargets(Long teamId, Long reviewerMemberId) {
+        teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        TeamMember reviewer = requireActiveMember(teamId, reviewerMemberId);
+
+        List<TeamMember> targets = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE).stream()
+                .filter(teamMember -> !teamMember.getTeamMemberId().equals(reviewer.getTeamMemberId()))
+                .toList();
+
+        Set<Long> reviewedRevieweeIds =
+                reviewRepository.findByTeam_TeamIdAndReviewer_TeamMemberId(teamId, reviewer.getTeamMemberId()).stream()
+                        .map(review -> review.getReviewee().getTeamMemberId())
+                        .collect(Collectors.toSet());
+        Map<Long, MemberAvatarResponse> avatarsByMemberId = characterService.findAvatarsByMembers(
+                targets.stream().map(TeamMember::getMember).toList());
+
+        List<ReviewTargetResponse> responses = targets.stream()
+                .map(target -> ReviewConverter.toReviewTargetResponse(
+                        target,
+                        reviewedRevieweeIds.contains(target.getTeamMemberId()),
+                        avatarsByMemberId.get(target.getMember().getMemberId())))
+                .toList();
+
+        return new ReviewTargetListResponse(responses);
     }
 
     /**

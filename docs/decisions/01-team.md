@@ -12,7 +12,7 @@
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | teamId | PK | |
-| status | `TeamStatus` | 챗봇 진행 단계. 아래 상태머신 참고 |
+| status | `TeamStatus` | 챗봇 진행 단계. 아래 상태머신 참고. `GET /api/teams/{teamId}/members`(`TeamMembersResponse.status`)로 노출 (2026-08-02, PR #56 리뷰 반영 — 이전엔 어디에도 안 나가서 프론트가 "지금 SUBMITTED라 팀원 리뷰 팝업을 띄워야 하는지" 등을 판단할 방법이 없었음) |
 | preferredCategory | `InterestCategory` | 매칭 시 팀 대표 카테고리 (공모전 추천 AI 입력값) |
 | leaderSelectionMode | `LeaderSelectionMode` | 팀 생성 시점에 1회 계산 후 고정. [02](./02-leader-election.md) 참고 |
 | contest | `Contest` FK, nullable | 투표로 확정되면 세팅 |
@@ -121,6 +121,14 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
   것이므로 중복 개표 위험이 없다. GREETING/팀장 여부 투표 단계는 이번 수정 범위에 포함하지
   않음(리뷰에서 지목된 범위가 "투표/리뷰"였고, GREETING은 별도로 추가한 2시간 타임아웃
   스케줄러가 최종 안전망 역할을 함).
+- **`Team.status` 노출 (2026-08-02, Figma 5.1.3.6/팀원 리뷰 팝업 확인 후 추가)**: 공모전
+  제출 완료 시(`TeamProgressService.submitCompletion`) 활성 팀원 전원에게 협업거리 포인트를
+  자동 지급하고 완료 시스템 메시지를 브로드캐스트하는 것까지는 이미 구현돼 있었지만, 정작
+  `Team.status` 자체는 어떤 응답에도 노출되지 않아 프론트가 "지금 SUBMITTED니까 팀원 리뷰
+  팝업을 띄워야 한다"는 걸 판단할 방법이 없었다(채팅 메시지의 `SYSTEM_NOTICE` 타입은 나가기/
+  챗봇 토글 메시지와 구분이 안 되고, 완료 시점에 접속 안 해있던 팀원은 WebSocket 브로드캐스트도
+  놓침). `TeamMembersResponse.status`(`Team.status.name()`)를 추가해 `GET
+  /api/teams/{teamId}/members` 응답에 포함시켰다.
 - ⚠️ **임시**: `domains/team/controller/TeamTestController.java` (`POST /api/test/teams`,
   `@Profile("local")`) — 매칭 연동 전까지 수동 테스트(WebSocket 채팅 등)를 위해 `createTeam`을
   직접 호출할 수 있게 열어둔 개발용 엔드포인트. `local` 프로필을 명시적으로 켰을 때만 활성화되는

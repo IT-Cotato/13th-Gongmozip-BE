@@ -216,6 +216,6 @@ public class TeamService {
                         avatarsByMemberId.get(teamMember.getMember().getMemberId())))
                 .toList();
 
-        return TeamConverter.toTeamMembersResponse(memberResponses, team.isChatbotEnabled());
+        return TeamConverter.toTeamMembersResponse(memberResponses, team.isChatbotEnabled(), team.getStatus());
     }
 }

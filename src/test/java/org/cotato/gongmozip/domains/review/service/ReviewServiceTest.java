@@ -8,7 +8,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.MemberAvatarResponse;
+import org.cotato.gongmozip.domains.character.enums.CharacterPalette;
+import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
 import org.cotato.gongmozip.domains.collaboration.enums.CollaborationPointReason;
 import org.cotato.gongmozip.domains.collaboration.service.CollaborationPointService;
@@ -16,10 +20,12 @@ import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.review.dto.request.ReviewRequest.WriteReviewRequest;
 import org.cotato.gongmozip.domains.review.dto.response.ReviewResponse.ReviewResultResponse;
+import org.cotato.gongmozip.domains.review.dto.response.ReviewResponse.ReviewTargetListResponse;
 import org.cotato.gongmozip.domains.review.entity.Review;
 import org.cotato.gongmozip.domains.review.exception.ReviewException;
 import org.cotato.gongmozip.domains.review.exception.codes.ReviewErrorCode;
 import org.cotato.gongmozip.domains.review.repository.ReviewRepository;
+import org.cotato.gongmozip.domains.survey.enums.CharacterType;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
@@ -52,6 +58,9 @@ class ReviewServiceTest {
 
     @Mock
     private ChatbotOrchestrationService chatbotOrchestrationService;
+
+    @Mock
+    private CharacterService characterService;
 
     @InjectMocks
     private ReviewService reviewService;
@@ -227,6 +236,64 @@ class ReviewServiceTest {
 
         // then
         verify(chatbotOrchestrationService).completeReview(team);
+    }
+
+    @DisplayName("리뷰 대상 목록을 조회하면 나를 제외한 활성 팀원이 반환되고, 이미 리뷰한 대상은 표시된다.")
+    @Test
+    void 리뷰_대상_목록을_조회하면_나를_제외한_활성_팀원이_반환되고_이미_리뷰한_대상은_표시된다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.SUBMITTED).build();
+        TeamMember reviewer = teamMemberOf(team, 10L, "김철수");
+        TeamMember alreadyReviewed = teamMemberOf(team, 20L, "이해은");
+        TeamMember notYetReviewed = teamMemberOf(team, 30L, "박준수");
+        MemberAvatarResponse avatar =
+                new MemberAvatarResponse(30L, CharacterType.LEAD_RUNNER, CharacterPalette.DEFAULT, null, null);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(reviewer));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(reviewer, alreadyReviewed, notYetReviewed));
+        given(reviewRepository.findByTeam_TeamIdAndReviewer_TeamMemberId(1L, reviewer.getTeamMemberId()))
+                .willReturn(List.of(Review.builder()
+                        .team(team)
+                        .reviewer(reviewer)
+                        .reviewee(alreadyReviewed)
+                        .content("잘했어요")
+                        .build()));
+        given(characterService.findAvatarsByMembers(List.of(alreadyReviewed.getMember(), notYetReviewed.getMember())))
+                .willReturn(Map.of(30L, avatar));
+
+        // when
+        ReviewTargetListResponse response = reviewService.getReviewTargets(1L, 10L);
+
+        // then
+        assertThat(response.targets()).hasSize(2);
+        assertThat(response.targets())
+                .filteredOn(t -> t.teamMemberId().equals(20L))
+                .singleElement()
+                .satisfies(t -> {
+                    assertThat(t.alreadyReviewed()).isTrue();
+                    assertThat(t.avatar()).isNull();
+                });
+        assertThat(response.targets())
+                .filteredOn(t -> t.teamMemberId().equals(30L))
+                .singleElement()
+                .satisfies(t -> {
+                    assertThat(t.alreadyReviewed()).isFalse();
+                    assertThat(t.avatar()).isEqualTo(avatar);
+                });
+    }
+
+    @DisplayName("존재하지 않는 팀의 리뷰 대상을 조회하면 예외가 발생한다.")
+    @Test
+    void 존재하지_않는_팀의_리뷰_대상을_조회하면_예외가_발생한다() {
+        // given
+        given(teamRepository.findById(999L)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> reviewService.getReviewTargets(999L, 10L))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.TEAM_NOT_FOUND);
     }
 
     private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {

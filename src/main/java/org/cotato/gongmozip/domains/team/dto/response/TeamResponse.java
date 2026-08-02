@@ -29,5 +29,5 @@ public final class TeamResponse {
             MemberAvatarResponse avatar) {}
 
     public record TeamMembersResponse(
-            List<TeamMemberSummaryResponse> members, boolean chatbotEnabled, int participantCount) {}
+            List<TeamMemberSummaryResponse> members, boolean chatbotEnabled, int participantCount, String status) {}
 }
