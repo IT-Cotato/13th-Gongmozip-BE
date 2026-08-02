@@ -1,6 +1,5 @@
 package org.cotato.gongmozip.domains.matching.dto.response;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -55,8 +54,7 @@ public class MatchingApplicationResponse {
             LocalDateTime applicationDeadlineAt) {}
 
     // 오늘 신청 내역과 현재 시각을 기준으로 가능한 철회 방식을 함께 반환
-    // 신청하지 않은 경우 null 필드는 JSON 응답에서 제외
-    @JsonInclude(JsonInclude.Include.NON_NULL)
+    // 신청하지 않은 경우 신청 정보 필드를 null로 반환
     public record TodayApplicationResponse(
             // 오늘 신청 이력이 있으면 true
             boolean appliedToday,

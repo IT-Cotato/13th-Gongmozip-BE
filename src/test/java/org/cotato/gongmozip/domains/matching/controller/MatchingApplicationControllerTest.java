@@ -1,5 +1,6 @@
 package org.cotato.gongmozip.domains.matching.controller;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -16,6 +17,7 @@ import java.util.List;
 import org.cotato.gongmozip.domains.matching.dto.request.MatchingApplicationRequest.ApplyRequest;
 import org.cotato.gongmozip.domains.matching.dto.response.MatchingApplicationResponse.ApplicationResponse;
 import org.cotato.gongmozip.domains.matching.dto.response.MatchingApplicationResponse.EligibilityResponse;
+import org.cotato.gongmozip.domains.matching.dto.response.MatchingApplicationResponse.TodayApplicationResponse;
 import org.cotato.gongmozip.domains.matching.dto.response.MatchingApplicationResponse.WithdrawalResponse;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.matching.enums.WithdrawalType;
@@ -68,6 +70,27 @@ class MatchingApplicationControllerTest {
                 .andExpect(jsonPath("$.code").value("MATCHING_200_1"))
                 .andExpect(jsonPath("$.data.eligible").value(true))
                 .andExpect(jsonPath("$.data.participantCount").value(12));
+    }
+
+    @DisplayName("오늘 신청이 없으면 신청 정보 필드를 null로 포함한다.")
+    @Test
+    void getTodayApplicationReturnsNullFieldsWhenNotApplied() throws Exception {
+        given(matchingApplicationService.getTodayApplication(1L))
+                .willReturn(
+                        new TodayApplicationResponse(false, null, "NONE", null, null, null, null, null, null, null));
+
+        mockMvc.perform(get("/api/matching/applications/me/today").with(user(userDetails)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.appliedToday").value(false))
+                .andExpect(jsonPath("$.data.status").value("NONE"))
+                .andExpect(jsonPath("$.data.applicationId").value(nullValue()))
+                .andExpect(jsonPath("$.data.applicationDate").value(nullValue()))
+                .andExpect(jsonPath("$.data.contestCategory").value(nullValue()))
+                .andExpect(jsonPath("$.data.leaderPreference").value(nullValue()))
+                .andExpect(jsonPath("$.data.skillScore").value(nullValue()))
+                .andExpect(jsonPath("$.data.skillGroup").value(nullValue()))
+                .andExpect(jsonPath("$.data.collaborationDistance").value(nullValue()))
+                .andExpect(jsonPath("$.data.withdrawal").value(nullValue()));
     }
 
     @DisplayName("프로필, 카테고리, 팀장 선호, 주의사항을 제출하면 매칭풀에 입장한다.")
