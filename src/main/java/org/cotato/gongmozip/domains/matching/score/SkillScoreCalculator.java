@@ -2,6 +2,8 @@ package org.cotato.gongmozip.domains.matching.score;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import org.cotato.gongmozip.domains.matching.exception.MatchingException;
+import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
 import org.cotato.gongmozip.domains.matching.vo.SkillScoreSnapshot;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
@@ -64,8 +66,14 @@ public class SkillScoreCalculator {
 
     // 학점 원점수: 현재 학점 / 학점 만점 × 100
     private BigDecimal calculateGpaScore(Double gpa, Double gpaScale) {
-        if (gpa == null || gpaScale == null || gpaScale <= 0 || gpa < 0 || gpa > gpaScale) {
-            throw new IllegalArgumentException("Invalid GPA values");
+        if (gpa == null
+                || gpaScale == null
+                || !Double.isFinite(gpa)
+                || !Double.isFinite(gpaScale)
+                || gpaScale <= 0
+                || gpa < 0
+                || gpa > gpaScale) {
+            throw new MatchingException(MatchingErrorCode.INVALID_PROFILE_GPA);
         }
         return BigDecimal.valueOf(gpa)
                 .divide(BigDecimal.valueOf(gpaScale), 6, RoundingMode.HALF_UP)

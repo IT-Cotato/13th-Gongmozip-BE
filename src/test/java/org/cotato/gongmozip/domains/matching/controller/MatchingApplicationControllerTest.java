@@ -19,6 +19,8 @@ import org.cotato.gongmozip.domains.matching.dto.response.MatchingApplicationRes
 import org.cotato.gongmozip.domains.matching.dto.response.MatchingApplicationResponse.WithdrawalResponse;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.matching.enums.WithdrawalType;
+import org.cotato.gongmozip.domains.matching.exception.MatchingException;
+import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
 import org.cotato.gongmozip.domains.matching.service.MatchingApplicationService;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
@@ -105,6 +107,23 @@ class MatchingApplicationControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("COMMON_400_1"));
+    }
+
+    @DisplayName("프로필 학점이 잘못되면 구조화된 매칭 400 응답을 반환한다.")
+    @Test
+    void applyRejectsInvalidProfileGpa() throws Exception {
+        ApplyRequest request = new ApplyRequest(10L, InterestCategory.IT_AI_TECH, LeaderPreference.NEUTRAL, true);
+        given(matchingApplicationService.apply(eq(1L), any(ApplyRequest.class)))
+                .willThrow(new MatchingException(MatchingErrorCode.INVALID_PROFILE_GPA));
+
+        mockMvc.perform(post("/api/matching/applications")
+                        .with(user(userDetails))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.code").value("MATCHING_400_5"))
+                .andExpect(jsonPath("$.message").value("프로필의 학점 입력값이 올바르지 않습니다."));
     }
 
     @DisplayName("프론트 분기 없이 하나의 철회 API가 백엔드 판정 결과를 반환한다.")

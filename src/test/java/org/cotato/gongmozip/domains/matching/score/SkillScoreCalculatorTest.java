@@ -1,8 +1,12 @@
 package org.cotato.gongmozip.domains.matching.score;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+import java.util.List;
+import org.cotato.gongmozip.domains.matching.exception.MatchingException;
+import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
 import org.cotato.gongmozip.domains.matching.vo.SkillScoreSnapshot;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.junit.jupiter.api.DisplayName;
@@ -67,5 +71,21 @@ class SkillScoreCalculatorTest {
         assertThat(result.awardScore()).isEqualByComparingTo("100.00");
         assertThat(result.certificationScore()).isEqualByComparingTo("100.00");
         assertThat(result.totalScore()).isEqualByComparingTo("20.00");
+    }
+
+    @DisplayName("잘못된 학점 값은 매칭 도메인의 400 예외로 변환한다.")
+    @Test
+    void 잘못된_학점은_매칭_예외로_변환한다() {
+        List<Profile> invalidProfiles = List.of(
+                Profile.builder().gpa(null).gpaScale(4.5).build(),
+                Profile.builder().gpa(4.0).gpaScale(0.0).build(),
+                Profile.builder().gpa(4.6).gpaScale(4.5).build(),
+                Profile.builder().gpa(Double.NaN).gpaScale(4.5).build());
+
+        for (Profile profile : invalidProfiles) {
+            assertThatThrownBy(() -> calculator.calculate(profile, BigDecimal.ZERO, 0, 0, 0, false))
+                    .isInstanceOf(MatchingException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.INVALID_PROFILE_GPA);
+        }
     }
 }
