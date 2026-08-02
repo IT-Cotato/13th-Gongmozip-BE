@@ -45,5 +45,6 @@
 | 프로젝트 완주 (팀장) | +30m |
 | 팀원 리뷰 작성 | +10m (보류 기능이라 연결은 나중) |
 
-⚠️ `PersonalityProfile.collaborationDistance`(매칭 희망 거리, 설문 응답값)와는 다른 개념.
+매칭 신청 시 현재 `Member.collaborationPoint`를 `MatchingApplication.collaborationDistance`에
+스냅샷으로 저장한다. 신청 후 회원의 협업거리가 변해도 과거 신청 값은 바뀌지 않는다.
 자세한 내용은 [06-collaboration-point.md](./decisions/06-collaboration-point.md) 참고.

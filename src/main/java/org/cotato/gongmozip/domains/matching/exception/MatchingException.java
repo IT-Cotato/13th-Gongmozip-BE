@@ -1,0 +1,11 @@
+package org.cotato.gongmozip.domains.matching.exception;
+
+import org.cotato.gongmozip.global.exception.BaseErrorCode;
+import org.cotato.gongmozip.global.exception.CustomException;
+
+public class MatchingException extends CustomException {
+
+    public MatchingException(BaseErrorCode errorCode) {
+        super(errorCode);
+    }
+}
