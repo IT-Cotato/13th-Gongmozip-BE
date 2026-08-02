@@ -20,6 +20,7 @@ import org.cotato.gongmozip.domains.matching.dto.request.MatchingApplicationRequ
 import org.cotato.gongmozip.domains.matching.entity.MatchingApplication;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.matching.enums.MatchingApplicationStatus;
+import org.cotato.gongmozip.domains.matching.enums.MatchingIneligibilityReason;
 import org.cotato.gongmozip.domains.matching.enums.WithdrawalType;
 import org.cotato.gongmozip.domains.matching.exception.MatchingException;
 import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
@@ -103,6 +104,79 @@ class MatchingApplicationServiceTest {
                 projectScoreProvider,
                 new SkillScoreCalculator(),
                 matchingTimePolicy);
+    }
+
+    @DisplayName("신청할 수 없는 모든 사유를 누락 없이 함께 반환한다.")
+    @Test
+    void getEligibilityReturnsAllIneligibilityReasons() {
+        LocalDateTime blockedUntil = NOW.plusDays(1);
+        Member member =
+                Member.builder().memberId(1L).matchingBlockedUntil(blockedUntil).build();
+        given(memberRepository.findById(member.getMemberId())).willReturn(Optional.of(member));
+        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.now()).willReturn(NOW);
+        given(profileRepository.countByMember(member)).willReturn(0);
+        given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.empty());
+        given(matchingApplicationRepository.existsByMemberAndApplicationDate(member, TODAY))
+                .willReturn(true);
+        given(matchingTimePolicy.isApplicationOpen()).willReturn(false);
+        given(matchingApplicationRepository.countByApplicationDateAndStatusIn(any(LocalDate.class), any()))
+                .willReturn(12L);
+        given(matchingTimePolicy.applicationDeadline(TODAY)).willReturn(TODAY.atTime(14, 0));
+
+        var response = matchingApplicationService.getEligibility(member.getMemberId());
+
+        assertThat(response.eligible()).isFalse();
+        assertThat(response.reasons())
+                .containsExactly(
+                        MatchingIneligibilityReason.PROFILE_REQUIRED,
+                        MatchingIneligibilityReason.SURVEY_REQUIRED,
+                        MatchingIneligibilityReason.APPLICATION_DEADLINE_PASSED,
+                        MatchingIneligibilityReason.ALREADY_APPLIED_TODAY,
+                        MatchingIneligibilityReason.MATCHING_RESTRICTED);
+        assertThat(response.hasProfile()).isFalse();
+        assertThat(response.surveyCompleted()).isFalse();
+        assertThat(response.appliedToday()).isTrue();
+        assertThat(response.matchingBlockedUntil()).isEqualTo(blockedUntil);
+        assertThat(response.participantCount()).isEqualTo(12);
+    }
+
+    @DisplayName("오늘 신청이 없으면 NONE 상태의 빈 응답을 반환한다.")
+    @Test
+    void getTodayApplicationReturnsEmptyResponse() {
+        Member member = Member.builder().memberId(1L).build();
+        given(memberRepository.findById(member.getMemberId())).willReturn(Optional.of(member));
+        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingApplicationRepository.findByMemberAndApplicationDate(member, TODAY))
+                .willReturn(Optional.empty());
+
+        var response = matchingApplicationService.getTodayApplication(member.getMemberId());
+
+        assertThat(response.appliedToday()).isFalse();
+        assertThat(response.applicationId()).isNull();
+        assertThat(response.status()).isEqualTo("NONE");
+        assertThat(response.withdrawal()).isNull();
+    }
+
+    @DisplayName("철회할 수 없는 신청 상태는 철회 불가 정보로 반환한다.")
+    @Test
+    void getTodayApplicationReturnsUnavailableWithdrawalForNonWithdrawableStatus() {
+        Member member = Member.builder().memberId(1L).build();
+        MatchingApplication application = applicationWithStatus(100L, member, MatchingApplicationStatus.MATCHED);
+        given(memberRepository.findById(member.getMemberId())).willReturn(Optional.of(member));
+        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingApplicationRepository.findByMemberAndApplicationDate(member, TODAY))
+                .willReturn(Optional.of(application));
+
+        var response = matchingApplicationService.getTodayApplication(member.getMemberId());
+
+        assertThat(response.appliedToday()).isTrue();
+        assertThat(response.status()).isEqualTo("MATCHED");
+        assertThat(response.withdrawal().withdrawable()).isFalse();
+        assertThat(response.withdrawal().type()).isNull();
+        assertThat(response.withdrawal().expectedPenalty()).isZero();
+        assertThat(response.withdrawal().deadlineAt()).isNull();
+        verify(matchingTimePolicy, never()).resolveWithdrawalType(any(LocalDate.class));
     }
 
     @DisplayName("신청할 때 역량과 설문 및 협업거리를 신청 엔티티에 스냅샷으로 저장한다.")
@@ -189,6 +263,25 @@ class MatchingApplicationServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.PROFILE_REQUIRED);
     }
 
+    @DisplayName("매칭 참여 제한 기간에는 신청할 수 없다.")
+    @Test
+    void restrictedMemberCannotApply() {
+        Member member = Member.builder()
+                .memberId(1L)
+                .matchingBlockedUntil(NOW.plusHours(1))
+                .build();
+        ApplyRequest request = new ApplyRequest(10L, InterestCategory.IT_AI_TECH, LeaderPreference.NEUTRAL, true);
+        given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
+        given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
+        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.now()).willReturn(NOW);
+
+        assertThatThrownBy(() -> matchingApplicationService.apply(member.getMemberId(), request))
+                .isInstanceOf(MatchingException.class)
+                .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.MATCHING_RESTRICTED);
+        verify(matchingApplicationRepository, never()).existsByMemberAndApplicationDate(any(), any());
+    }
+
     @DisplayName("14시 전 철회는 무료 취소로 처리한다.")
     @Test
     void withdrawBeforeDeadlineIsFreeCancel() {
@@ -242,6 +335,21 @@ class MatchingApplicationServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.APPLICATION_NOT_FOUND);
     }
 
+    @DisplayName("철회할 수 없는 신청 상태는 거절한다.")
+    @Test
+    void withdrawRejectsInvalidApplicationStatus() {
+        Member member = Member.builder().memberId(1L).build();
+        MatchingApplication application = applicationWithStatus(100L, member, MatchingApplicationStatus.MATCHED);
+        given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
+        given(matchingApplicationRepository.findByIdAndMemberIdWithLock(100L, member.getMemberId()))
+                .willReturn(Optional.of(application));
+
+        assertThatThrownBy(() -> matchingApplicationService.withdraw(member.getMemberId(), 100L))
+                .isInstanceOf(MatchingException.class)
+                .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.INVALID_APPLICATION_STATUS);
+        verify(matchingTimePolicy, never()).now();
+    }
+
     private SurveySubmission submittedSurvey(Member member) {
         return SurveySubmission.builder()
                 .member(member)
@@ -263,11 +371,21 @@ class MatchingApplicationServiceTest {
     }
 
     private MatchingApplication waitingApplication(Long applicationId, Member member) {
+        return applicationWithStatus(applicationId, member, MatchingApplicationStatus.WAITING);
+    }
+
+    private MatchingApplication applicationWithStatus(
+            Long applicationId, Member member, MatchingApplicationStatus status) {
         return MatchingApplication.builder()
                 .matchingApplicationId(applicationId)
                 .member(member)
                 .applicationDate(TODAY)
-                .status(MatchingApplicationStatus.WAITING)
+                .status(status)
+                .contestCategory(InterestCategory.IT_AI_TECH)
+                .leaderPreference(LeaderPreference.NEUTRAL)
+                .skillScore(new BigDecimal("50.00"))
+                .skillGroup(2)
+                .collaborationDistance(100)
                 .build();
     }
 }
