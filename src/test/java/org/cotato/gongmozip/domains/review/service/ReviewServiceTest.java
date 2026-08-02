@@ -134,9 +134,9 @@ class ReviewServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", ReviewErrorCode.ALREADY_REVIEWED);
     }
 
-    @DisplayName("정상적으로 리뷰를 작성하면 협업거리 포인트가 적립된다. (전원 완료 전이면 COMPLETED로 전이하지 않는다)")
+    @DisplayName("리뷰어가 아직 나머지 팀원을 다 리뷰하지 않았으면 포인트가 적립되지 않는다. (전원 완료 전이면 COMPLETED로 전이하지 않는다)")
     @Test
-    void 정상적으로_리뷰를_작성하면_협업거리_포인트가_적립된다() {
+    void 리뷰어가_아직_나머지_팀원을_다_리뷰하지_않았으면_포인트가_적립되지_않는다() {
         // given
         Team team = Team.builder().teamId(1L).status(TeamStatus.SUBMITTED).build();
         TeamMember reviewer = teamMemberOf(team, 10L, "김철수");
@@ -151,6 +151,9 @@ class ReviewServiceTest {
         given(reviewRepository.save(any(Review.class))).willAnswer(inv -> inv.getArgument(0));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(reviewer, reviewee, other));
+        // 활성 팀원이 3명이라 reviewer는 총 2건을 써야 하는데, 지금까지 이 1건뿐이다.
+        given(reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberId(1L, reviewer.getTeamMemberId()))
+                .willReturn(1L);
         given(reviewRepository.countByTeam_TeamIdAndReviewer_StatusAndReviewee_Status(
                         1L, TeamMemberStatus.ACTIVE, TeamMemberStatus.ACTIVE))
                 .willReturn(1L);
@@ -161,9 +164,40 @@ class ReviewServiceTest {
         // then
         assertThat(response.revieweeTeamMemberId()).isEqualTo(20L);
         assertThat(response.content()).isEqualTo("잘했어요");
+        verify(collaborationPointService, never()).awardPoint(any(), any(), any());
+        verify(chatbotOrchestrationService, never()).completeReview(any());
+    }
+
+    @DisplayName("리뷰어가 나머지 팀원 전체에 대한 리뷰를 방금 마치면 협업거리 포인트가 1회 적립된다.")
+    @Test
+    void 리뷰어가_나머지_팀원_전체에_대한_리뷰를_방금_마치면_협업거리_포인트가_1회_적립된다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.SUBMITTED).build();
+        TeamMember reviewer = teamMemberOf(team, 10L, "김철수");
+        TeamMember reviewee = teamMemberOf(team, 20L, "이해은");
+        TeamMember other = teamMemberOf(team, 30L, "박준수");
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(reviewer));
+        given(teamMemberRepository.findById(20L)).willReturn(Optional.of(reviewee));
+        given(reviewRepository.existsByTeam_TeamIdAndReviewer_TeamMemberIdAndReviewee_TeamMemberId(1L, 10L, 20L))
+                .willReturn(false);
+        given(reviewRepository.save(any(Review.class))).willAnswer(inv -> inv.getArgument(0));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(reviewer, reviewee, other));
+        // 활성 팀원이 3명이라 reviewer는 총 2건을 써야 하는데, 이 리뷰가 그 2번째(마지막)다.
+        given(reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberId(1L, reviewer.getTeamMemberId()))
+                .willReturn(2L);
+        given(reviewRepository.countByTeam_TeamIdAndReviewer_StatusAndReviewee_Status(
+                        1L, TeamMemberStatus.ACTIVE, TeamMemberStatus.ACTIVE))
+                .willReturn(2L);
+
+        // when
+        reviewService.writeReview(1L, 10L, new WriteReviewRequest(20L, "잘했어요"));
+
+        // then
         verify(collaborationPointService)
                 .awardPoint(reviewer.getMember(), team, CollaborationPointReason.REVIEW_WRITTEN);
-        verify(chatbotOrchestrationService, never()).completeReview(any());
     }
 
     @DisplayName("활성 팀원 전원이 서로를 다 리뷰하면 팀이 COMPLETED로 전이된다.")
@@ -182,6 +216,8 @@ class ReviewServiceTest {
         given(reviewRepository.save(any(Review.class))).willAnswer(inv -> inv.getArgument(0));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(reviewer, reviewee));
+        given(reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberId(1L, reviewer.getTeamMemberId()))
+                .willReturn(1L);
         given(reviewRepository.countByTeam_TeamIdAndReviewer_StatusAndReviewee_Status(
                         1L, TeamMemberStatus.ACTIVE, TeamMemberStatus.ACTIVE))
                 .willReturn(2L);

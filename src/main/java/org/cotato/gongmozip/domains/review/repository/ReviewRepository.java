@@ -11,4 +11,6 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     long countByTeam_TeamIdAndReviewer_StatusAndReviewee_Status(
             Long teamId, TeamMemberStatus reviewerStatus, TeamMemberStatus revieweeStatus);
+
+    long countByTeam_TeamIdAndReviewer_TeamMemberId(Long teamId, Long reviewerTeamMemberId);
 }

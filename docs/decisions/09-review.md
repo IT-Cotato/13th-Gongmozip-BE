@@ -39,6 +39,12 @@ unique(team_id, reviewer_team_member_id, reviewee_team_member_id) — 같은 팀
   전이들과 동일하게 챗봇 오케스트레이션 서비스가 소유).
 - 리뷰 작성 시 `CollaborationPointService.awardPoint(reviewer.member, team, REVIEW_WRITTEN)`
   (+10m) — Phase 3에서 이미 만들어둔 enum 값을 그대로 사용.
+  > ⚠️ **포인트 중복 지급 버그 정정 (2026-08-02, PR #56 리뷰 반영)**: 기능명세서
+  > 5.1.3.6.1은 "나머지 팀원 전체에 대한 리뷰를 최종 완료하는 시점"에 10m를 **1회만** 지급하는
+  > 것으로 정의하는데, 최초 구현은 리뷰 1건을 쓸 때마다 매번 지급하고 있었다(4인 팀이면 리뷰
+  > 3개로 30m 획득하는 버그). `ReviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberId`를
+  > 추가해, 리뷰어가 방금 쓴 리뷰가 본인이 써야 할 마지막 리뷰(=활성 팀원 수 - 1건)일 때만
+  > 지급하도록 수정했다.
 - 팀/멤버십 관련 예외는 기존 관례대로 별도 `ReviewErrorCode`를 두지 않고 `TeamErrorCode`
   (`TEAM_NOT_FOUND`, `NOT_TEAM_MEMBER`, `INVALID_TEAM_STATUS`)를 재사용. `ReviewErrorCode`는
   리뷰 도메인 고유 규칙(본인 리뷰 금지, 중복 리뷰 금지)만 갖는다.

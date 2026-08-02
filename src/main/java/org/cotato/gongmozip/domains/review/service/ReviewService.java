@@ -54,16 +54,32 @@ public class ReviewService {
         }
 
         Review saved = reviewRepository.save(ReviewConverter.toReview(team, reviewer, reviewee, request.content()));
-        collaborationPointService.awardPoint(reviewer.getMember(), team, CollaborationPointReason.REVIEW_WRITTEN);
-        completeReviewIfAllDone(team);
+        List<TeamMember> activeMembers =
+                teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE);
+        awardPointIfReviewerJustCompleted(team, reviewer, activeMembers);
+        completeReviewIfAllDone(team, activeMembers);
 
         return ReviewConverter.toReviewResultResponse(saved);
     }
 
+    // 리뷰어 본인이 나머지 활성 팀원 전원에 대한 리뷰를 방금 다 썼을 때만(=이 리뷰가 그 마지막
+    // 리뷰일 때만) 협업거리 포인트를 1회 지급한다. 리뷰 1건마다 지급하면 안 된다
+    // (기능명세서 5.1.3.6.1 — 리뷰 최종 완료 시점에 총 10m를 딱 한 번 지급).
+    private void awardPointIfReviewerJustCompleted(Team team, TeamMember reviewer, List<TeamMember> activeMembers) {
+        long expectedReviewsByReviewer = activeMembers.size() - 1L;
+        if (expectedReviewsByReviewer <= 0) {
+            return;
+        }
+
+        long writtenByReviewer = reviewRepository.countByTeam_TeamIdAndReviewer_TeamMemberId(
+                team.getTeamId(), reviewer.getTeamMemberId());
+        if (writtenByReviewer == expectedReviewsByReviewer) {
+            collaborationPointService.awardPoint(reviewer.getMember(), team, CollaborationPointReason.REVIEW_WRITTEN);
+        }
+    }
+
     // 활성 팀원 전원이 서로(자기 자신 제외)를 리뷰했으면 팀을 COMPLETED로 전이시킨다.
-    private void completeReviewIfAllDone(Team team) {
-        List<TeamMember> activeMembers =
-                teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE);
+    private void completeReviewIfAllDone(Team team, List<TeamMember> activeMembers) {
         long expectedPairs = (long) activeMembers.size() * (activeMembers.size() - 1);
         if (expectedPairs == 0) {
             return;
