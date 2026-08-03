@@ -26,6 +26,20 @@ public interface MatchingApplicationRepository extends JpaRepository<MatchingApp
 
     Optional<MatchingApplication> findByMemberAndApplicationDate(Member member, LocalDate applicationDate);
 
+    // 결과 조회에서 회원·선택 프로필·배치를 함께 읽어 지연 로딩과 추가 쿼리를 피한다.
+    @Query(
+            """
+            SELECT ma
+            FROM MatchingApplication ma
+            JOIN FETCH ma.member
+            JOIN FETCH ma.profile
+            LEFT JOIN FETCH ma.matchingBatch
+            WHERE ma.member.memberId = :memberId
+              AND ma.applicationDate = :applicationDate
+            """)
+    Optional<MatchingApplication> findResultApplication(
+            @Param("memberId") Long memberId, @Param("applicationDate") LocalDate applicationDate);
+
     // 배치와 연결된 전체 신청을 조회해 결과·테스트에서 배치 단위 상태를 확인한다.
     List<MatchingApplication> findAllByMatchingBatch(MatchingBatch matchingBatch);
 
