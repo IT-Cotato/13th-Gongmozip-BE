@@ -16,56 +16,45 @@ class SkillScoreCalculatorTest {
 
     private final SkillScoreCalculator calculator = new SkillScoreCalculator();
 
-    @DisplayName("첫 매칭 회원은 프로젝트 50%, 협업거리 10% 가중치로 계산한다.")
     @Test
-    void 첫_매칭_가중치를_적용한다() {
+    @DisplayName("첫 매칭 사용자는 프로젝트 50%, 협업거리 10% 가중치로 계산한다")
+    void calculateFirstMatchingScore() {
         Profile profile = Profile.builder().gpa(4.0).gpaScale(4.0).build();
-
         SkillScoreSnapshot result = calculator.calculate(profile, new BigDecimal("50"), 1, 0, 100, true);
 
         assertThat(result.gpaScore()).isEqualByComparingTo("100.00");
         assertThat(result.awardScore()).isEqualByComparingTo("50.00");
         assertThat(result.collaborationScore()).isEqualByComparingTo("20.00");
         assertThat(result.totalScore()).isEqualByComparingTo("52.00");
-        assertThat(result.skillGroup()).isEqualTo(2);
+        assertThat(result.firstMatching()).isTrue();
     }
 
-    @DisplayName("기존 회원은 프로젝트 40%, 협업거리 20% 가중치로 계산한다.")
     @Test
-    void 기존_회원_가중치를_적용한다() {
+    @DisplayName("기존 사용자는 프로젝트 40%, 협업거리 20% 가중치로 계산한다")
+    void calculateExistingMemberScore() {
         Profile profile = Profile.builder().gpa(4.0).gpaScale(4.0).build();
-
         SkillScoreSnapshot result = calculator.calculate(profile, new BigDecimal("50"), 1, 0, 100, false);
 
         assertThat(result.totalScore()).isEqualByComparingTo("49.00");
-        assertThat(result.skillGroup()).isEqualTo(2);
+        assertThat(result.firstMatching()).isFalse();
     }
 
-    @DisplayName("40, 60, 80점은 각각 상위 그룹의 시작점이다.")
     @Test
-    void 그룹_경계값은_상위_그룹에_포함된다() {
-        Profile zeroGpa = Profile.builder().gpa(0.0).gpaScale(4.5).build();
-        Profile fullGpa = Profile.builder().gpa(4.5).gpaScale(4.5).build();
+    @DisplayName("역량 계산 결과에는 점수만 담고 그룹은 14시 배치에서 결정한다")
+    void scoreSnapshotDoesNotDecideGroup() {
+        Profile profile = Profile.builder().gpa(4.5).gpaScale(4.5).build();
+        SkillScoreSnapshot result = calculator.calculate(profile, new BigDecimal("100"), 6, 6, 500, false);
 
-        assertThat(calculator
-                        .calculate(zeroGpa, new BigDecimal("100"), 0, 0, 0, false)
-                        .skillGroup())
-                .isEqualTo(2); // 프로젝트 40점
-        assertThat(calculator
-                        .calculate(fullGpa, new BigDecimal("100"), 0, 0, 0, false)
-                        .skillGroup())
-                .isEqualTo(3); // 학점 20 + 프로젝트 40 = 60점
-        assertThat(calculator
-                        .calculate(fullGpa, new BigDecimal("100"), 6, 0, 500, false)
-                        .skillGroup())
-                .isEqualTo(4); // 90점
+        assertThat(result.totalScore()).isEqualByComparingTo("100.00");
+        assertThat(SkillScoreSnapshot.class.getRecordComponents())
+                .extracting(component -> component.getName())
+                .doesNotContain("skillGroup");
     }
 
-    @DisplayName("수상과 자격증은 0개면 0점, 6개 이상이면 원점수 100점으로 제한한다.")
     @Test
-    void 개수_점수는_0에서_100_사이로_제한된다() {
+    @DisplayName("수상과 자격증 개수 점수는 0점에서 100점 사이로 제한한다")
+    void clampCountScores() {
         Profile profile = Profile.builder().gpa(0.0).gpaScale(4.5).build();
-
         SkillScoreSnapshot result = calculator.calculate(profile, BigDecimal.ZERO, 6, 10, 0, false);
 
         assertThat(result.awardScore()).isEqualByComparingTo("100.00");
@@ -73,9 +62,9 @@ class SkillScoreCalculatorTest {
         assertThat(result.totalScore()).isEqualByComparingTo("20.00");
     }
 
-    @DisplayName("잘못된 학점 값은 매칭 도메인의 400 예외로 변환한다.")
     @Test
-    void 잘못된_학점은_매칭_예외로_변환한다() {
+    @DisplayName("잘못된 학점 정보는 매칭 도메인 예외로 변환한다")
+    void rejectInvalidGpa() {
         List<Profile> invalidProfiles = List.of(
                 Profile.builder().gpa(null).gpaScale(4.5).build(),
                 Profile.builder().gpa(4.0).gpaScale(0.0).build(),

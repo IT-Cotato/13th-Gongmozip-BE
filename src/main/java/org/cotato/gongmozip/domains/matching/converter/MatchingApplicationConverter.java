@@ -45,7 +45,6 @@ public final class MatchingApplicationConverter {
                 .certificationScore(skillScore.certificationScore())
                 .collaborationScore(skillScore.collaborationScore())
                 .skillScore(skillScore.totalScore())
-                .skillGroup(skillScore.skillGroup())
                 .collaborationDistance(collaborationDistance)
                 .agreeablenessScore(submission.getAgreeablenessScore())
                 .conscientiousnessScore(submission.getConscientiousnessScore())

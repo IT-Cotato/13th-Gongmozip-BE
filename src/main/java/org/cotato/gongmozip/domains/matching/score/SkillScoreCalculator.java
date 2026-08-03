@@ -9,6 +9,10 @@ import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.springframework.stereotype.Component;
 
+/**
+ * 프로필의 서로 다른 역량 지표를 공통 0~100 척도로 바꾸고 신청자 유형에 맞는 가중 총점을 계산하기 위해 만들었다.
+ * 역량 기반 풀 분류는 14시 배치가 전체 신청자 분포를 보고 수행하므로, 이 계산기는 신청 시점의 개인 점수만 확정한다.
+ */
 @Component
 public class SkillScoreCalculator {
 
@@ -23,7 +27,7 @@ public class SkillScoreCalculator {
     private static final BigDecimal COLLABORATION_WEIGHT_EXISTING = new BigDecimal("0.20");
     private static final BigDecimal COLLABORATION_WEIGHT_FIRST = new BigDecimal("0.10");
 
-    // 역량 점수 계산 — 원점수 변환 → 사용자 유형별 가중치 적용 → 4개 역량 그룹 판정
+    // 원점수 변환과 사용자 유형별 가중치 적용 결과를 하나의 신청 시점 스냅샷으로 반환한다.
     public SkillScoreSnapshot calculate(
             Profile profile,
             BigDecimal projectScore,
@@ -60,7 +64,6 @@ public class SkillScoreCalculator {
                 certificationScore,
                 collaborationScore,
                 total,
-                resolveSkillGroup(total),
                 firstMatching);
     }
 
@@ -98,19 +101,5 @@ public class SkillScoreCalculator {
             return BigDecimal.ZERO.setScale(SCALE);
         }
         return score.max(BigDecimal.ZERO).min(ONE_HUNDRED).setScale(SCALE, RoundingMode.HALF_UP);
-    }
-
-    // 경계값 40·60·80점은 각각 상위 그룹에 포함한다
-    private int resolveSkillGroup(BigDecimal total) {
-        if (total.compareTo(new BigDecimal("40")) < 0) {
-            return 1;
-        }
-        if (total.compareTo(new BigDecimal("60")) < 0) {
-            return 2;
-        }
-        if (total.compareTo(new BigDecimal("80")) < 0) {
-            return 3;
-        }
-        return 4;
     }
 }

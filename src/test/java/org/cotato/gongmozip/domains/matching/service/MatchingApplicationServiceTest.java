@@ -225,7 +225,7 @@ class MatchingApplicationServiceTest {
         assertThat(saved.getCollaborationScore()).isEqualByComparingTo("20.00");
         assertThat(saved.getAgreeablenessScore()).isEqualByComparingTo("4.10");
         assertThat(response.skillScore()).isEqualByComparingTo("52.00");
-        assertThat(response.skillGroup()).isEqualTo(2);
+        assertThat(response.skillGroup()).isNull();
     }
 
     @DisplayName("같은 날 취소 이력이 있어도 다시 신청할 수 없다.")

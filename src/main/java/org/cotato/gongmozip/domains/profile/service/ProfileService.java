@@ -12,6 +12,7 @@ import org.cotato.gongmozip.domains.matching.repository.MatchingApplicationRepos
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.converter.ProfileConverter;
+import org.cotato.gongmozip.domains.profile.converter.ProjectEvaluationConverter;
 import org.cotato.gongmozip.domains.profile.dto.request.ProfileRequest.*;
 import org.cotato.gongmozip.domains.profile.dto.response.ProfileResponse.*;
 import org.cotato.gongmozip.domains.profile.entity.*;
@@ -201,6 +202,7 @@ public class ProfileService {
 
         ProjectExperience project = ProfileConverter.toProjectExperience(request, profile);
         projectExperienceRepository.save(project);
+        prepareProjectEvaluation(project);
 
         return ProfileConverter.toProjectResponse(project);
     }
@@ -303,32 +305,9 @@ public class ProfileService {
             });
         }
 
-        // 콘텐츠가 수정되었다면 기존 AI 요약 평가가 존재할 경우 자동으로 비동기 AI 재평가 트리거
+        // 콘텐츠가 수정되었다면 기존 평가 유무와 관계없이 매칭용 AI 평가를 다시 생성한다.
         if (contentChanged) {
-            projectEvaluationRepository.findByProjectExperience(project).ifPresent(evaluation -> {
-                if (evaluation.getStatus() != AiSummaryStatus.PENDING
-                        && evaluation.getStatus() != AiSummaryStatus.PROCESSING) {
-                    evaluation.pending();
-                    projectEvaluationRepository.save(evaluation);
-
-                    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            try {
-                                projectEvaluationService.evaluateProjectAsync(
-                                        project.getProjectId(),
-                                        project.getProjectName(),
-                                        project.getRole(),
-                                        project.getDescription());
-                            } catch (TaskRejectedException e) {
-                                log.error("자동 AI 요약 평가 트리거 중 쓰레드 풀 포화로 작업 제출 실패", e);
-                                projectEvaluationTxService.fail(
-                                        project.getProjectId(), "Thread pool saturation: " + e.getMessage());
-                            }
-                        }
-                    });
-                }
-            });
+            prepareProjectEvaluation(project);
         }
         String aiStatus = project.getAiSummaryStatus().name();
 
@@ -587,6 +566,32 @@ public class ProfileService {
         if (gpa < 0 || gpaScale <= 0 || gpa > gpaScale) {
             throw new ProfileException(ProfileErrorCode.INVALID_GPA);
         }
+    }
+
+    private void prepareProjectEvaluation(ProjectExperience project) {
+        // 신규 프로젝트에는 평가 행을 만들고, 수정 프로젝트에는 기존 평가를 PENDING으로 되돌려 최신 내용을 반영한다.
+        ProjectEvaluation evaluation = projectEvaluationRepository
+                .findByProjectExperience(project)
+                .orElseGet(() -> ProjectEvaluationConverter.toProjectEvaluation(project));
+        evaluation.pending();
+        projectEvaluationRepository.save(evaluation);
+
+        Long projectId = project.getProjectId();
+        String projectName = project.getProjectName();
+        String role = project.getRole();
+        String description = project.getDescription();
+        // 롤백된 프로젝트를 평가하지 않도록 커밋 이후에만 비동기 작업을 제출한다.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    projectEvaluationService.evaluateProjectAsync(projectId, projectName, role, description);
+                } catch (TaskRejectedException e) {
+                    log.error("자동 프로젝트 평가 트리거 중 쓰레드 풀 포화로 작업 제출 실패", e);
+                    projectEvaluationTxService.fail(projectId, "Thread pool saturation: " + e.getMessage());
+                }
+            }
+        });
     }
 
     private void validateProjectPeriod(LocalDate started, LocalDate ended, boolean isOngoing) {

@@ -91,7 +91,8 @@ public class MatchingApplication extends BaseEntity {
     @Column(name = "skill_score", nullable = false, precision = 5, scale = 2)
     private BigDecimal skillScore;
 
-    @Column(name = "skill_group", nullable = false)
+    // 신청 직후에는 null이며 14시 배치가 확정한 유효 풀 번호(1~4)를 저장한다.
+    @Column(name = "skill_group")
     private Integer skillGroup;
 
     // 활동으로 변하는 회원 협업거리의 신청 시점 스냅샷이다.

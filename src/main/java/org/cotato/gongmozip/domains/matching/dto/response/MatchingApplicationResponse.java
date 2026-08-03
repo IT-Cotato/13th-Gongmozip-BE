@@ -47,7 +47,7 @@ public class MatchingApplicationResponse {
             // 프로필과 협업거리를 바탕으로 계산한 신청 시점 역량 총점
             BigDecimal skillScore,
             // 역량 총점에 따라 분류된 1~4 그룹
-            int skillGroup,
+            Integer skillGroup,
             // 이후 회원 값이 바뀌어도 유지되는 신청 시점 협업거리
             int collaborationDistance,
             // 해당 신청일의 신청 마감 시각
