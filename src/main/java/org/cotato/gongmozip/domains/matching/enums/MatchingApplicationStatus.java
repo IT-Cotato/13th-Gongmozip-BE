@@ -16,7 +16,6 @@ public enum MatchingApplicationStatus {
     PASSED,
 
     // 스케줄러가 신청을 가져가 실제 팀 조합을 계산하고 있는 상태
-    // TODO: 매칭 알고리즘/스케줄러 구현 시 상태 전이를 연결한다.
     MATCHING,
 
     // 팀 조합이 생성되어 사용자들의 매칭 수락 또는 패스 응답을 기다리는 상태
