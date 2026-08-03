@@ -1,6 +1,7 @@
 package org.cotato.gongmozip.domains.team.service;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -34,6 +35,7 @@ import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.TeamMemberSum
 import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.TeamMembersResponse;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
+import org.cotato.gongmozip.domains.team.enums.ChatRoomSortType;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
 import org.cotato.gongmozip.domains.team.exception.TeamException;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
@@ -99,7 +101,7 @@ public class TeamService {
      * 묶었다 — 안 읽은 메시지 개수만 팀마다 임계값(lastReadAt)이 달라 배치가 까다로워 그대로 뒀다
      * (가벼운 COUNT 쿼리라 N개 남아도 영향은 작음).
      */
-    public ChatRoomListResponse getMyChatRooms(Long memberId) {
+    public ChatRoomListResponse getMyChatRooms(Long memberId, ChatRoomSortType sortType) {
         List<TeamMember> myMemberships =
                 teamMemberRepository.findByMemberIdAndStatus(memberId, TeamMemberStatus.ACTIVE);
         List<Long> teamIds =
@@ -151,9 +153,25 @@ public class TeamService {
                             lastMessage != null ? lastMessage.getCreatedAt() : null,
                             unreadCount);
                 })
+                .sorted(chatRoomComparator(sortType))
                 .toList();
 
         return TeamConverter.toChatRoomListResponse(rooms);
+    }
+
+    // 카카오톡처럼 "최신 메시지 순"/"안읽은 메시지 순" 두 가지로 채팅방 목록을 정렬한다.
+    // 메시지가 한 번도 없었던 방(lastMessageAt=null)은 항상 맨 뒤로 보낸다.
+    private Comparator<ChatRoomSummaryResponse> chatRoomComparator(ChatRoomSortType sortType) {
+        Comparator<ChatRoomSummaryResponse> byLatestMessage = Comparator.comparing(
+                ChatRoomSummaryResponse::lastMessageAt, Comparator.nullsLast(Comparator.reverseOrder()));
+        return switch (sortType) {
+                // 안읽은 메시지 개수 크기 순이 아니라, 안읽은 메시지가 있는 방을 먼저 모아 보여주고
+                // (그 안에서는 최신 메시지 순), 그 다음 읽은 방들도 마찬가지로 최신 메시지 순으로
+                // 이어붙인다 — 카카오톡의 "안읽은 순"이 이 방식이다.
+            case UNREAD -> Comparator.comparing((ChatRoomSummaryResponse room) -> room.unreadCount() == 0)
+                    .thenComparing(byLatestMessage);
+            case LATEST -> byLatestMessage;
+        };
     }
 
     @Transactional

@@ -3,16 +3,19 @@ package org.cotato.gongmozip.domains.team.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.MemberAvatarResponse;
 import org.cotato.gongmozip.domains.character.enums.CharacterPalette;
 import org.cotato.gongmozip.domains.character.service.CharacterService;
+import org.cotato.gongmozip.domains.chat.entity.Message;
 import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
@@ -29,9 +32,11 @@ import org.cotato.gongmozip.domains.survey.enums.CharacterType;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamCreationRequest;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamMemberInput;
 import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.ChatRoomListResponse;
+import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.ChatRoomSummaryResponse;
 import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.TeamMembersResponse;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
+import org.cotato.gongmozip.domains.team.enums.ChatRoomSortType;
 import org.cotato.gongmozip.domains.team.enums.LeaderSelectionMode;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
 import org.cotato.gongmozip.domains.team.enums.TeamRole;
@@ -46,6 +51,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class TeamServiceTest {
@@ -163,7 +169,7 @@ class TeamServiceTest {
         given(characterService.findAvatarsByMembers(any())).willReturn(Map.of());
 
         // when
-        ChatRoomListResponse response = teamService.getMyChatRooms(1L);
+        ChatRoomListResponse response = teamService.getMyChatRooms(1L, ChatRoomSortType.LATEST);
 
         // then
         assertThat(response.rooms()).hasSize(1);
@@ -193,10 +199,84 @@ class TeamServiceTest {
         given(characterService.findAvatarsByMembers(any())).willReturn(Map.of(2L, avatar));
 
         // when
-        ChatRoomListResponse response = teamService.getMyChatRooms(1L);
+        ChatRoomListResponse response = teamService.getMyChatRooms(1L, ChatRoomSortType.LATEST);
 
         // then
         assertThat(response.rooms().get(0).avatars()).containsExactly(avatar);
+    }
+
+    @DisplayName("최신 메시지 순으로 조회하면 마지막 메시지가 더 최근인 방이 먼저 온다.")
+    @Test
+    void 최신_메시지_순으로_조회하면_마지막_메시지가_더_최근인_방이_먼저_온다() {
+        // given
+        Team teamA = Team.builder().teamId(100L).build();
+        Team teamB = Team.builder().teamId(200L).build();
+        TeamMember meInA = teamMemberOf(teamA, 1L, "나");
+        TeamMember meInB = teamMemberOf(teamB, 1L, "나");
+
+        given(teamMemberRepository.findByMemberIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(meInA, meInB));
+        given(teamMemberRepository.findByTeamIdInAndStatus(List.of(100L, 200L), TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(meInA, meInB));
+
+        Message olderMessage = Message.builder().team(teamA).content("오래된 메시지").build();
+        ReflectionTestUtils.setField(
+                olderMessage, "createdAt", LocalDateTime.now().minusHours(2));
+        Message newerMessage = Message.builder().team(teamB).content("최근 메시지").build();
+        ReflectionTestUtils.setField(newerMessage, "createdAt", LocalDateTime.now());
+
+        given(messageRepository.findLatestMessagePerTeam(List.of(100L, 200L)))
+                .willReturn(List.of(olderMessage, newerMessage));
+        given(messageRepository.countByTeam_TeamIdAndCreatedAtAfter(any(Long.class), any()))
+                .willReturn(0L);
+        given(characterService.findAvatarsByMembers(any())).willReturn(Map.of());
+
+        // when
+        ChatRoomListResponse response = teamService.getMyChatRooms(1L, ChatRoomSortType.LATEST);
+
+        // then
+        assertThat(response.rooms()).extracting(ChatRoomSummaryResponse::teamId).containsExactly(200L, 100L);
+    }
+
+    @DisplayName("안읽은 메시지 순으로 조회하면, 개수와 무관하게 안읽은 방이 먼저 모이고(그 안에서는 최신 메시지 순), 다 읽은 방이 그다음(역시 최신 메시지 순)으로 온다.")
+    @Test
+    void 안읽은_메시지_순으로_조회하면_안읽은_방이_먼저_모이고_그_안에서는_최신_메시지_순으로_온다() {
+        // given
+        Team teamA = Team.builder().teamId(100L).build(); // 안읽음 1건, 오래된 메시지
+        Team teamB = Team.builder().teamId(200L).build(); // 다 읽음, 가장 최신 메시지
+        Team teamC = Team.builder().teamId(300L).build(); // 안읽음 3건, 안읽은 방 중 가장 최신
+        TeamMember meInA = teamMemberOf(teamA, 1L, "나");
+        TeamMember meInB = teamMemberOf(teamB, 1L, "나");
+        TeamMember meInC = teamMemberOf(teamC, 1L, "나");
+
+        given(teamMemberRepository.findByMemberIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(meInA, meInB, meInC));
+        given(teamMemberRepository.findByTeamIdInAndStatus(List.of(100L, 200L, 300L), TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(meInA, meInB, meInC));
+
+        Message messageA = Message.builder().team(teamA).content("A").build();
+        ReflectionTestUtils.setField(messageA, "createdAt", LocalDateTime.now().minusHours(2));
+        Message messageB = Message.builder().team(teamB).content("B").build();
+        ReflectionTestUtils.setField(messageB, "createdAt", LocalDateTime.now());
+        Message messageC = Message.builder().team(teamC).content("C").build();
+        ReflectionTestUtils.setField(messageC, "createdAt", LocalDateTime.now().minusMinutes(30));
+
+        given(messageRepository.findLatestMessagePerTeam(List.of(100L, 200L, 300L)))
+                .willReturn(List.of(messageA, messageB, messageC));
+        given(messageRepository.countByTeam_TeamIdAndCreatedAtAfter(eq(100L), any()))
+                .willReturn(1L);
+        given(messageRepository.countByTeam_TeamIdAndCreatedAtAfter(eq(200L), any()))
+                .willReturn(0L);
+        given(messageRepository.countByTeam_TeamIdAndCreatedAtAfter(eq(300L), any()))
+                .willReturn(3L);
+        given(characterService.findAvatarsByMembers(any())).willReturn(Map.of());
+
+        // when
+        ChatRoomListResponse response = teamService.getMyChatRooms(1L, ChatRoomSortType.UNREAD);
+
+        // then
+        // B가 전체적으로 메시지는 가장 최신이지만 다 읽은 방이라 맨 뒤로 밀린다.
+        assertThat(response.rooms()).extracting(ChatRoomSummaryResponse::teamId).containsExactly(300L, 100L, 200L);
     }
 
     @DisplayName("채팅방을 나가면 팀원 상태가 LEFT로 바뀌고 시스템 메시지가 발행된다.")
