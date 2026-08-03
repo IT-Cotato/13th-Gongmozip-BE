@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.ChatbotToggleRequest;
 import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.ChatRoomListResponse;
 import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.TeamMembersResponse;
+import org.cotato.gongmozip.domains.team.enums.ChatRoomSortType;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamSuccessCode;
 import org.cotato.gongmozip.domains.team.service.TeamService;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Team", description = "팀(채팅방) 관련 API")
@@ -32,12 +34,13 @@ public class TeamController {
 
     private final TeamService teamService;
 
-    @Operation(summary = "채팅방 목록 조회")
+    @Operation(summary = "채팅방 목록 조회 (sort: LATEST=최신 메시지 순(기본값), UNREAD=안읽은 메시지 순)")
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = TeamErrorCode.class)
     @GetMapping("/teams")
     public ResponseEntity<BaseResponse<ChatRoomListResponse>> getChatRooms(
+            @RequestParam(name = "sort", required = false, defaultValue = "LATEST") ChatRoomSortType sort,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
-        ChatRoomListResponse response = teamService.getMyChatRooms(userDetails.getMemberId());
+        ChatRoomListResponse response = teamService.getMyChatRooms(userDetails.getMemberId(), sort);
         return BaseResponseFormatter.success(TeamSuccessCode.CHAT_ROOM_LIST_RETRIEVED, response);
     }
 

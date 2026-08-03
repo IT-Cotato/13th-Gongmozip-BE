@@ -89,6 +89,8 @@
 - 챗봇 on/off: `PATCH /api/teams/{teamId}/chatbot` (`TeamService.toggleChatbot`)
 - 채팅방 목록(`GET /api/teams`)에 최근 메시지 미리보기(`lastMessageContent`/`lastMessageAt`)와
   안읽음 수(`unreadCount`)를 포함하도록 Phase 1 응답을 확장함
+- **정렬 옵션 추가 (2026-08-03, Figma 5.2 채팅방 설정 확인)**: `GET /api/teams?sort=LATEST|UNREAD`
+  — 최신 메시지 순(기본값)/안읽은 메시지 순. 자세한 내용은 [01-team.md](./01-team.md) 참고.
 - 팀 소속 검증 예외는 별도 `ChatErrorCode` 없이 `TeamErrorCode`를 그대로 재사용 (Team=채팅방
   아키텍처 결정에 따름). STOMP 쪽 예외는 `ChatWebSocketController`의 `@MessageExceptionHandler`가
   `/user/queue/errors`로 클라이언트에 내려준다.

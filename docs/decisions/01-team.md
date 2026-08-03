@@ -134,6 +134,17 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
   챗봇 토글 메시지와 구분이 안 되고, 완료 시점에 접속 안 해있던 팀원은 WebSocket 브로드캐스트도
   놓침). `TeamMembersResponse.status`(`Team.status.name()`)를 추가해 `GET
   /api/teams/{teamId}/members` 응답에 포함시켰다.
+- **채팅방 목록 정렬 (2026-08-03, Figma 5.2 채팅방 설정 확인 후 추가)**: 카카오톡처럼 "최신
+  메시지 순"/"안읽은 메시지 순" 두 가지로 정렬할 수 있어야 했다. `GET /api/teams`에 쿼리
+  파라미터 `sort`(`ChatRoomSortType`: `LATEST`(기본값)/`UNREAD`)를 추가. `ChatRoomSummaryResponse`가
+  이미 `lastMessageAt`/`unreadCount`를 갖고 있어서 별도 쿼리 없이 애플리케이션 레벨에서
+  `Comparator`로 정렬한다(방 개수가 몇 개 안 되는 개인별 채팅방 목록이라 DB 정렬로 옮길
+  필요는 없다고 판단). `LATEST`는 `lastMessageAt` 내림차순. `UNREAD`는 안읽은 메시지
+  개수(`unreadCount`) **크기 순이 아니다** — 카카오톡 실제 동작을 확인해보니, 안읽은 방을
+  개수와 무관하게 먼저 모아 보여주고(그 안에서는 최신 메시지 순), 다 읽은 방들은 그 뒤에
+  역시 최신 메시지 순으로 이어붙이는 방식이었다. `unreadCount == 0` 여부(오름차순, 즉
+  안읽은 방이 먼저) → `lastMessageAt` 내림차순 2단 정렬로 구현. 메시지가 한 번도 없던 방
+  (`lastMessageAt = null`)은 두 정렬 기준 모두에서 항상 맨 뒤로 보낸다.
 - ⚠️ **임시**: `domains/team/controller/TeamTestController.java` (`POST /api/test/teams`,
   `@Profile("local")`) — 매칭 연동 전까지 수동 테스트(WebSocket 채팅 등)를 위해 `createTeam`을
   직접 호출할 수 있게 열어둔 개발용 엔드포인트. `local` 프로필을 명시적으로 켰을 때만 활성화되는
