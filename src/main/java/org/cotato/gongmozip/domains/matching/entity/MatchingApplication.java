@@ -65,6 +65,10 @@ public class MatchingApplication extends BaseEntity {
     @Column(name = "first_matching", nullable = false)
     private boolean firstMatching;
 
+    @Builder.Default
+    @Column(name = "reassignment_priority", nullable = false)
+    private boolean reassignmentPriority = false;
+
     @Column(name = "canceled_at")
     private LocalDateTime canceledAt;
 
