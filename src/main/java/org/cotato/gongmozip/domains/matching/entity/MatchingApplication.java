@@ -28,6 +28,11 @@ import org.cotato.gongmozip.domains.survey.enums.CharacterType;
 import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
 import org.cotato.gongmozip.global.entity.BaseEntity;
 
+/**
+ * 사용자의 매칭 신청과 신청 시점의 프로필·성향·역량 스냅샷을 보존하는 엔티티다.
+ * 이번 배치 구현에서는 소속 배치와 유효 풀을 함께 기록하고, 준비부터 배정 결과까지의 상태 전이를 엔티티가 직접 보호하도록
+ * 확장했다.
+ */
 @Getter
 @Entity
 @Table(name = "matching_applications")
@@ -48,6 +53,10 @@ public class MatchingApplication extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "profile_id", nullable = false)
     private Profile profile;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "matching_batch_id")
+    private MatchingBatch matchingBatch;
 
     // 레거시 신청 행은 NULL을 유지하고, 신규 API로 생성되는 행만 날짜 유일성 정책을 적용한다.
     @Column(name = "application_date")
@@ -147,13 +156,79 @@ public class MatchingApplication extends BaseEntity {
 
     // 14시 전 철회 상태 전이 — 협업거리 감점 없음
     public void cancel(LocalDateTime canceledAt) {
+        if (status == MatchingApplicationStatus.WAITING) {
+            this.matchingBatch = null;
+        }
         this.status = MatchingApplicationStatus.CANCELED;
         this.canceledAt = canceledAt;
     }
 
     // 14시 이후 철회 상태 전이 — 협업거리 감점은 CollaborationPointService에서 처리한다
     public void pass(LocalDateTime canceledAt) {
+        if (status == MatchingApplicationStatus.WAITING || status == MatchingApplicationStatus.MATCHING) {
+            // 계산 중 철회된 신청은 현재 배치 결과가 될 수 없으므로 재시도 입력에서 제외한다.
+            this.matchingBatch = null;
+        }
         this.status = MatchingApplicationStatus.PASSED;
         this.canceledAt = canceledAt;
+    }
+
+    // 분할이 끝난 신청을 하나의 배치와 유효 풀에 연결한다. 이 단계까지 상태는 WAITING을 유지한다.
+    public void prepareForBatch(MatchingBatch batch, int poolOrdinal) {
+        if (status != MatchingApplicationStatus.WAITING || matchingBatch != null) {
+            throw new IllegalStateException("아직 배치가 준비되지 않은 대기 신청만 배치에 포함할 수 있습니다.");
+        }
+        if (poolOrdinal < 1 || poolOrdinal > 4) {
+            throw new IllegalArgumentException("유효 풀 번호는 1에서 4 사이여야 합니다.");
+        }
+        this.matchingBatch = batch;
+        this.skillGroup = poolOrdinal;
+    }
+
+    // 선점된 배치가 자신의 배치인지 확인한 뒤 알고리즘 계산 대상 상태로 전환한다.
+    public void startMatching(MatchingBatch batch) {
+        if (status != MatchingApplicationStatus.WAITING) {
+            throw new IllegalStateException("대기 중인 신청만 매칭을 시작할 수 있습니다.");
+        }
+        if (matchingBatch == null || !matchingBatch.equals(batch)) {
+            throw new IllegalStateException("신청이 해당 매칭 배치에 포함될 준비가 되지 않았습니다.");
+        }
+        this.status = MatchingApplicationStatus.MATCHING;
+    }
+
+    // 계산 결과 팀이 배정된 신청을 제안 대기 상태로 전환한다.
+    public void propose(MatchingBatch batch) {
+        validateProcessedBatch(batch);
+        validateMatchingStatus();
+        this.status = MatchingApplicationStatus.PROPOSED;
+    }
+
+    // 고정된 팀 크기 계획에서 배정되지 못한 신청을 최종 미매칭 상태로 전환한다.
+    public void failToMatch(MatchingBatch batch) {
+        validateProcessedBatch(batch);
+        validateMatchingStatus();
+        this.status = MatchingApplicationStatus.FAILED;
+    }
+
+    // 배치 계산·저장 실패 시 처리 중이던 신청만 WAITING으로 되돌려 같은 배치에서 재시도할 수 있게 한다.
+    public void restoreWaitingAfterBatchFailure(MatchingBatch batch) {
+        validateProcessedBatch(batch);
+        if (status == MatchingApplicationStatus.MATCHING) {
+            this.status = MatchingApplicationStatus.WAITING;
+        }
+    }
+
+    private void validateProcessedBatch(MatchingBatch batch) {
+        // 다른 배치의 늦은 결과가 현재 신청 상태를 덮어쓰는 것을 막는다.
+        if (matchingBatch == null || batch == null || !matchingBatch.equals(batch)) {
+            throw new IllegalStateException("신청이 해당 매칭 배치에 속하지 않습니다.");
+        }
+    }
+
+    private void validateMatchingStatus() {
+        // 철회 등으로 MATCHING을 벗어난 신청에는 계산 결과를 반영하지 않는다.
+        if (status != MatchingApplicationStatus.MATCHING) {
+            throw new IllegalStateException("매칭 계산 중인 신청에만 배치 결과를 반영할 수 있습니다.");
+        }
     }
 }
