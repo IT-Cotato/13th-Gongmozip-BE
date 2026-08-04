@@ -175,6 +175,70 @@ class MatchingResultQueryServiceTest {
         verify(matchingTimePolicy, never()).now();
     }
 
+    @DisplayName("결과 생성 전에 패널티 철회한 신청은 공개 시각 전에도 WITHDRAWN을 반환한다")
+    @Test
+    void returnsWithdrawnBeforePublicationWhenPassedWithoutResultMembership() {
+        MatchingApplication application = application(1L, MatchingApplicationStatus.PASSED, null);
+        given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(application));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingGroupMemberRepository.findResultMembership(application)).willReturn(Optional.empty());
+
+        var response = matchingResultQueryService.getTodayResult(1L);
+
+        assertThat(response.resultStatus()).isEqualTo(MatchingResultStatus.WITHDRAWN);
+        assertThat(response.applicationStatus()).isEqualTo(MatchingApplicationStatus.PASSED);
+        assertThat(response.matchingGroupId()).isNull();
+        assertThat(response.members()).isEmpty();
+        verify(matchingTimePolicy, never()).now();
+    }
+
+    @DisplayName("결과 생성 후 공개 전에 철회하면 기존 그룹 정보는 공개 시각까지 숨긴다")
+    @Test
+    void hidesPassedResultMembershipBeforePublication() {
+        MatchingBatch batch = batch();
+        MatchingApplication application = application(1L, MatchingApplicationStatus.PASSED, batch);
+        MatchingGroup group = group(batch);
+        MatchingGroupMember membership = groupMember(11L, group, application);
+        LocalDateTime beforePublish = PUBLISHED_AT.minusSeconds(1);
+        given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(application));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingGroupMemberRepository.findResultMembership(application)).willReturn(Optional.of(membership));
+        given(matchingTimePolicy.now()).willReturn(beforePublish);
+        given(matchingTimePolicy.isResultPublished(TODAY, beforePublish)).willReturn(false);
+
+        var response = matchingResultQueryService.getTodayResult(1L);
+
+        assertThat(response.resultStatus()).isEqualTo(MatchingResultStatus.NOT_PUBLISHED);
+        assertThat(response.matchingGroupId()).isNull();
+        assertThat(response.members()).isEmpty();
+        verify(matchingGroupMemberRepository, never()).findResultMembers(group);
+    }
+
+    @DisplayName("결과 생성 후 철회한 신청은 공개 시각 이후 기존 그룹 정보와 WITHDRAWN을 반환한다")
+    @Test
+    void returnsPassedResultMembershipAfterPublication() {
+        MatchingBatch batch = batch();
+        MatchingApplication mine = application(1L, MatchingApplicationStatus.PASSED, batch);
+        MatchingApplication teammateTwo = application(2L, MatchingApplicationStatus.PROPOSED, batch);
+        MatchingApplication teammateThree = application(3L, MatchingApplicationStatus.PROPOSED, batch);
+        MatchingGroup group = group(batch);
+        MatchingGroupMember myMembership = groupMember(11L, group, mine);
+        List<MatchingGroupMember> members =
+                List.of(myMembership, groupMember(12L, group, teammateTwo), groupMember(13L, group, teammateThree));
+        given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(mine));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingGroupMemberRepository.findResultMembership(mine)).willReturn(Optional.of(myMembership));
+        given(matchingTimePolicy.now()).willReturn(PUBLISHED_AT);
+        given(matchingTimePolicy.isResultPublished(TODAY, PUBLISHED_AT)).willReturn(true);
+        given(matchingGroupMemberRepository.findResultMembers(group)).willReturn(members);
+
+        var response = matchingResultQueryService.getTodayResult(1L);
+
+        assertThat(response.resultStatus()).isEqualTo(MatchingResultStatus.WITHDRAWN);
+        assertThat(response.matchingGroupId()).isEqualTo(group.getMatchingGroupId());
+        assertThat(response.members()).hasSize(3);
+    }
+
     private MatchingBatch batch() {
         return MatchingBatch.builder()
                 .matchingBatchId(10L)

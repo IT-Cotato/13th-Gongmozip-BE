@@ -12,6 +12,7 @@ import org.cotato.gongmozip.domains.matching.dto.response.MatchingResultResponse
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.matching.enums.MatchingApplicationStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingGroupMemberStatus;
+import org.cotato.gongmozip.domains.matching.enums.MatchingGroupStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingResultStatus;
 import org.cotato.gongmozip.domains.matching.service.MatchingResultQueryService;
 import org.cotato.gongmozip.domains.member.entity.Member;
@@ -71,7 +72,12 @@ class MatchingResultControllerTest {
                 3,
                 decimal("90.00"),
                 score,
-                members);
+                members,
+                TODAY.plusDays(1).atTime(12, 0),
+                MatchingGroupStatus.PROPOSED,
+                MatchingGroupMemberStatus.PENDING,
+                null,
+                null);
         given(matchingResultQueryService.getTodayResult(1L)).willReturn(serviceResponse);
 
         var responseEntity = matchingResultController.getTodayResult(userDetails);
