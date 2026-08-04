@@ -573,6 +573,9 @@ public class ProfileService {
         ProjectEvaluation evaluation = projectEvaluationRepository
                 .findByProjectExperience(project)
                 .orElseGet(() -> ProjectEvaluationConverter.toProjectEvaluation(project));
+        if (evaluation.getStatus() == AiSummaryStatus.PENDING || evaluation.getStatus() == AiSummaryStatus.PROCESSING) {
+            return;
+        }
         evaluation.pending();
         projectEvaluationRepository.save(evaluation);
 

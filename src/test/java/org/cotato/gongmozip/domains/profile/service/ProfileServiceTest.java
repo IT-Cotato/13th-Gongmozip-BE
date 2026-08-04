@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -27,6 +28,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -504,6 +507,44 @@ class ProfileServiceTest {
         assertThat(response.aiSummaryStatus()).isEqualTo("PENDING");
         then(projectExperienceRepository).should().save(project);
         then(projectAiSummaryService).should().generateSummaryAsync(20L, "변경된 프로젝트", "역할", "설명");
+    }
+
+    @DisplayName("콘텐츠 변경 시 평가가 진행 중이면 평가를 다시 요청하지 않는다.")
+    @ParameterizedTest
+    @EnumSource(
+            value = AiSummaryStatus.class,
+            names = {"PENDING", "PROCESSING"})
+    void doesNotRequestEvaluationAgainWhenEvaluationIsInProgress(AiSummaryStatus evaluationStatus) {
+        Profile profile =
+                Profile.builder().profileId(10L).member(member).nickname("러너").build();
+        ProjectExperience project = ProjectExperience.builder()
+                .projectId(20L)
+                .profile(profile)
+                .projectName("프로젝트")
+                .description("설명")
+                .role("역할")
+                .techStacks(List.of("Spring"))
+                .startedAt(LocalDate.of(2026, 1, 1))
+                .isOngoing(true)
+                .aiSummaryStatus(AiSummaryStatus.PROCESSING)
+                .build();
+        ProjectEvaluation evaluation = ProjectEvaluation.builder()
+                .projectEvaluationId(30L)
+                .projectExperience(project)
+                .status(evaluationStatus)
+                .build();
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
+        given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
+        given(projectEvaluationRepository.findByProjectExperience(project)).willReturn(Optional.of(evaluation));
+
+        profileService.updateProject(
+                10L, 20L, new UpdateProjectRequest("변경된 프로젝트", null, null, null, null, null, null), member);
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+        assertThat(evaluation.getStatus()).isEqualTo(evaluationStatus);
+        then(projectEvaluationRepository).should(never()).save(evaluation);
+        then(projectEvaluationService).should(never()).evaluateProjectAsync(any(), any(), any(), any());
     }
 
     @DisplayName("프로젝트 AI 요약 생성 요청 시 정상 접수된다.")
