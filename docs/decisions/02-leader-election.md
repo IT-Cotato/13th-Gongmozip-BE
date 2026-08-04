@@ -2,14 +2,13 @@
 
 ## 배경/목적
 
-팀 생성 시점의 팀장 희망 점수 합산에 따라 3가지 경로로 분기하는 팀장 선출 로직.
+팀 생성 시점의 `MatchingApplication.leaderPreference` 인원수에 따라 3가지 경로로 분기하는 팀장
+선출 로직이다. 3인 팀과 4인 팀 모두 같은 분기 철학을 사용한다.
 
-> ⚠️ **데이터 갭 (2026-07-29 확인)**: 아래 로직은 `PersonalityProfile.leaderPreferenceScore`
-> (원합니다=1/상관없어요=0.5/원하지않아요=0)를 전제로 설계했으나, 코드베이스 재확인 결과
-> 이 필드는 **현재 어디에도 존재하지 않는다** (`PersonalityProfile` 엔티티 자체가
-> `SurveySubmission`+`MatchingApplication`으로 재구성되며 사라짐, 두 엔티티 모두 팀장 희망
-> 관련 필드 없음). 3분기 로직 자체는 그대로 유지하되, **데이터가 생기기 전까지는 항상
-> `OPEN_NOMINATION` 경로만 동작**하도록 임시 처리한다 (아래 "임시 처리" 참고).
+> **정책 변경 (2026-08-03)**: 과거 문서의 유효 리더 점수 합산 방식은 폐기한다. 현재 신청에는
+> `WANTS`(네), `NEUTRAL`(필요하면), `DOES_NOT_WANT`(아니요)가 저장된다. 팀장 선출 모드와 매칭
+> 궁합의 리더 점수는 WANTS와 NEUTRAL의 실제 인원수를 사용한다. 기존 Team 생성 코드는 아직
+> 신청 정보를 연결하지 않으므로 코드 반영 전까지는 종전처럼 `OPEN_NOMINATION`만 동작한다.
 
 ## 엔티티 · 필드 정의
 
@@ -32,15 +31,14 @@ unique(team_id, voter_team_member_id, round)
 
 ### LeaderSelectionMode 판정 기준
 
-팀장 희망 점수(원합니다=1 / 상관없어요=0.5 / 원하지않아요=0)를 팀원 전체 합산해서 판정한다.
-**이 점수 필드는 현재 `SurveySubmission`/`MatchingApplication` 어디에도 없다 —
-survey/matching 담당자 확인 필요 (아래 "임시 처리" 참고).**
+`WANTS` 인원수를 먼저 확인하고, WANTS가 없을 때 `NEUTRAL` 인원을 추천 후보풀로 사용한다.
 
 | 조건 | mode | 설명 |
 |---|---|---|
-| 사전 후보(score=1.0) 2명 이상 | `CANDIDATE_VOTE` | 인사 유도 → 팀장 투표(사전 후보 대상) → 선출 |
-| 점수 합 1.0~1.5 | `AUTO_ASSIGNED` | 투표 없이 인사 유도 메시지에 팀장 안내 포함, 바로 확정 |
-| 그 외 (후보 0명, 또는 0.5점만 있음) | `OPEN_NOMINATION` | 인사 유도 → 팀장 여부 투표(AI 2명 추천) → 팀장 투표 → 선출 |
+| WANTS 1명 | `AUTO_ASSIGNED` | 해당 사용자를 투표 없이 팀장으로 자동 선출 |
+| WANTS 2명 이상 | `CANDIDATE_VOTE` | WANTS 사용자들을 확정 후보로 두고 경쟁 투표 |
+| WANTS 0명, NEUTRAL 1명 이상 | `OPEN_NOMINATION` | NEUTRAL 사용자들을 추천 후보풀로 사용한 뒤 선출 진행 |
+| WANTS 0명, NEUTRAL 0명 | `OPEN_NOMINATION` | 후보가 없으므로 예외적으로 무작위 임시 팀장 지정 |
 
 ## 결정사항
 
@@ -49,25 +47,26 @@ survey/matching 담당자 확인 필요 (아래 "임시 처리" 참고).**
 - **AUTO_ASSIGNED**: 유일한 사전 후보를 `TeamRole.LEADER`로 즉시 지정. `LeaderVote` 생성 안 함.
   인사 유도 챗봇 메시지 자체에 팀장 이름 포함.
 - **OPEN_NOMINATION**:
-  1. 챗봇이 전원에게 "팀장 여부 투표" 요청 (AI가 2명 추천 표시, 실제 후보 지정은 아님)
-  2. 응답한 `TeamMember.leaderCandidacy = WANTS`인 사람들이 후보가 되어 `LeaderVote` 진행
-  3. 아무도 `WANTS`를 선택하지 않으면 팀원 중 랜덤 1명을 임시 팀장으로 지정하고 시스템 메시지로 안내
+  1. 신청 당시 `NEUTRAL` 사용자를 추천 후보풀로 제공한다.
+  2. 후보풀 안에서 팀장 후보 등록과 `LeaderVote`를 진행한다.
+  3. NEUTRAL도 없으면 팀원 중 무작위 1명을 임시 팀장으로 지정하고 시스템 메시지로 안내한다.
 - **동률 처리** (CANDIDATE_VOTE, OPEN_NOMINATION 공통): 챗봇이 AI 판단으로 추천 후보 1명을
   제시하며 두 가지 선택지 제공
   - "추천 수락하기" → 해당 후보를 즉시 `TeamRole.LEADER`로 확정
   - "재투표하기" → `LeaderVote.round += 1`, 동률이었던 후보들 대상으로 재투표
 
-## 임시 처리 (데이터 갭 대응)
+## 임시 처리 (매칭 결과 연동 전)
 
-팀장 희망 점수 데이터가 준비되기 전까지:
+13번 문서의 실제 Team 생성 연결이 구현되기 전까지:
 
 - `Team.leaderSelectionMode`는 팀 생성 시 항상 `OPEN_NOMINATION`으로 고정한다.
 - `TeamMember.isPreLeaderCandidate`는 항상 `false`로 고정한다.
-- `CANDIDATE_VOTE` / `AUTO_ASSIGNED` 분기 로직은 코드에는 작성해두되(문서화된 스펙 그대로),
-  판정 조건에 들어갈 입력값이 없어 실질적으로 도달하지 않는 dead branch 상태로 둔다.
-- 데이터가 추가되면 판정 로직에 조건만 연결하면 되므로, Phase 5 구현 자체를 미루지 않는다.
+- `CANDIDATE_VOTE` / `AUTO_ASSIGNED` 분기 코드는 존재하지만 실제 매칭 신청 입력과 아직 연결되지
+  않아 도달하지 않는다.
+- 연동 시 `MatchingApplication.leaderPreference`를 `TeamMember.isPreLeaderCandidate`와 추천 후보
+  정보로 복사하고, 팀원 수가 3명 또는 4명인지 함께 검증한다.
 
-## 구현 현황 (Phase 5 완료 — OPEN_NOMINATION만)
+## 구현 현황 (Phase 5 완료, 2026-08-03 정책 연결은 대기)
 
 - 엔티티/리포지토리: `domains/team/entity/LeaderVote.java`, `LeaderVoteRepository.java`
 - 서비스: `domains/team/service/LeaderElectionService.java`
@@ -95,11 +94,11 @@ survey/matching 담당자 확인 필요 (아래 "임시 처리" 참고).**
 
 ## 미정 / 추후 확인 필요
 
-- **[담당자 확인 필요] 팀장 희망 점수 필드 부재** — 매칭 신청 시 "팀장 희망 여부"를 입력받아
-  `SurveySubmission` 또는 `MatchingApplication`에 저장해야 `CANDIDATE_VOTE`/`AUTO_ASSIGNED`
-  경로가 실제로 동작한다. survey/matching 담당자에게 공유하고 필드 추가 여부/일정 확인 필요.
-- `leaderSelectionMode` 경계값 케이스 (예: 사전 후보 1명 + 상관없어요 2명 = 합 2.0인 경우
-  `CANDIDATE_VOTE`인지 `AUTO_ASSIGNED`인지) — 위 데이터가 준비된 이후 실제로 마주치면 확인.
+- `MatchingApplication.leaderPreference`를 13번의 Team 생성 입력과 연결해야 한다.
+- WANTS가 1명이면 NEUTRAL 인원과 무관하게 `AUTO_ASSIGNED`, WANTS가 2명 이상이면 NEUTRAL
+  인원과 무관하게 `CANDIDATE_VOTE`로 처리한다.
+- WANTS가 0명일 때 NEUTRAL 후보풀을 기존 UI·AI 추천 카드에 어떻게 표시할지는 Team 생성 연동
+  단계에서 API 응답 계약을 갱신한다.
 
 ## 관련 화면
 

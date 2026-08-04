@@ -40,7 +40,7 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
 | team, member | FK | unique(team_id, member_id) |
 | profile | `Profile` FK | 팀 생성(매칭 신청) 시점에 사용된 프로필 스냅샷. `profiles.is_main`이 제거되어 "대표 프로필" 개념이 없어졌으므로, 이 팀에서 어떤 프로필로 참여했는지를 명시적으로 고정한다 |
 | role | `TeamRole` (`LEADER`/`MEMBER`) | |
-| isPreLeaderCandidate | boolean | 팀 생성 시점 팀장 희망 점수 스냅샷. **현재는 항상 false로 고정** — [02-leader-election.md](./02-leader-election.md)의 데이터 갭 참고 |
+| isPreLeaderCandidate | boolean | 매칭 신청의 `LeaderPreference.WANTS` 여부를 팀 생성 시점에 스냅샷. 새 매칭 결과 연동 전까지 기존 생성 경로는 false |
 | leaderCandidacy | `LeaderCandidacyStatus` (`UNDECIDED`/`WANTS`/`DOES_NOT_WANT`) | `OPEN_NOMINATION` 경로에서 사용 (현재 유일하게 동작하는 경로) |
 | status | `ACTIVE`/`LEFT` | 채팅방 나가기 |
 | greetedAt | LocalDateTime, nullable | 자기소개 메시지 최초 전송 시각. "전원 인사 완료" 판정용 |
@@ -51,32 +51,30 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
 
 - **엔티티 참조 정정**: 최초 설계 시 `PersonalityProfile`을 참조했으나, 현재 코드베이스에는
   해당 엔티티가 없다. `survey` 도메인은 `SurveySubmission`(설문 점수 보유) +
-  `MatchingApplication`(매칭 신청 시점 스냅샷: `contestCategory`, `skillScore`, `skillGroup`,
-  `collaborationDistance` 등)으로 재구성되어 있다. `Team.preferredCategory`는
+  `MatchingApplication`(매칭 신청 시점 스냅샷: `contestCategory`, `skillScore`,
+  `collaborationDistance`, `leaderPreference` 등)으로 재구성되어 있다. 실제 백분위·병합 그룹은
+  신청 시점 필드가 아니라 `MatchingBatch`의 유효 풀 정보를 기준으로 한다. `Team.preferredCategory`는
   `MatchingApplication.contestCategory`를 참조하는 것으로 정정한다.
 - 팀 생성 시 `leaderSelectionMode`를 1회 계산하고 각 팀원의 `isPreLeaderCandidate`를
-  스냅샷하는 설계 자체는 유지하되, **입력 데이터(팀장 희망 점수)가 현재 존재하지 않아
-  임시로 항상 `OPEN_NOMINATION` + `isPreLeaderCandidate=false`로 고정한다.**
-  자세한 내용/후속 조치는 [02-leader-election.md](./02-leader-election.md).
+  스냅샷하는 설계를 유지한다. 입력은 `MatchingApplication.leaderPreference`를 사용한다. 기존
+  Team 생성 경로는 아직 이 신청 정보를 받지 않으므로 새 결과 연동 전까지 `OPEN_NOMINATION`으로
+  동작하며, 연결 계획은 [02-leader-election.md](./02-leader-election.md)를 따른다.
 - 챗봇을 가상의 TeamMember row로 만들지 않는다 (→ [03-chat.md](./03-chat.md)).
 - **팀 생성 입력 계약**: 매칭 알고리즘이 어떻게 그룹을 짜는지는 이 도메인이 알 필요가 없다.
   `team` 도메인은 아래 계약만 받으면 팀을 생성할 수 있도록 설계한다.
   ```
   TeamCreationRequest {
-      List<TeamMemberInput> members   // memberId + profileId (매칭 신청에 사용된 프로필)
+      List<TeamMemberInput> members   // 정확히 3명 또는 4명, memberId + profileId
       InterestCategory preferredCategory   // MatchingApplication.contestCategory 기반
   }
   ```
-  현재 코드베이스에는 "개인의 매칭 신청"(`MatchingApplication`)만 있고 이를 그룹핑해서
-  팀을 만드는 로직/엔티티는 존재하지 않는다. 매칭 그룹핑 구현 여부·시점과 무관하게, 위
-  계약을 만족하는 호출(API 또는 내부 이벤트)이 있으면 Phase 1은 동작 가능하도록 만든다.
-  Phase 1 개발 중에는 시드 데이터/테스트용 트리거로 이 계약을 대체한다.
+  알고리즘 결과를 실제 Team으로 확정하는 연결은 13번 범위다. 해당 연결에서는 팀원 목록이
+  정확히 3명 또는 4명인지 검증하고, 신청에 사용된 프로필과 팀장 선호를 함께 전달한다.
 
 ## 미정 / 추후 확인 필요
 
-- **팀장 희망 점수 데이터 부재** — survey/matching 담당자 확인 필요. [02-leader-election.md](./02-leader-election.md) 참고.
-- **팀 그룹핑(매칭 결과) 산출 방식** — 현재 존재하지 않음. 언제/누가/어떤 형태로 만들지 확인 필요.
-  확인 전까지는 위 `TeamCreationRequest` 계약만으로 Phase 1을 진행.
+- **매칭 결과 연동 미완료** — `MatchingApplication.leaderPreference`는 존재하지만 13번의 실제 Team
+  생성 연결이 아직 없어 기존 경로에서는 선출 모드를 계산하지 못한다. [02-leader-election.md](./02-leader-election.md) 참고.
 - 팀장 변경(수동 위임) 기능 — 챗봇 안내 문구에 언급되지만 화면/플로우 미정. TeamMember.role
   갱신 API로 충분해 보이나 별도 스코프로 분리 예정.
 
