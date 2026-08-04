@@ -7,7 +7,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
-import org.cotato.gongmozip.domains.matching.config.MatchingAlgorithmProperties;
 import org.cotato.gongmozip.domains.matching.entity.MatchingApplication;
 import org.cotato.gongmozip.domains.matching.entity.MatchingBatch;
 import org.cotato.gongmozip.domains.matching.entity.MatchingGroup;
@@ -30,7 +29,6 @@ public class MatchingResultQueryService {
     private final MatchingApplicationRepository matchingApplicationRepository;
     private final MatchingGroupMemberRepository matchingGroupMemberRepository;
     private final MatchingTimePolicy matchingTimePolicy;
-    private final MatchingAlgorithmProperties properties;
 
     public TodayMatchingResultResponse getTodayResult(Long memberId) {
         LocalDate today = matchingTimePolicy.today();
@@ -41,7 +39,8 @@ public class MatchingResultQueryService {
     }
 
     private TodayMatchingResultResponse toResult(Long memberId, MatchingApplication application) {
-        LocalDateTime publishedAt = resolvePublishedAt(application);
+        LocalDate applicationDate = resolveApplicationDate(application);
+        LocalDateTime publishedAt = matchingTimePolicy.resultPublishAt(applicationDate);
         MatchingApplicationStatus applicationStatus = application.getStatus();
 
         if (applicationStatus == MatchingApplicationStatus.CANCELED
@@ -49,7 +48,7 @@ public class MatchingResultQueryService {
             return applicationOnlyResult(MatchingResultStatus.WITHDRAWN, application, publishedAt);
         }
         // 계산이 먼저 끝나더라도 공개 시각 전에는 그룹·팀원·점수를 조회하지 않는다.
-        if (matchingTimePolicy.now().isBefore(publishedAt)) {
+        if (!matchingTimePolicy.isResultPublished(applicationDate, matchingTimePolicy.now())) {
             return applicationOnlyResult(MatchingResultStatus.NOT_PUBLISHED, application, publishedAt);
         }
         if (applicationStatus == MatchingApplicationStatus.FAILED) {
@@ -85,12 +84,15 @@ public class MatchingResultQueryService {
                         .toList());
     }
 
-    private LocalDateTime resolvePublishedAt(MatchingApplication application) {
-        MatchingBatch batch = application.getMatchingBatch();
-        if (batch != null) {
-            return batch.getPublishedAt();
+    private LocalDate resolveApplicationDate(MatchingApplication application) {
+        if (application.getApplicationDate() != null) {
+            return application.getApplicationDate();
         }
-        return LocalDateTime.of(application.getApplicationDate(), properties.getResultPublishTime());
+        MatchingBatch batch = application.getMatchingBatch();
+        if (batch != null && batch.getApplicationDate() != null) {
+            return batch.getApplicationDate();
+        }
+        throw new MatchingException(MatchingErrorCode.MATCHING_RESULT_NOT_PUBLISHED);
     }
 
     private TodayMatchingResultResponse emptyResult(MatchingResultStatus resultStatus) {

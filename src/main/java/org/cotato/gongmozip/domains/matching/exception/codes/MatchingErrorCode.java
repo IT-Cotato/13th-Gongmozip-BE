@@ -21,6 +21,7 @@ public enum MatchingErrorCode implements BaseErrorCode {
     MATCHING_RESTRICTED(HttpStatus.FORBIDDEN, "MATCHING_403_2", "협업거리 감소로 인해 현재 매칭 참여가 제한되어 있습니다."),
     MATCHING_GROUP_ACCESS_DENIED(HttpStatus.FORBIDDEN, "MATCHING_403_3", "해당 매칭 결과에 접근할 권한이 없습니다."),
     TEAM_ACCESS_DENIED(HttpStatus.FORBIDDEN, "MATCHING_403_4", "해당 팀에 대한 접근 권한이 없습니다."),
+    MATCHING_RESULT_NOT_PUBLISHED(HttpStatus.FORBIDDEN, "MATCHING_403_5", "아직 매칭 결과가 공개되지 않았습니다."),
 
     // 404 Not Found
     APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "MATCHING_404_1", "매칭 신청을 찾을 수 없습니다."),

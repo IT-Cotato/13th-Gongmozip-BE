@@ -87,3 +87,8 @@ cloud:
       bucket: gongmozip-contest-images-test
     cloudfront:
       domain: https://test.cloudfront.net
+
+# 운영 application.yml과 독립적으로 로딩되는 테스트용 매칭 공개 시각
+matching:
+  algorithm:
+    result-publish-time: "16:00"

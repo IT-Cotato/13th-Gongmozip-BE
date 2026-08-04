@@ -1,7 +1,6 @@
 package org.cotato.gongmozip.domains.matching.service;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -11,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.matching.algorithm.MatchingPoolPartitioner;
 import org.cotato.gongmozip.domains.matching.algorithm.model.pool.MatchingCandidate;
 import org.cotato.gongmozip.domains.matching.algorithm.model.pool.MatchingPoolDefinition;
-import org.cotato.gongmozip.domains.matching.config.MatchingAlgorithmProperties;
 import org.cotato.gongmozip.domains.matching.entity.MatchingApplication;
 import org.cotato.gongmozip.domains.matching.entity.MatchingBatch;
 import org.cotato.gongmozip.domains.matching.enums.MatchingApplicationStatus;
@@ -34,7 +32,6 @@ public class MatchingPoolPreparationService {
     private final MatchingApplicationRepository matchingApplicationRepository;
     private final MatchingBatchRepository matchingBatchRepository;
     private final MatchingPoolPartitioner partitioner;
-    private final MatchingAlgorithmProperties properties;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void prepare(LocalDate applicationDate) {
@@ -78,7 +75,6 @@ public class MatchingPoolPreparationService {
                 .sourceQuartileTo(definition.sourceQuartileTo())
                 .status(MatchingBatchStatus.PENDING)
                 .randomSeed(stableSeed(applicationDate, definition))
-                .publishedAt(LocalDateTime.of(applicationDate, properties.getResultPublishTime()))
                 .build();
     }
 

@@ -10,7 +10,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import org.cotato.gongmozip.domains.matching.config.MatchingAlgorithmProperties;
 import org.cotato.gongmozip.domains.matching.entity.MatchingApplication;
 import org.cotato.gongmozip.domains.matching.entity.MatchingBatch;
 import org.cotato.gongmozip.domains.matching.entity.MatchingGroup;
@@ -51,9 +50,8 @@ class MatchingResultQueryServiceTest {
 
     @BeforeEach
     void setUp() {
-        MatchingAlgorithmProperties properties = new MatchingAlgorithmProperties();
         matchingResultQueryService = new MatchingResultQueryService(
-                matchingApplicationRepository, matchingGroupMemberRepository, matchingTimePolicy, properties);
+                matchingApplicationRepository, matchingGroupMemberRepository, matchingTimePolicy);
         given(matchingTimePolicy.today()).willReturn(TODAY);
     }
 
@@ -76,6 +74,9 @@ class MatchingResultQueryServiceTest {
         MatchingApplication application = application(1L, MatchingApplicationStatus.PROPOSED, batch());
         given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(application));
         given(matchingTimePolicy.now()).willReturn(PUBLISHED_AT.minusSeconds(1));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingTimePolicy.isResultPublished(TODAY, PUBLISHED_AT.minusSeconds(1)))
+                .willReturn(false);
 
         var response = matchingResultQueryService.getTodayResult(1L);
 
@@ -100,6 +101,8 @@ class MatchingResultQueryServiceTest {
 
         given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(mine));
         given(matchingTimePolicy.now()).willReturn(PUBLISHED_AT);
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingTimePolicy.isResultPublished(TODAY, PUBLISHED_AT)).willReturn(true);
         given(matchingGroupMemberRepository.findResultMembership(mine)).willReturn(Optional.of(myMembership));
         given(matchingGroupMemberRepository.findResultMembers(group)).willReturn(members);
 
@@ -129,6 +132,9 @@ class MatchingResultQueryServiceTest {
         MatchingApplication application = application(1L, MatchingApplicationStatus.FAILED, batch());
         given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(application));
         given(matchingTimePolicy.now()).willReturn(PUBLISHED_AT.plusMinutes(1));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingTimePolicy.isResultPublished(TODAY, PUBLISHED_AT.plusMinutes(1)))
+                .willReturn(true);
 
         var response = matchingResultQueryService.getTodayResult(1L);
 
@@ -144,6 +150,9 @@ class MatchingResultQueryServiceTest {
         MatchingApplication application = application(1L, MatchingApplicationStatus.MATCHING, batch());
         given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(application));
         given(matchingTimePolicy.now()).willReturn(PUBLISHED_AT.plusMinutes(1));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingTimePolicy.isResultPublished(TODAY, PUBLISHED_AT.plusMinutes(1)))
+                .willReturn(true);
 
         var response = matchingResultQueryService.getTodayResult(1L);
 
@@ -152,11 +161,12 @@ class MatchingResultQueryServiceTest {
         verify(matchingGroupMemberRepository, never()).findResultMembership(application);
     }
 
-    @DisplayName("취소나 패스 신청은 공개 시각과 무관하게 WITHDRAWN을 반환한다")
+    @DisplayName("무료 취소 신청은 공개 시각과 무관하게 WITHDRAWN을 반환한다")
     @Test
     void returnsWithdrawnForCanceledApplication() {
         MatchingApplication application = application(1L, MatchingApplicationStatus.CANCELED, null);
         given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(application));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
 
         var response = matchingResultQueryService.getTodayResult(1L);
 
@@ -171,7 +181,6 @@ class MatchingResultQueryServiceTest {
                 .applicationDate(TODAY)
                 .category(InterestCategory.IT_AI_TECH)
                 .poolOrdinal(1)
-                .publishedAt(PUBLISHED_AT)
                 .build();
     }
 
