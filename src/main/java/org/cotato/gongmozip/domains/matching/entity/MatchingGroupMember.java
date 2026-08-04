@@ -18,6 +18,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.cotato.gongmozip.domains.matching.enums.MatchingGroupMemberStatus;
+import org.cotato.gongmozip.domains.matching.enums.MatchingResponseSource;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.global.entity.BaseEntity;
 
@@ -56,6 +57,60 @@ public class MatchingGroupMember extends BaseEntity {
 
     @Column(name = "responded_at")
     private LocalDateTime respondedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "response_source", length = 30)
+    private MatchingResponseSource responseSource;
+
+    /**
+     * 이 그룹원 응답에 계산된 정책상 감점값(3/5/7/9/11)이다.
+     *
+     * <p>실제 협업거리 증감 원장은 {@code CollaborationPointHistory.delta}에 별도로 남는다. 이 값은
+     * 동일한 패스 요청이 재시도됐을 때 최초 응답과 같은 감점값을 반환하면서 포인트를 다시 차감하지
+     * 않기 위한 응답 단위 스냅샷이다.
+     */
+    @Column(name = "pass_penalty")
+    private Integer passPenalty;
+
+    public void accept(LocalDateTime respondedAt) {
+        validatePending();
+        this.responseStatus = MatchingGroupMemberStatus.ACCEPTED;
+        this.respondedAt = respondedAt;
+        this.responseSource = MatchingResponseSource.USER;
+    }
+
+    public void pass(LocalDateTime respondedAt, int passPenalty) {
+        validatePending();
+        if (passPenalty < 0) {
+            throw new IllegalArgumentException("패스 감점은 양수로 기록해야 합니다.");
+        }
+        this.responseStatus = MatchingGroupMemberStatus.PASSED;
+        this.respondedAt = respondedAt;
+        this.responseSource = MatchingResponseSource.USER;
+        this.passPenalty = passPenalty;
+    }
+
+    public void expire(LocalDateTime respondedAt, int passPenalty) {
+        validatePending();
+        if (passPenalty < 0) {
+            throw new IllegalArgumentException("패스 감점은 양수로 기록해야 합니다.");
+        }
+        this.responseStatus = MatchingGroupMemberStatus.EXPIRED;
+        this.respondedAt = respondedAt;
+        this.responseSource = MatchingResponseSource.DEADLINE_JOB;
+        this.passPenalty = passPenalty;
+    }
+
+    public boolean isActiveResponseTarget() {
+        return responseStatus == MatchingGroupMemberStatus.PENDING
+                || responseStatus == MatchingGroupMemberStatus.ACCEPTED;
+    }
+
+    private void validatePending() {
+        if (responseStatus != MatchingGroupMemberStatus.PENDING) {
+            throw new IllegalStateException("응답 대기 중인 그룹원만 응답 상태를 변경할 수 있습니다.");
+        }
+    }
 
     @jakarta.persistence.PrePersist
     @jakarta.persistence.PreUpdate

@@ -21,6 +21,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.matching.enums.MatchingApplicationStatus;
+import org.cotato.gongmozip.domains.matching.enums.MatchingReassignmentReason;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
@@ -77,6 +78,18 @@ public class MatchingApplication extends BaseEntity {
     @Builder.Default
     @Column(name = "reassignment_priority", nullable = false)
     private boolean reassignmentPriority = false;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_application_id")
+    private MatchingApplication sourceApplication;
+
+    @Builder.Default
+    @Column(name = "reassignment_count", nullable = false)
+    private int reassignmentCount = 0;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reassignment_reason", length = 50)
+    private MatchingReassignmentReason reassignmentReason;
 
     @Column(name = "canceled_at")
     private LocalDateTime canceledAt;
@@ -208,6 +221,60 @@ public class MatchingApplication extends BaseEntity {
         validateProcessedBatch(batch);
         validateMatchingStatus();
         this.status = MatchingApplicationStatus.FAILED;
+    }
+
+    public void match() {
+        if (status != MatchingApplicationStatus.PROPOSED) {
+            throw new IllegalStateException("제안 상태의 신청만 최종 매칭할 수 있습니다.");
+        }
+        this.status = MatchingApplicationStatus.MATCHED;
+    }
+
+    public void waitForReassignment() {
+        if (status != MatchingApplicationStatus.PROPOSED) {
+            throw new IllegalStateException("제안 상태의 피해 신청만 재배정 대기로 전환할 수 있습니다.");
+        }
+        this.status = MatchingApplicationStatus.REASSIGN_PENDING;
+    }
+
+    public MatchingApplication createReassignment(
+            LocalDate applicationDate, MatchingReassignmentReason reassignmentReason) {
+        if (applicationDate == null || reassignmentReason == null) {
+            throw new IllegalArgumentException("재배정 날짜와 사유는 필수입니다.");
+        }
+        return MatchingApplication.builder()
+                .member(member)
+                .profile(profile)
+                .applicationDate(applicationDate)
+                .status(MatchingApplicationStatus.WAITING)
+                .leaderPreference(leaderPreference)
+                .firstMatching(firstMatching)
+                .reassignmentPriority(true)
+                .sourceApplication(this)
+                .reassignmentCount(reassignmentCount + 1)
+                .reassignmentReason(reassignmentReason)
+                .contestCategory(contestCategory)
+                .gpaScore(gpaScore)
+                .projectScore(projectScore)
+                .awardScore(awardScore)
+                .certificationScore(certificationScore)
+                .collaborationScore(collaborationScore)
+                .skillScore(skillScore)
+                .collaborationDistance(collaborationDistance)
+                .agreeablenessScore(agreeablenessScore)
+                .conscientiousnessScore(conscientiousnessScore)
+                .honestyHumilityScore(honestyHumilityScore)
+                .extroversionScore(extroversionScore)
+                .goalPreferenceScore(goalPreferenceScore)
+                .workStyleScore(workStyleScore)
+                .communicationStyleScore(communicationStyleScore)
+                .extroversion2Score(extroversion2Score)
+                .extroversion3Score(extroversion3Score)
+                .extroversionType(extroversionType)
+                .characterType(characterType)
+                .characterXScore(characterXScore)
+                .characterYScore(characterYScore)
+                .build();
     }
 
     // 배치 계산·저장 실패 시 처리 중이던 신청만 WAITING으로 되돌려 같은 배치에서 재시도할 수 있게 한다.
