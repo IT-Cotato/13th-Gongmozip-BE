@@ -15,6 +15,7 @@ public enum MatchingErrorCode implements BaseErrorCode {
     WITHDRAWAL_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "MATCHING_400_4", "현재는 매칭 신청을 철회할 수 없습니다."),
     INVALID_PROFILE_GPA(HttpStatus.BAD_REQUEST, "MATCHING_400_5", "프로필의 학점 입력값이 올바르지 않습니다."),
     PROJECT_EVALUATION_NOT_READY(HttpStatus.BAD_REQUEST, "MATCHING_400_6", "프로젝트 AI 평가가 모두 완료된 후 매칭을 신청할 수 있습니다."),
+    MATCHING_RESPONSE_DEADLINE_PASSED(HttpStatus.BAD_REQUEST, "MATCHING_400_7", "매칭 결과 응답 기한이 지났습니다."),
 
     // 403 Forbidden
     PROFILE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "MATCHING_403_1", "본인의 프로필만 매칭에 사용할 수 있습니다."),
@@ -35,7 +36,11 @@ public enum MatchingErrorCode implements BaseErrorCode {
     ALREADY_APPLIED_TODAY(HttpStatus.CONFLICT, "MATCHING_409_1", "매칭풀에는 하루에 한 번만 입장할 수 있습니다."),
     INVALID_APPLICATION_STATUS(HttpStatus.CONFLICT, "MATCHING_409_2", "현재 신청 상태에서는 해당 요청을 처리할 수 없습니다."),
     MATCHING_REASON_IN_PROGRESS(HttpStatus.CONFLICT, "MATCHING_409_3", "해당 매칭 결과의 추천 사유가 이미 생성 중입니다."),
-    LEADER_RECOMMENDATION_IN_PROGRESS(HttpStatus.CONFLICT, "MATCHING_409_4", "해당 팀의 팀장 추천이 이미 진행 중입니다.");
+    LEADER_RECOMMENDATION_IN_PROGRESS(HttpStatus.CONFLICT, "MATCHING_409_4", "해당 팀의 팀장 추천이 이미 진행 중입니다."),
+    MATCHING_RESPONSE_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "MATCHING_409_5", "이미 제출한 매칭 응답은 변경할 수 없습니다."),
+    MATCHING_GROUP_ALREADY_CLOSED(HttpStatus.CONFLICT, "MATCHING_409_6", "이미 종료된 매칭 그룹입니다."),
+    MATCHING_TEAM_ALREADY_CREATED(HttpStatus.CONFLICT, "MATCHING_409_7", "해당 매칭 그룹의 팀이 이미 생성되었습니다."),
+    MATCHING_REASSIGNMENT_CONFLICT(HttpStatus.CONFLICT, "MATCHING_409_8", "자동 재매칭 신청과 기존 신청이 충돌했습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
