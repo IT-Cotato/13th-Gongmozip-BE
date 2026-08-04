@@ -14,6 +14,7 @@ public enum MatchingErrorCode implements BaseErrorCode {
     SURVEY_REQUIRED(HttpStatus.BAD_REQUEST, "MATCHING_400_3", "협업 유형 검사를 완료해야 합니다."),
     WITHDRAWAL_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "MATCHING_400_4", "현재는 매칭 신청을 철회할 수 없습니다."),
     INVALID_PROFILE_GPA(HttpStatus.BAD_REQUEST, "MATCHING_400_5", "프로필의 학점 입력값이 올바르지 않습니다."),
+    PROJECT_EVALUATION_NOT_READY(HttpStatus.BAD_REQUEST, "MATCHING_400_6", "프로젝트 AI 평가가 모두 완료된 후 매칭을 신청할 수 있습니다."),
 
     // 403 Forbidden
     PROFILE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "MATCHING_403_1", "본인의 프로필만 매칭에 사용할 수 있습니다."),

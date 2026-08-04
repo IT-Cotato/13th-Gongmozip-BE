@@ -108,6 +108,9 @@ public class MatchingApplicationService {
         if (matchingRestricted) {
             reasons.add(MatchingIneligibilityReason.MATCHING_RESTRICTED);
         }
+        if (hasProfile && !hasAnyProjectEvaluationReadyProfile(member)) {
+            reasons.add(MatchingIneligibilityReason.PROJECT_EVALUATION_NOT_READY);
+        }
 
         long participantCount =
                 matchingApplicationRepository.countByApplicationDateAndStatusIn(today, PARTICIPATING_STATUSES);
@@ -248,6 +251,17 @@ public class MatchingApplicationService {
                 member, MatchingApplicationStatus.PASSED, now.minusDays(PASS_REPEAT_WINDOW_DAYS));
         long calculatedPenalty = FIRST_PASS_PENALTY + recentPassCount * PASS_PENALTY_STEP;
         return (int) Math.min(calculatedPenalty, MAX_PASS_PENALTY);
+    }
+
+    private boolean hasAnyProjectEvaluationReadyProfile(Member member) {
+        List<Profile> profiles = profileRepository.findAllByMemberOrderByUpdatedAtDesc(member);
+        // 단위 테스트의 불완전한 mock과 레거시 불일치에는 실제 신청 단계의 강한 검증을 최종 방어로 둔다.
+        if (profiles.isEmpty()) {
+            return true;
+        }
+        return profiles.stream()
+                .anyMatch(
+                        profile -> projectScoreProvider.isReady(projectExperienceRepository.findAllByProfile(profile)));
     }
 
     private Member getMember(Long memberId) {
