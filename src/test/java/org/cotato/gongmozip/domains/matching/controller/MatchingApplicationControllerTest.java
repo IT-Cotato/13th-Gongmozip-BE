@@ -24,6 +24,7 @@ import org.cotato.gongmozip.domains.matching.enums.WithdrawalType;
 import org.cotato.gongmozip.domains.matching.exception.MatchingException;
 import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
 import org.cotato.gongmozip.domains.matching.service.MatchingApplicationService;
+import org.cotato.gongmozip.domains.matching.service.MatchingWithdrawalService;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
@@ -50,6 +51,9 @@ class MatchingApplicationControllerTest {
 
     @MockitoBean
     private MatchingApplicationService matchingApplicationService;
+
+    @MockitoBean
+    private MatchingWithdrawalService matchingWithdrawalService;
 
     @MockitoBean
     private MemberRepository memberRepository;
@@ -152,7 +156,7 @@ class MatchingApplicationControllerTest {
     @DisplayName("프론트 분기 없이 하나의 철회 API가 백엔드 판정 결과를 반환한다.")
     @Test
     void withdraw() throws Exception {
-        given(matchingApplicationService.withdraw(1L, 100L))
+        given(matchingWithdrawalService.withdraw(1L, 100L))
                 .willReturn(new WithdrawalResponse(100L, "PASSED", WithdrawalType.PENALIZED_PASS, 5, 95));
 
         mockMvc.perform(post("/api/matching/applications/100/withdraw").with(user(userDetails)))
