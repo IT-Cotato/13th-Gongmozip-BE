@@ -762,6 +762,35 @@ class LeaderElectionServiceTest {
                 .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
     }
 
+    @DisplayName("투표 없이 마감되면 '팀장 안 할래요'를 명시한 사람은 무작위 대상에서 제외된다.")
+    @Test
+    void 투표_없이_마감되면_DOES_NOT_WANT_팀원은_무작위_대상에서_제외된다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember onlyCandidate = teamMemberOf(team, 10L, "김철수");
+        onlyCandidate.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember declined1 = teamMemberOf(team, 20L, "이해은");
+        declined1.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
+        TeamMember declined2 = teamMemberOf(team, 30L, "박준수");
+        declined2.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(onlyCandidate, declined1, declined2));
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1)).willReturn(List.of());
+
+        // when
+        leaderElectionService.resolveDeadlineIfDue(1L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
+        assertThat(onlyCandidate.getRole()).isEqualTo(TeamRole.LEADER);
+        assertThat(declined1.getRole()).isEqualTo(TeamRole.MEMBER);
+        assertThat(declined2.getRole()).isEqualTo(TeamRole.MEMBER);
+    }
+
     @DisplayName("후보 등록은 끝났고 마감 시점에 일부라도 투표가 있으면 있는 대로 개표한다.")
     @Test
     void 후보_등록은_끝났고_일부_투표가_있으면_있는_대로_개표한다() {

@@ -250,7 +250,16 @@ public class LeaderElectionService {
         int round = currentRound(teamId, activeMembers.size());
         List<LeaderVote> votes = leaderVoteRepository.findByTeam_TeamIdAndRound(teamId, round);
         if (votes.isEmpty()) {
-            TeamMember randomLeader = activeMembers.get(RANDOM.nextInt(activeMembers.size()));
+            // 이 분기에 도달했다는 것 자체가 WANTS 후보가 2명 이상 있어 LEADER_VOTE_CARD가 이미
+            // 발행됐다는 뜻이다(0/1명이었다면 resolveCandidacyPhase에서 이미 LEADER_DECIDED로
+            // 빠졌을 것). "팀장 안 할래요"를 명시한 사람까지 무작위 대상에 넣으면 안 되므로,
+            // WANTS 후보로 풀을 제한한다(빈 리스트가 될 이론상 불가능한 경우에만 방어적으로
+            // activeMembers 전체를 대상으로 한다).
+            List<TeamMember> candidates = activeMembers.stream()
+                    .filter(tm -> tm.getLeaderCandidacy() == LeaderCandidacyStatus.WANTS)
+                    .toList();
+            List<TeamMember> randomPool = candidates.isEmpty() ? activeMembers : candidates;
+            TeamMember randomLeader = randomPool.get(RANDOM.nextInt(randomPool.size()));
             assignLeader(
                     team,
                     randomLeader,
