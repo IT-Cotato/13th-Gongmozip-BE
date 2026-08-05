@@ -45,8 +45,9 @@ public class ChatbotOrchestrationService {
             "안녕하세요. 저는 팀 운영을 도와주는 AI 챗봇이에요. 팀 매칭이 완료되었어요. 각자 간단한 자기소개와 인사를 나눠볼까요?";
     private static final String LEADER_SELECTION_PROMPT = "모두 인사를 마쳤네요! 이제 팀장을 선출해볼게요. 팀장이 되고 싶은 분은 투표해주세요.";
     private static final String CONTEST_SELECTION_PROMPT = "팀장 선출까지 마쳤으면, 팀원들과 함께 나갈 공모전을 후보로 추가하고 투표해보세요!";
-    private static final String IN_PROGRESS_PROMPT = "공모전이 정해졌어요! 이제 팀원들과 함께 준비를 시작해보세요. 언제든 저의 도움이 필요하면 태그해주세요.\n\n"
-            + "활용 예시\n@챗봇 우리 역할 분담 추천해줘\n@챗봇 우리 타임라인 추천해줘";
+    private static final String IN_PROGRESS_PROMPT = "언제든 저의 도움이 필요하면 태그해주세요.";
+    private static final String CHATBOT_GUIDE_TITLE = "활용 예시";
+    private static final List<String> CHATBOT_GUIDE_EXAMPLES = List.of("우리 역할 분담 추천해줘", "우리 타임라인 추천해줘");
     private static final String REVIEW_COMPLETE_PROMPT = "모든 팀원이 서로에게 리뷰를 남겼어요. 수고 많으셨어요! 팀 프로젝트가 여기서 마무리됩니다.";
     // 팀장 여부 투표/팀장 투표 시작(=LEADER_SELECTING 진입) 후 이 시간 안에 결과가 나지 않으면
     // 스케줄러가 강제로 확정한다(GREETING 타임아웃과 동일한 정책, docs/decisions/02-leader-election.md).
@@ -271,6 +272,8 @@ public class ChatbotOrchestrationService {
     public void advanceToInProgress(Team team) {
         team.advanceStatus(TeamStatus.IN_PROGRESS);
         chatService.postChatbotMessage(team, IN_PROGRESS_PROMPT);
+        chatService.postChatbotCardMessage(
+                team, MessageType.CHATBOT_GUIDE_CARD, CHATBOT_GUIDE_TITLE, toChatbotGuideMetadata());
     }
 
     /** 활성 팀원 전원이 서로에 대한 리뷰를 다 썼을 때(ReviewService) 호출되어 리뷰 단계를 마무리한다. */
@@ -316,6 +319,15 @@ public class ChatbotOrchestrationService {
             return objectMapper.writeValueAsString(Map.of(key, id));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("팀장 결과 메타데이터 직렬화에 실패했습니다.", e);
+        }
+    }
+
+    // "@챗봇에게 말하기" 버튼을 탭했을 때 채울 예시 문구 목록을 내려준다.
+    private String toChatbotGuideMetadata() {
+        try {
+            return objectMapper.writeValueAsString(Map.of("examples", CHATBOT_GUIDE_EXAMPLES));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("챗봇 활용 안내 메타데이터 직렬화에 실패했습니다.", e);
         }
     }
 }
