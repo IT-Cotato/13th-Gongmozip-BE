@@ -60,8 +60,8 @@ public class AuthController {
 
         ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, result.refreshToken())
                 .httpOnly(true) // XSS 공격 방어
-                .secure(false) // 운영 환경에서는 true로 변경 (HTTPS 필요)
-                .sameSite("Strict")
+                .secure(true)
+                .sameSite("None")
                 .maxAge(refreshTokenExpiration / 1000) // 쿠키 만료 시간(14일)
                 .path("/api/auth") // 쿠키는 api/auth인 경우에만 전송
                 .build();
@@ -83,8 +83,8 @@ public class AuthController {
 
         ResponseCookie deleteCookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, "")
                 .httpOnly(true)
-                .secure(false) // 운영 환경에서는 true로 변경 (HTTPS 필요)
-                .sameSite("Strict")
+                .secure(true)
+                .sameSite("None")
                 .maxAge(0) // 쿠키 즉시 만료
                 .path("/api/auth")
                 .build();
@@ -106,8 +106,8 @@ public class AuthController {
 
         ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, result.refreshToken())
                 .httpOnly(true)
-                .secure(false)
-                .sameSite("Strict")
+                .secure(true)
+                .sameSite("None")
                 .maxAge(refreshTokenExpiration / 1000)
                 .path("/api/auth")
                 .build();

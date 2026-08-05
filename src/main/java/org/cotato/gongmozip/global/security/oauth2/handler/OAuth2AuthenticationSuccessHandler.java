@@ -55,8 +55,8 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         // Access Token: JS에서 읽어 Authorization 헤더로 사용하므로 non-HttpOnly
         ResponseCookie accessCookie = ResponseCookie.from(ACCESS_TOKEN_COOKIE, accessToken)
                 .httpOnly(false)
-                .secure(request.isSecure())
-                .sameSite("Lax")
+                .secure(true)
+                .sameSite("None")
                 .maxAge(accessTokenExpiration / 1000)
                 .path("/")
                 .build();
@@ -64,8 +64,8 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         // Refresh Token: 탈취 방지를 위해 HttpOnly, /api/auth 경로에서만 전송
         ResponseCookie refreshCookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, refreshToken)
                 .httpOnly(true)
-                .secure(request.isSecure())
-                .sameSite("Lax")
+                .secure(true)
+                .sameSite("None")
                 .maxAge(refreshTokenExpiration / 1000)
                 .path("/api/auth")
                 .build();
