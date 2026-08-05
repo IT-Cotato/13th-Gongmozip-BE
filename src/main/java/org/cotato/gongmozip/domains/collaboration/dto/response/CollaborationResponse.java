@@ -12,5 +12,11 @@ public final class CollaborationResponse {
 
     public record CollaborationHistoryResponse(Long historyId, int delta, String reason, LocalDateTime createdAt) {}
 
-    public record CollaborationHistoryListResponse(List<CollaborationHistoryResponse> histories) {}
+    public record CollaborationHistoryListResponse(
+            List<CollaborationHistoryResponse> histories,
+            int page,
+            int size,
+            long totalElements,
+            int totalPages,
+            boolean hasNext) {}
 }

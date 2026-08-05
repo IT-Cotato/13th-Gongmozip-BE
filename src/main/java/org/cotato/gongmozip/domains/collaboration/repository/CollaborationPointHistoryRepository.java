@@ -18,6 +18,9 @@ public interface CollaborationPointHistoryRepository extends JpaRepository<Colla
 
     java.util.List<CollaborationPointHistory> findAllByMemberOrderByCreatedAtDesc(Member member);
 
+    org.springframework.data.domain.Page<CollaborationPointHistory> findAllByMemberOrderByCreatedAtDesc(
+            Member member, org.springframework.data.domain.Pageable pageable);
+
     // 음수 delta만 양수 손실량으로 뒤집어 최근 협업거리 감소 합계를 계산한다
     @Query(
             """

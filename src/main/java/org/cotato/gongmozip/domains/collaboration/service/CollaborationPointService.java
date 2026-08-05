@@ -39,15 +39,15 @@ public class CollaborationPointService {
 
     public org.cotato.gongmozip.domains.collaboration.dto.response.CollaborationResponse
                     .CollaborationHistoryListResponse
-            getCollaborationHistories(Long memberId) {
+            getCollaborationHistories(Long memberId, org.springframework.data.domain.Pageable pageable) {
         Member member = memberRepository
                 .findById(memberId)
                 .orElseThrow(() -> new org.cotato.gongmozip.domains.member.exception.MemberException(
                         org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode.MEMBER_NOT_FOUND));
-        java.util.List<CollaborationPointHistory> histories =
-                collaborationPointHistoryRepository.findAllByMemberOrderByCreatedAtDesc(member);
+        org.springframework.data.domain.Page<CollaborationPointHistory> historiesPage =
+                collaborationPointHistoryRepository.findAllByMemberOrderByCreatedAtDesc(member, pageable);
         return org.cotato.gongmozip.domains.collaboration.converter.CollaborationConverter.toHistoryListResponse(
-                histories);
+                historiesPage);
     }
 
     // enum에 정의된 기본 변화량을 적용하는 일반 적립·차감 진입점

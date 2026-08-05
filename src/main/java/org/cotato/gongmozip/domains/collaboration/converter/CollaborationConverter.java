@@ -27,11 +27,13 @@ public final class CollaborationConverter {
                 history.getCreatedAt());
     }
 
-    public static CollaborationHistoryListResponse toHistoryListResponse(List<CollaborationPointHistory> histories) {
-        List<CollaborationHistoryResponse> list = histories.stream()
+    public static CollaborationHistoryListResponse toHistoryListResponse(
+            org.springframework.data.domain.Page<CollaborationPointHistory> page) {
+        List<CollaborationHistoryResponse> list = page.getContent().stream()
                 .map(CollaborationConverter::toHistoryResponse)
                 .toList();
-        return new CollaborationHistoryListResponse(list);
+        return new CollaborationHistoryListResponse(
+                list, page.getNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages(), page.hasNext());
     }
 
     private static String toKoreanReason(CollaborationPointReason reason) {

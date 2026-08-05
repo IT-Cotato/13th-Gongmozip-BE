@@ -41,9 +41,10 @@ public class CollaborationController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = MemberErrorCode.class)
     @GetMapping("/histories")
     public ResponseEntity<BaseResponse<CollaborationHistoryListResponse>> getHistories(
+            @org.springframework.data.web.PageableDefault(size = 10) org.springframework.data.domain.Pageable pageable,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         CollaborationHistoryListResponse response =
-                collaborationPointService.getCollaborationHistories(userDetails.getMemberId());
+                collaborationPointService.getCollaborationHistories(userDetails.getMemberId(), pageable);
         return BaseResponseFormatter.success(CollaborationSuccessCode.COLLABORATION_HISTORY_RETRIEVED, response);
     }
 }
