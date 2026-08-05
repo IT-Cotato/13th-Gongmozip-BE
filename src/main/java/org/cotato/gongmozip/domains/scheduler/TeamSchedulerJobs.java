@@ -63,4 +63,17 @@ public class TeamSchedulerJobs {
             }
         }
     }
+
+    // 팀장 여부 투표/팀장 투표 마감도 시각 단위(LEADER_SELECTING 진입 후 2시간)라 5분 간격으로
+    // 확인한다.
+    @Scheduled(cron = "0 */5 * * * *")
+    public void resolveLeaderSelectionDeadlines() {
+        for (Long teamId : teamScheduleService.findDueLeaderSelectionDeadlineTeamIds()) {
+            try {
+                teamScheduleService.resolveLeaderSelectionDeadlineForTeam(teamId);
+            } catch (Exception e) {
+                log.error("팀장 선출 마감 처리 실패 - teamId: {}", teamId, e);
+            }
+        }
+    }
 }

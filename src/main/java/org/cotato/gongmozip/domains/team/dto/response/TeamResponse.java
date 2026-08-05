@@ -29,5 +29,10 @@ public final class TeamResponse {
             MemberAvatarResponse avatar) {}
 
     public record TeamMembersResponse(
-            List<TeamMemberSummaryResponse> members, boolean chatbotEnabled, int participantCount, String status) {}
+            List<TeamMemberSummaryResponse> members,
+            boolean chatbotEnabled,
+            int participantCount,
+            String status,
+            // LEADER_SELECTING(팀장 여부 투표/팀장 투표) 마감 시각. 그 외 상태에서는 null.
+            LocalDateTime leaderSelectionDeadlineAt) {}
 }

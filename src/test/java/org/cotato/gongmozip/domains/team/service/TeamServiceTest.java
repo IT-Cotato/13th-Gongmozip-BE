@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
 import org.cotato.gongmozip.domains.collaboration.enums.CollaborationPointReason;
 import org.cotato.gongmozip.domains.collaboration.service.CollaborationPointService;
 import org.cotato.gongmozip.domains.contest.service.ContestVotingService;
+import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
@@ -29,6 +31,7 @@ import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.profile.repository.ProfileRepository;
 import org.cotato.gongmozip.domains.review.service.ReviewService;
 import org.cotato.gongmozip.domains.survey.enums.CharacterType;
+import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamCreationRequest;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamMemberInput;
 import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.ChatRoomListResponse;
@@ -48,6 +51,7 @@ import org.cotato.gongmozip.domains.team.repository.TeamRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -105,7 +109,12 @@ class TeamServiceTest {
         Profile profile2 = Profile.builder().profileId(20L).nickname("이해은").build();
 
         TeamCreationRequest request = new TeamCreationRequest(
-                List.of(new TeamMemberInput(1L, 10L), new TeamMemberInput(2L, 20L)), InterestCategory.IT_AI_TECH);
+                List.of(
+                        new TeamMemberInput(
+                                1L, 10L, LeaderPreference.NEUTRAL, ExtroversionType.A, BigDecimal.valueOf(3.0)),
+                        new TeamMemberInput(
+                                2L, 20L, LeaderPreference.NEUTRAL, ExtroversionType.A, BigDecimal.valueOf(3.0))),
+                InterestCategory.IT_AI_TECH);
 
         given(teamRepository.save(any(Team.class))).willAnswer(inv -> inv.getArgument(0));
         given(memberRepository.findById(1L)).willReturn(Optional.of(member1));
@@ -125,6 +134,87 @@ class TeamServiceTest {
         verify(chatbotOrchestrationService).startGreeting(team);
     }
 
+    @DisplayName("팀장 희망(WANTS) 응답이 1명이면 AUTO_ASSIGNED로 판정되고 그 팀원이 즉시 팀장으로 지정된다.")
+    @Test
+    void 팀장_희망이_1명이면_자동으로_팀장이_지정된다() {
+        // given
+        Member member1 = Member.builder().memberId(1L).email("a@gongmozip.com").build();
+        Member member2 = Member.builder().memberId(2L).email("b@gongmozip.com").build();
+        Profile profile1 = Profile.builder().profileId(10L).nickname("김민정").build();
+        Profile profile2 = Profile.builder().profileId(20L).nickname("이해은").build();
+
+        TeamCreationRequest request = new TeamCreationRequest(
+                List.of(
+                        new TeamMemberInput(
+                                1L, 10L, LeaderPreference.WANTS, ExtroversionType.E, BigDecimal.valueOf(4.0)),
+                        new TeamMemberInput(
+                                2L, 20L, LeaderPreference.NEUTRAL, ExtroversionType.A, BigDecimal.valueOf(3.0))),
+                InterestCategory.IT_AI_TECH);
+
+        given(teamRepository.save(any(Team.class))).willAnswer(inv -> inv.getArgument(0));
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member1));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(member2));
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile1));
+        given(profileRepository.findById(20L)).willReturn(Optional.of(profile2));
+        given(teamMemberRepository.save(any(TeamMember.class))).willAnswer(inv -> inv.getArgument(0));
+
+        // when
+        Team team = teamService.createTeam(request);
+
+        // then
+        assertThat(team.getLeaderSelectionMode()).isEqualTo(LeaderSelectionMode.AUTO_ASSIGNED);
+        ArgumentCaptor<TeamMember> captor = ArgumentCaptor.forClass(TeamMember.class);
+        verify(teamMemberRepository, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues())
+                .filteredOn(tm -> tm.getMember().getMemberId().equals(1L))
+                .singleElement()
+                .satisfies(tm -> {
+                    assertThat(tm.getRole()).isEqualTo(TeamRole.LEADER);
+                    assertThat(tm.isPreLeaderCandidate()).isTrue();
+                });
+        assertThat(captor.getAllValues())
+                .filteredOn(tm -> tm.getMember().getMemberId().equals(2L))
+                .singleElement()
+                .satisfies(tm -> assertThat(tm.getRole()).isEqualTo(TeamRole.MEMBER));
+    }
+
+    @DisplayName("팀장 희망(WANTS) 응답이 2명 이상이면 CANDIDATE_VOTE로 판정되고 아무도 자동 지정되지 않는다.")
+    @Test
+    void 팀장_희망이_2명_이상이면_후보_투표_모드로_판정된다() {
+        // given
+        Member member1 = Member.builder().memberId(1L).email("a@gongmozip.com").build();
+        Member member2 = Member.builder().memberId(2L).email("b@gongmozip.com").build();
+        Profile profile1 = Profile.builder().profileId(10L).nickname("김민정").build();
+        Profile profile2 = Profile.builder().profileId(20L).nickname("이해은").build();
+
+        TeamCreationRequest request = new TeamCreationRequest(
+                List.of(
+                        new TeamMemberInput(
+                                1L, 10L, LeaderPreference.WANTS, ExtroversionType.E, BigDecimal.valueOf(4.0)),
+                        new TeamMemberInput(
+                                2L, 20L, LeaderPreference.WANTS, ExtroversionType.I, BigDecimal.valueOf(3.0))),
+                InterestCategory.IT_AI_TECH);
+
+        given(teamRepository.save(any(Team.class))).willAnswer(inv -> inv.getArgument(0));
+        given(memberRepository.findById(1L)).willReturn(Optional.of(member1));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(member2));
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile1));
+        given(profileRepository.findById(20L)).willReturn(Optional.of(profile2));
+        given(teamMemberRepository.save(any(TeamMember.class))).willAnswer(inv -> inv.getArgument(0));
+
+        // when
+        Team team = teamService.createTeam(request);
+
+        // then
+        assertThat(team.getLeaderSelectionMode()).isEqualTo(LeaderSelectionMode.CANDIDATE_VOTE);
+        ArgumentCaptor<TeamMember> captor = ArgumentCaptor.forClass(TeamMember.class);
+        verify(teamMemberRepository, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues()).allSatisfy(tm -> {
+            assertThat(tm.getRole()).isEqualTo(TeamRole.MEMBER);
+            assertThat(tm.isPreLeaderCandidate()).isTrue();
+        });
+    }
+
     @DisplayName("팀원이 없으면 팀 생성에 실패한다.")
     @Test
     void 팀원이_없으면_팀_생성에_실패한다() {
@@ -142,7 +232,12 @@ class TeamServiceTest {
     void 중복된_회원이_포함되면_팀_생성에_실패한다() {
         // given
         TeamCreationRequest request = new TeamCreationRequest(
-                List.of(new TeamMemberInput(1L, 10L), new TeamMemberInput(1L, 11L)), InterestCategory.IT_AI_TECH);
+                List.of(
+                        new TeamMemberInput(
+                                1L, 10L, LeaderPreference.NEUTRAL, ExtroversionType.A, BigDecimal.valueOf(3.0)),
+                        new TeamMemberInput(
+                                1L, 11L, LeaderPreference.NEUTRAL, ExtroversionType.A, BigDecimal.valueOf(3.0))),
+                InterestCategory.IT_AI_TECH);
 
         // when & then
         assertThatThrownBy(() -> teamService.createTeam(request))
@@ -394,10 +489,12 @@ class TeamServiceTest {
     @Test
     void 대화상대를_조회하면_챗봇_활성화_여부와_함께_팀원_목록을_반환한다() {
         // given
+        LocalDateTime leaderSelectionDeadlineAt = LocalDateTime.of(2026, 8, 5, 18, 0);
         Team team = Team.builder()
                 .teamId(100L)
                 .chatbotEnabled(true)
-                .status(TeamStatus.IN_PROGRESS)
+                .status(TeamStatus.LEADER_SELECTING)
+                .leaderSelectionDeadlineAt(leaderSelectionDeadlineAt)
                 .build();
         TeamMember me = teamMemberOf(team, 1L, "나");
         TeamMember other = teamMemberOf(team, 2L, "김민정");
@@ -414,7 +511,8 @@ class TeamServiceTest {
 
         // then
         assertThat(response.chatbotEnabled()).isTrue();
-        assertThat(response.status()).isEqualTo("IN_PROGRESS");
+        assertThat(response.status()).isEqualTo("LEADER_SELECTING");
+        assertThat(response.leaderSelectionDeadlineAt()).isEqualTo(leaderSelectionDeadlineAt);
         assertThat(response.participantCount()).isEqualTo(2);
         assertThat(response.members()).anySatisfy(m -> assertThat(m.isMe()).isTrue());
         assertThat(response.members())

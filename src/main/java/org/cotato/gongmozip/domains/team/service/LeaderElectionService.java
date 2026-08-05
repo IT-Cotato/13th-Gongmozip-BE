@@ -15,6 +15,7 @@ import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
+import org.cotato.gongmozip.domains.team.converter.TeamConverter;
 import org.cotato.gongmozip.domains.team.entity.LeaderVote;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
@@ -27,13 +28,14 @@ import org.cotato.gongmozip.domains.team.repository.LeaderVoteRepository;
 import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
 import org.cotato.gongmozip.domains.team.repository.TeamRepository;
 import org.cotato.gongmozip.global.ai.AiClient;
+import org.cotato.gongmozip.global.ai.dto.LeaderCandidateSnapshot;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 팀장 선출 플로우 (LeaderVote). 팀장 희망 점수 데이터 부재로 leaderSelectionMode는 항상
- * OPEN_NOMINATION으로 고정되어 있어(docs/decisions/02-leader-election.md), 이 서비스는
- * OPEN_NOMINATION 경로(인사 유도 -> 팀장 여부 투표 -> 팀장 투표)만 구현한다.
+ * 팀장 선출 플로우 (LeaderVote). 케이스①(AUTO_ASSIGNED)은 TeamService/ChatbotOrchestrationService
+ * 선에서 끝나 이 서비스에 도달하지 않고, 케이스②(OPEN_NOMINATION)·③(CANDIDATE_VOTE)의 후보
+ * 등록/투표/동률/마감 처리를 담당한다 (docs/decisions/02-leader-election.md).
  */
 @Service
 @RequiredArgsConstructor
@@ -209,6 +211,65 @@ public class LeaderElectionService {
         }
     }
 
+    /**
+     * 팀장 여부 투표/팀장 투표 마감 시각이 지났는데도 팀이 LEADER_SELECTING이면 스케줄러가
+     * 호출한다. 지금 어느 하위 단계에 머물러 있는지는 활성 팀원의 {@code leaderCandidacy}로
+     * 판정한다 — 한 명이라도 아직 {@code UNDECIDED}면 "팀장 여부 투표" 단계가 안 끝난 것이고,
+     * 전원이 응답을 마쳤다면(0/1명 확정은 이미 이 상태에 도달하기 전에 LEADER_DECIDED로 빠지므로)
+     * 후보 등록은 끝났고 "팀장 투표" 단계에서 멈춰있는 것이다.
+     * ({@code leaderVoteRepository.existsByTeam_TeamId}만으로는 두 단계를 구분할 수 없다 —
+     * 후보가 확정돼 투표 카드가 발행된 직후에도 아직 아무도 투표하지 않았다면 LeaderVote가
+     * 하나도 없는 건 candidacy 단계와 동일하기 때문이다.)
+     */
+    @Transactional
+    public void resolveDeadlineIfDue(Long teamId) {
+        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        if (team.getStatus() != TeamStatus.LEADER_SELECTING) {
+            return;
+        }
+
+        List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
+        if (activeMembers.isEmpty()) {
+            return;
+        }
+
+        boolean stillAwaitingCandidacy =
+                activeMembers.stream().anyMatch(tm -> tm.getLeaderCandidacy() == LeaderCandidacyStatus.UNDECIDED);
+        if (stillAwaitingCandidacy) {
+            // 마감까지 응답하지 않은 사람은 "팀장 안 할래요"로 간주하고 확정한다.
+            activeMembers.stream()
+                    .filter(tm -> tm.getLeaderCandidacy() == LeaderCandidacyStatus.UNDECIDED)
+                    .forEach(tm -> tm.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT));
+            resolveCandidacyPhase(team, activeMembers);
+            return;
+        }
+
+        // 후보 등록(candidacy)은 끝났고 팀장 투표 단계에서 마감을 맞은 경우. 현재 라운드에 투표가
+        // 있으면 있는 대로 개표하고(ContestVotingService.resolveDeadlineIfDue와 동일한 정책),
+        // 하나도 없으면 무작위로 임시 팀장을 지정한다.
+        int round = currentRound(teamId, activeMembers.size());
+        List<LeaderVote> votes = leaderVoteRepository.findByTeam_TeamIdAndRound(teamId, round);
+        if (votes.isEmpty()) {
+            // 이 분기에 도달했다는 것 자체가 WANTS 후보가 2명 이상 있어 LEADER_VOTE_CARD가 이미
+            // 발행됐다는 뜻이다(0/1명이었다면 resolveCandidacyPhase에서 이미 LEADER_DECIDED로
+            // 빠졌을 것). "팀장 안 할래요"를 명시한 사람까지 무작위 대상에 넣으면 안 되므로,
+            // WANTS 후보로 풀을 제한한다(빈 리스트가 될 이론상 불가능한 경우에만 방어적으로
+            // activeMembers 전체를 대상으로 한다).
+            List<TeamMember> candidates = activeMembers.stream()
+                    .filter(tm -> tm.getLeaderCandidacy() == LeaderCandidacyStatus.WANTS)
+                    .toList();
+            List<TeamMember> randomPool = candidates.isEmpty() ? activeMembers : candidates;
+            TeamMember randomLeader = randomPool.get(RANDOM.nextInt(randomPool.size()));
+            assignLeader(
+                    team,
+                    randomLeader,
+                    "팀장 투표 마감까지 아무도 투표하지 않아, 팀원 중 1명을 임시 팀장으로 무작위 지정했어요. "
+                            + randomLeader.getProfile().getNickname() + "님이 임시 팀장으로 선정되었습니다.");
+        } else {
+            tally(team, round, activeMembers);
+        }
+    }
+
     private void tally(Team team, int round, List<TeamMember> activeMembers) {
         List<LeaderVote> votes = leaderVoteRepository.findByTeam_TeamIdAndRound(team.getTeamId(), round);
         // 투표 이후 득표 후보가 나갔을 수 있으므로, 현재도 활성 상태인 후보를 대상으로 한 표만
@@ -248,14 +309,27 @@ public class LeaderElectionService {
                     .orElseThrow(() -> new TeamException(TeamErrorCode.INVALID_LEADER_CANDIDATE));
             assignLeader(team, winner, "투표 결과, " + winner.getProfile().getNickname() + "님이 팀장으로 선출되었습니다.");
         } else {
-            // 동률: 같은 후보들만 대상으로 다음 라운드 재투표를 안내하되, AI 추천 후보를 함께 제시해
-            // "추천 수락"으로도 바로 확정할 수 있게 한다.
-            Long aiRecommendedId = aiClient.recommendTiebreakLeader(topCandidateIds);
-            String recommendedName = activeMembers.stream()
+            List<LeaderCandidateSnapshot> snapshots = activeMembers.stream()
+                    .map(TeamConverter::toLeaderCandidateSnapshot)
+                    .toList();
+            Long aiRecommendedId = aiClient.recommendTiebreakLeader(team.getTeamId(), snapshots, topCandidateIds);
+            TeamMember recommended = activeMembers.stream()
                     .filter(tm -> tm.getTeamMemberId().equals(aiRecommendedId))
                     .findFirst()
-                    .map(tm -> tm.getProfile().getNickname())
                     .orElse(null);
+
+            // 재투표(2라운드 이상)도 또 동률이면 더 이상 재투표를 반복하지 않고 AI 추천 후보로
+            // 바로 확정한다 (카톡 스펙: "둘이 또 동률일 경우에는 '추천 수락하기'로 진행한다").
+            if (round >= 2 && recommended != null) {
+                assignLeader(
+                        team,
+                        recommended,
+                        "재투표도 동률이 발생해 AI 추천에 따라 " + recommended.getProfile().getNickname() + "님이 팀장으로 확정되었습니다.");
+                return;
+            }
+
+            String recommendedName =
+                    recommended == null ? null : recommended.getProfile().getNickname();
             String content = recommendedName == null
                     ? "동률이 발생했어요. 동률이었던 팀원들끼리 재투표를 진행할게요."
                     : "동률이 발생했어요. AI가 보기엔 " + recommendedName
@@ -295,7 +369,8 @@ public class LeaderElectionService {
     private void assignLeader(Team team, TeamMember leader, String announcement) {
         leader.assignAsLeader();
         team.advanceStatus(TeamStatus.LEADER_DECIDED);
-        chatService.postChatbotMessage(team, announcement);
+        chatService.postChatbotCardMessage(
+                team, MessageType.LEADER_RESULT_CARD, announcement, toLeaderResultMetadata(leader.getTeamMemberId()));
         chatbotOrchestrationService.advanceToContestSelecting(team);
     }
 
@@ -329,6 +404,14 @@ public class LeaderElectionService {
                 .filter(entry -> entry.getValue() == maxVotes)
                 .map(Map.Entry::getKey)
                 .toList();
+    }
+
+    private String toLeaderResultMetadata(Long leaderTeamMemberId) {
+        try {
+            return objectMapper.writeValueAsString(Map.of("leaderTeamMemberId", leaderTeamMemberId));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("팀장 결과 메타데이터 직렬화에 실패했습니다.", e);
+        }
     }
 
     private String toCandidateMetadata(List<Long> candidateTeamMemberIds) {

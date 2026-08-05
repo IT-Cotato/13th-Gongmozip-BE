@@ -2,10 +2,18 @@ package org.cotato.gongmozip.global.ai;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
+import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
+import org.cotato.gongmozip.global.ai.dto.LeaderCandidateSnapshot;
 import org.cotato.gongmozip.global.ai.dto.ProjectEvaluationResult;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +23,8 @@ public class MockAiClient implements AiClient {
 
     private static final int MAX_LEADER_RECOMMENDATIONS = 2;
     private static final int MAX_CONTEST_RECOMMENDATIONS = 3;
+    private static final int NEUTRAL_BONUS = 2;
+    private static final int NO_MAJORITY_SCORE = 7;
     private static final Random RANDOM = new Random();
 
     @Override
@@ -49,15 +59,106 @@ public class MockAiClient implements AiClient {
     }
 
     @Override
-    public List<Long> recommendLeaderCandidates(List<Long> activeTeamMemberIds) {
-        log.info("AI leader candidate recommendation simulation for {} members", activeTeamMemberIds.size());
-        return shuffledSample(activeTeamMemberIds, MAX_LEADER_RECOMMENDATIONS);
+    public List<Long> recommendLeaderCandidates(Long teamId, List<LeaderCandidateSnapshot> activeMembers) {
+        log.info("Rule-based leader candidate recommendation for team {} ({} members)", teamId, activeMembers.size());
+        Comparator<LeaderCandidateSnapshot> ranking = rankingComparator(teamId, activeMembers);
+        return activeMembers.stream()
+                .sorted(ranking)
+                .limit(MAX_LEADER_RECOMMENDATIONS)
+                .map(LeaderCandidateSnapshot::teamMemberId)
+                .toList();
     }
 
     @Override
-    public Long recommendTiebreakLeader(List<Long> tiedCandidateTeamMemberIds) {
-        log.info("AI tiebreak recommendation simulation among {} candidates", tiedCandidateTeamMemberIds.size());
-        return tiedCandidateTeamMemberIds.get(RANDOM.nextInt(tiedCandidateTeamMemberIds.size()));
+    public Long recommendTiebreakLeader(
+            Long teamId, List<LeaderCandidateSnapshot> activeMembers, List<Long> tiedCandidateTeamMemberIds) {
+        log.info(
+                "Rule-based tiebreak recommendation for team {} among {} candidates",
+                teamId,
+                tiedCandidateTeamMemberIds.size());
+        Set<Long> tiedIds = new HashSet<>(tiedCandidateTeamMemberIds);
+        Comparator<LeaderCandidateSnapshot> ranking = rankingComparator(teamId, activeMembers);
+        return activeMembers.stream()
+                .filter(member -> tiedIds.contains(member.teamMemberId()))
+                .min(ranking)
+                .map(LeaderCandidateSnapshot::teamMemberId)
+                .orElse(null);
+    }
+
+    /**
+     * 팀장 추천 규칙기반 정렬 순서(최고 순으로 먼저 오도록 오름차순 comparator를 만든다).
+     * docs/decisions/02-leader-election.md "팀장 추천 및 추천 이유" 표 기준:
+     * 1) 최종점수(적합도+가점) 내림차순
+     * 2) 동률 시 팀장 희망 우선순위(WANTS&gt;NEUTRAL&gt;DOES_NOT_WANT) 내림차순
+     * 3) 그래도 동률이면 외향성 원점수 내림차순
+     * 4) 그래도 동률이면 팀ID 시드 고정 랜덤
+     */
+    private Comparator<LeaderCandidateSnapshot> rankingComparator(
+            Long teamId, List<LeaderCandidateSnapshot> allMembers) {
+        Comparator<LeaderCandidateSnapshot> byFinalScore =
+                Comparator.comparingInt((LeaderCandidateSnapshot member) -> finalScore(member, allMembers));
+        Comparator<LeaderCandidateSnapshot> byLeaderPreference = Comparator.comparingInt(
+                (LeaderCandidateSnapshot member) -> member.leaderPreference().getEffectiveLeaderUnits());
+        Comparator<LeaderCandidateSnapshot> byExtroversionScore =
+                Comparator.comparing(LeaderCandidateSnapshot::extroversionScore);
+        Comparator<LeaderCandidateSnapshot> bySeededRandom =
+                Comparator.comparingLong(member -> seededRandomKey(teamId, member.teamMemberId()));
+
+        return byFinalScore
+                .reversed()
+                .thenComparing(byLeaderPreference.reversed())
+                .thenComparing(byExtroversionScore.reversed())
+                .thenComparing(bySeededRandom);
+    }
+
+    // 최종점수(후보) = 적합도 점수 + (희망의사=="필요하면"이면 가점 2점, 아니면 0점)
+    int finalScore(LeaderCandidateSnapshot candidate, List<LeaderCandidateSnapshot> allMembers) {
+        List<ExtroversionType> remainingTypes = allMembers.stream()
+                .filter(member -> !member.teamMemberId().equals(candidate.teamMemberId()))
+                .map(LeaderCandidateSnapshot::extroversionType)
+                .toList();
+        int compatibility = compatibilityScore(candidate.extroversionType(), remainingTypes);
+        int neutralBonus = candidate.leaderPreference() == LeaderPreference.NEUTRAL ? NEUTRAL_BONUS : 0;
+        return compatibility + neutralBonus;
+    }
+
+    // "팀장 후보 유형 × 잔여 팀원 다수 유형" 적합도 점수 표. 잔여 팀원 중 다수 유형이 유일하게
+    // 정해지지 않으면(동률) 후보 유형과 무관하게 7점(A 다수와 동일 취급)을 준다.
+    int compatibilityScore(ExtroversionType candidateType, List<ExtroversionType> remainingTypes) {
+        ExtroversionType majority = majorityType(remainingTypes);
+        if (majority == null) {
+            return NO_MAJORITY_SCORE;
+        }
+        return switch (candidateType) {
+            case E -> switch (majority) {
+                case I -> 10;
+                case A -> 7;
+                case E -> 3;
+            };
+            case A -> 6;
+            case I -> switch (majority) {
+                case E -> 5;
+                case A, I -> 2;
+            };
+        };
+    }
+
+    // 최빈 유형이 유일할 때만 반환하고, 동률이면 null(=다수 원칙 미적용)을 반환한다.
+    ExtroversionType majorityType(List<ExtroversionType> types) {
+        Map<ExtroversionType, Long> counts =
+                types.stream().collect(Collectors.groupingBy(type -> type, Collectors.counting()));
+        long max = counts.values().stream().max(Long::compareTo).orElse(0L);
+        List<ExtroversionType> topTypes = counts.entrySet().stream()
+                .filter(e -> e.getValue() == max)
+                .map(Map.Entry::getKey)
+                .toList();
+        return topTypes.size() == 1 ? topTypes.get(0) : null;
+    }
+
+    // 팀ID + 팀원ID 조합으로 시드를 고정해, 같은 팀·같은 팀원에 대해서는 항상 같은 값을 반환한다
+    // (팀장 추천 동률 처리 4순위: "팀ID 시드 고정 랜덤").
+    private long seededRandomKey(Long teamId, Long teamMemberId) {
+        return new Random(teamId * 31 + teamMemberId).nextLong();
     }
 
     @Override

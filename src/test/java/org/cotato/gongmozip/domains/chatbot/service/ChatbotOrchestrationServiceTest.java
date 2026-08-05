@@ -20,6 +20,8 @@ import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
+import org.cotato.gongmozip.domains.team.enums.LeaderCandidacyStatus;
+import org.cotato.gongmozip.domains.team.enums.LeaderSelectionMode;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
 import org.cotato.gongmozip.domains.team.enums.TeamStatus;
 import org.cotato.gongmozip.domains.team.exception.TeamException;
@@ -30,6 +32,7 @@ import org.cotato.gongmozip.global.ai.AiClient;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -121,7 +124,7 @@ class ChatbotOrchestrationServiceTest {
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(lastToGreet));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(alreadyGreeted, lastToGreet));
-        given(aiClient.recommendLeaderCandidates(any())).willReturn(List.of(20L));
+        given(aiClient.recommendLeaderCandidates(any(), any())).willReturn(List.of(20L));
 
         // when
         chatbotOrchestrationService.recordGreetingAndAdvance(1L, 10L);
@@ -145,7 +148,7 @@ class ChatbotOrchestrationServiceTest {
         given(teamRepository.findById(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(greeted, neverGreeted));
-        given(aiClient.recommendLeaderCandidates(any())).willReturn(List.of());
+        given(aiClient.recommendLeaderCandidates(any(), any())).willReturn(List.of());
 
         // when
         chatbotOrchestrationService.forceAdvanceGreetingIfDue(1L);
@@ -154,6 +157,104 @@ class ChatbotOrchestrationServiceTest {
         assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
         verify(chatService)
                 .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_NOMINATION_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("AUTO_ASSIGNED 팀은 인사 메시지 자체에 팀장 안내가 포함된다.")
+    @Test
+    void AUTO_ASSIGNED_팀은_인사_메시지에_팀장_안내가_포함된다() {
+        // given
+        Team team = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.MATCHED)
+                .leaderSelectionMode(LeaderSelectionMode.AUTO_ASSIGNED)
+                .build();
+        TeamMember leader = teamMemberOf(team, 10L, "김민정");
+        leader.assignAsLeader();
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(leader));
+
+        // when
+        chatbotOrchestrationService.startGreeting(team);
+
+        // then
+        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+        verify(chatService).postChatbotMessage(eq(team), messageCaptor.capture());
+        assertThat(messageCaptor.getValue()).contains("김민정").contains("팀장");
+    }
+
+    @DisplayName("AUTO_ASSIGNED 팀은 전원 인사 완료 시 LEADER_SELECTING을 건너뛰고 바로 공모전 단계로 전이한다.")
+    @Test
+    void AUTO_ASSIGNED_팀은_전원_인사_완료_시_LEADER_SELECTING을_건너뛴다() {
+        // given
+        Team team = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.GREETING)
+                .leaderSelectionMode(LeaderSelectionMode.AUTO_ASSIGNED)
+                .preferredCategory(InterestCategory.IT_AI_TECH)
+                .build();
+        TeamMember leader = teamMemberOf(team, 10L, "김민정");
+        leader.assignAsLeader();
+        leader.markGreeted(java.time.LocalDateTime.now());
+        TeamMember lastToGreet = teamMemberOf(team, 20L, "이해은");
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(lastToGreet));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(leader, lastToGreet));
+        given(contestRepository.findAllWithFilterAndDeadlineAsc(any(), any(), any(), any(), any()))
+                .willReturn(new PageImpl<>(List.of()));
+        given(aiClient.recommendContests(any(), any())).willReturn(List.of());
+
+        // when
+        chatbotOrchestrationService.recordGreetingAndAdvance(1L, 20L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.CONTEST_SELECTING);
+        ArgumentCaptor<String> metadataCaptor = ArgumentCaptor.forClass(String.class);
+        verify(chatService)
+                .postChatbotCardMessage(
+                        eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), metadataCaptor.capture());
+        assertThat(metadataCaptor.getValue()).contains("leaderTeamMemberId").contains("10");
+        verify(chatService, never())
+                .postChatbotCardMessage(any(), eq(MessageType.LEADER_NOMINATION_CARD), anyString(), anyString());
+        verify(aiClient, never()).recommendLeaderCandidates(any(), any());
+    }
+
+    @DisplayName("CANDIDATE_VOTE 팀은 팀장 여부 투표 없이 사전 후보 전원을 바로 투표 카드로 발행한다.")
+    @Test
+    void CANDIDATE_VOTE_팀은_후보_투표_카드를_바로_발행한다() {
+        // given
+        Team team = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.GREETING)
+                .leaderSelectionMode(LeaderSelectionMode.CANDIDATE_VOTE)
+                .build();
+        TeamMember candidate1 = teamMemberOf(team, 10L, "김민정", true);
+        TeamMember candidate2 = teamMemberOf(team, 20L, "이해은", true);
+        candidate2.markGreeted(java.time.LocalDateTime.now());
+        TeamMember nonCandidate = teamMemberOf(team, 30L, "박준수", false);
+        nonCandidate.markGreeted(java.time.LocalDateTime.now());
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(candidate1));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(candidate1, candidate2, nonCandidate));
+
+        // when
+        chatbotOrchestrationService.recordGreetingAndAdvance(1L, 10L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
+        assertThat(candidate1.getLeaderCandidacy()).isEqualTo(LeaderCandidacyStatus.WANTS);
+        assertThat(candidate2.getLeaderCandidacy()).isEqualTo(LeaderCandidacyStatus.WANTS);
+        assertThat(nonCandidate.getLeaderCandidacy()).isEqualTo(LeaderCandidacyStatus.DOES_NOT_WANT);
+        ArgumentCaptor<String> metadataCaptor = ArgumentCaptor.forClass(String.class);
+        verify(chatService)
+                .postChatbotCardMessage(
+                        eq(team), eq(MessageType.LEADER_VOTE_CARD), anyString(), metadataCaptor.capture());
+        assertThat(metadataCaptor.getValue()).contains("10").contains("20").doesNotContain("30");
+        verify(chatService, never())
+                .postChatbotCardMessage(any(), eq(MessageType.LEADER_NOMINATION_CARD), anyString(), anyString());
     }
 
     @DisplayName("이미 GREETING을 지나 다음 단계로 넘어간 팀이면 타임아웃 강제 전이를 하지 않는다.")
@@ -312,6 +413,10 @@ class ChatbotOrchestrationServiceTest {
     }
 
     private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {
+        return teamMemberOf(team, memberId, nickname, false);
+    }
+
+    private TeamMember teamMemberOf(Team team, Long memberId, String nickname, boolean isPreLeaderCandidate) {
         Member member = Member.builder().memberId(memberId).build();
         Profile profile = Profile.builder().nickname(nickname).build();
         return TeamMember.builder()
@@ -320,6 +425,7 @@ class ChatbotOrchestrationServiceTest {
                 .member(member)
                 .profile(profile)
                 .status(TeamMemberStatus.ACTIVE)
+                .isPreLeaderCandidate(isPreLeaderCandidate)
                 .build();
     }
 }

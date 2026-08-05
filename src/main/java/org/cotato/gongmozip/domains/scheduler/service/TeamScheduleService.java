@@ -12,6 +12,7 @@ import org.cotato.gongmozip.domains.team.enums.TeamStatus;
 import org.cotato.gongmozip.domains.team.exception.TeamException;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
 import org.cotato.gongmozip.domains.team.repository.TeamRepository;
+import org.cotato.gongmozip.domains.team.service.LeaderElectionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +44,7 @@ public class TeamScheduleService {
     private final ContestVotingService contestVotingService;
     private final ChatbotOrchestrationService chatbotOrchestrationService;
     private final ChatService chatService;
+    private final LeaderElectionService leaderElectionService;
 
     /** 공모전 후보/투표 마감이 지났는데도 CONTEST_SELECTING인 팀 id 목록을 조회한다. */
     public List<Long> findDueContestVotingDeadlineTeamIds() {
@@ -116,5 +118,20 @@ public class TeamScheduleService {
     @Transactional
     public void forceAdvanceGreetingForTeam(Long teamId) {
         chatbotOrchestrationService.forceAdvanceGreetingIfDue(teamId);
+    }
+
+    /** 팀장 여부 투표/팀장 투표 마감이 지났는데도 LEADER_SELECTING인 팀 id 목록을 조회한다. */
+    public List<Long> findDueLeaderSelectionDeadlineTeamIds() {
+        return teamRepository
+                .findByStatusAndLeaderSelectionDeadlineAtLessThanEqual(TeamStatus.LEADER_SELECTING, LocalDateTime.now())
+                .stream()
+                .map(Team::getTeamId)
+                .toList();
+    }
+
+    /** 한 팀의 팀장 선출 마감을 강제로 확정 처리한다(팀 단위 트랜잭션). */
+    @Transactional
+    public void resolveLeaderSelectionDeadlineForTeam(Long teamId) {
+        leaderElectionService.resolveDeadlineIfDue(teamId);
     }
 }

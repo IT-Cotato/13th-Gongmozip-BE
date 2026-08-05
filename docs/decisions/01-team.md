@@ -21,6 +21,7 @@
 | progressCheckAt | LocalDateTime, nullable | contest 확정 시 계산. [07-scheduler.md](./07-scheduler.md) |
 | submissionCheckAt | LocalDateTime, nullable | contest 확정 시 계산. [07-scheduler.md](./07-scheduler.md) |
 | submitted | boolean | 팀장의 "진행 완료" 여부 |
+| leaderSelectionDeadlineAt | LocalDateTime, nullable | 팀장 여부 투표/팀장 투표 마감 시각. `GET /api/teams/{teamId}/members`(`TeamMembersResponse.leaderSelectionDeadlineAt`)로 노출 (2026-08-05). [02-leader-election.md](./02-leader-election.md) 참고 |
 
 ### TeamStatus (상태머신)
 
@@ -39,9 +40,12 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
 |---|---|---|
 | team, member | FK | unique(team_id, member_id) |
 | profile | `Profile` FK | 팀 생성(매칭 신청) 시점에 사용된 프로필 스냅샷. `profiles.is_main`이 제거되어 "대표 프로필" 개념이 없어졌으므로, 이 팀에서 어떤 프로필로 참여했는지를 명시적으로 고정한다 |
+| leaderPreference | `LeaderPreference` (`WANTS`/`NEUTRAL`/`DOES_NOT_WANT`) | 팀 생성(매칭 신청) 시점 팀장 희망 여부 스냅샷. `leaderSelectionMode` 판정과 팀장 추천 알고리즘 입력값 (2026-08-05, [02-leader-election.md](./02-leader-election.md) 참고) |
+| extroversionType | `ExtroversionType` (`I`/`A`/`E`) | 팀 생성 시점 협업 유형 검사 외향성 유형 스냅샷. 팀장 추천 알고리즘의 "잔여 팀원 다수 유형" 판정에 쓰인다 |
+| extroversionScore | BigDecimal | 외향성 원점수(3문항 평균, 1.0~5.0) 스냅샷. 팀장 추천 동률 처리 3순위(원점수 3~15점 환산)에 쓰인다 |
 | role | `TeamRole` (`LEADER`/`MEMBER`) | |
-| isPreLeaderCandidate | boolean | 팀 생성 시점 팀장 희망 점수 스냅샷. **현재는 항상 false로 고정** — [02-leader-election.md](./02-leader-election.md)의 데이터 갭 참고 |
-| leaderCandidacy | `LeaderCandidacyStatus` (`UNDECIDED`/`WANTS`/`DOES_NOT_WANT`) | `OPEN_NOMINATION` 경로에서 사용 (현재 유일하게 동작하는 경로) |
+| isPreLeaderCandidate | boolean | 팀 생성 시점 팀장 희망("네") 스냅샷. `leaderPreference == WANTS`인 팀원만 true (2026-08-05부터 실제 값 반영, 과거엔 데이터 부재로 항상 false 고정이었음) |
+| leaderCandidacy | `LeaderCandidacyStatus` (`UNDECIDED`/`WANTS`/`DOES_NOT_WANT`) | `OPEN_NOMINATION`/`CANDIDATE_VOTE` 경로에서 사용 |
 | status | `ACTIVE`/`LEFT` | 채팅방 나가기 |
 | greetedAt | LocalDateTime, nullable | 자기소개 메시지 최초 전송 시각. "전원 인사 완료" 판정용 |
 | lastReadAt | LocalDateTime, nullable | 안읽음 배지 계산용 read cursor |
@@ -54,31 +58,34 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
   `MatchingApplication`(매칭 신청 시점 스냅샷: `contestCategory`, `skillScore`, `skillGroup`,
   `collaborationDistance` 등)으로 재구성되어 있다. `Team.preferredCategory`는
   `MatchingApplication.contestCategory`를 참조하는 것으로 정정한다.
-- 팀 생성 시 `leaderSelectionMode`를 1회 계산하고 각 팀원의 `isPreLeaderCandidate`를
-  스냅샷하는 설계 자체는 유지하되, **입력 데이터(팀장 희망 점수)가 현재 존재하지 않아
-  임시로 항상 `OPEN_NOMINATION` + `isPreLeaderCandidate=false`로 고정한다.**
-  자세한 내용/후속 조치는 [02-leader-election.md](./02-leader-election.md).
+- **(2026-08-05 갱신)** 팀 생성 시 `leaderSelectionMode`를 1회 계산하고 각 팀원의
+  `isPreLeaderCandidate`를 스냅샷하는 설계가 실제로 동작한다. 매칭 도메인이
+  `MatchingGroupCompletionService`에서 `MatchingApplication.leaderPreference`/
+  `extroversionType`/`extroversionScore`를 `TeamMemberInput`에 실어 보내고,
+  `TeamConverter.determineLeaderSelectionMode()`가 팀원들의 WANTS 응답 개수로
+  `CANDIDATE_VOTE`/`AUTO_ASSIGNED`/`OPEN_NOMINATION`을 실제로 분기한다. 자세한 내용은
+  [02-leader-election.md](./02-leader-election.md).
 - 챗봇을 가상의 TeamMember row로 만들지 않는다 (→ [03-chat.md](./03-chat.md)).
 - **팀 생성 입력 계약**: 매칭 알고리즘이 어떻게 그룹을 짜는지는 이 도메인이 알 필요가 없다.
   `team` 도메인은 아래 계약만 받으면 팀을 생성할 수 있도록 설계한다.
   ```
   TeamCreationRequest {
-      List<TeamMemberInput> members   // memberId + profileId (매칭 신청에 사용된 프로필)
+      List<TeamMemberInput> members   // memberId, profileId, leaderPreference,
+                                       // extroversionType, extroversionScore
+                                       // (모두 매칭 신청 시점 MatchingApplication 스냅샷)
       InterestCategory preferredCategory   // MatchingApplication.contestCategory 기반
   }
   ```
-  현재 코드베이스에는 "개인의 매칭 신청"(`MatchingApplication`)만 있고 이를 그룹핑해서
-  팀을 만드는 로직/엔티티는 존재하지 않는다. 매칭 그룹핑 구현 여부·시점과 무관하게, 위
-  계약을 만족하는 호출(API 또는 내부 이벤트)이 있으면 Phase 1은 동작 가능하도록 만든다.
-  Phase 1 개발 중에는 시드 데이터/테스트용 트리거로 이 계약을 대체한다.
+  **(2026-08-05 갱신)** 매칭 도메인의 `MatchingGroupCompletionService`(수락 API/수동 패스/
+  12시 마감 공통 확정 로직)가 실제로 이 계약을 만족해 `TeamService.createTeam()`을 호출한다.
 
 ## 미정 / 추후 확인 필요
 
-- **팀장 희망 점수 데이터 부재** — survey/matching 담당자 확인 필요. [02-leader-election.md](./02-leader-election.md) 참고.
-- **팀 그룹핑(매칭 결과) 산출 방식** — 현재 존재하지 않음. 언제/누가/어떤 형태로 만들지 확인 필요.
-  확인 전까지는 위 `TeamCreationRequest` 계약만으로 Phase 1을 진행.
 - 팀장 변경(수동 위임) 기능 — 챗봇 안내 문구에 언급되지만 화면/플로우 미정. TeamMember.role
   갱신 API로 충분해 보이나 별도 스코프로 분리 예정.
+- `domains/team/controller/TeamTestController.java`(`POST /api/test/teams`) — 매칭 연동이
+  실제로 완료됐으니(위 참고) 삭제 대상이지만, 로컬 수동 테스트 용도로 아직 쓰이고 있어 이번
+  변경 범위에서는 남겨뒀다. 삭제 여부는 팀 논의 후 결정.
 
 ## 구현 현황 (Phase 1 완료)
 
@@ -146,10 +153,11 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
   안읽은 방이 먼저) → `lastMessageAt` 내림차순 2단 정렬로 구현. 메시지가 한 번도 없던 방
   (`lastMessageAt = null`)은 두 정렬 기준 모두에서 항상 맨 뒤로 보낸다.
 - ⚠️ **임시**: `domains/team/controller/TeamTestController.java` (`POST /api/test/teams`,
-  `@Profile("local")`) — 매칭 연동 전까지 수동 테스트(WebSocket 채팅 등)를 위해 `createTeam`을
+  `@Profile("local")`) — 원래 매칭 연동 전까지 수동 테스트(WebSocket 채팅 등)를 위해 `createTeam`을
   직접 호출할 수 있게 열어둔 개발용 엔드포인트. `local` 프로필을 명시적으로 켰을 때만 활성화되는
-  fail-safe 방식(보안 검토 후 `!prod`에서 변경, 자세한 이유는 [api.md](../api.md) 참고). 매칭
-  도메인이 실제로 연동되면 삭제.
+  fail-safe 방식(보안 검토 후 `!prod`에서 변경, 자세한 이유는 [api.md](../api.md) 참고).
+  **(2026-08-05 갱신)** 매칭 도메인 연동(`MatchingGroupCompletionService`)이 이미 완료돼 삭제
+  대상이지만, 로컬 수동 테스트 용도로 계속 쓰이고 있어 우선 남겨둠 — 위 "미정" 섹션 참고.
 
 ## 구현 현황 (Phase 4 — 챗봇 상태머신 골격)
 
@@ -171,6 +179,23 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
   → Phase 8에서 연결 완료, 자세한 내용은 [08-ai.md](./08-ai.md) 참고.
 - 테스트: `domains/chatbot/service/ChatbotOrchestrationServiceTest.java`,
   `TeamServiceTest`(createTeam 시 `startGreeting` 호출 검증)
+
+## 구현 현황 (2026-08-05 — 팀장 희망 데이터 배선 완료)
+
+- 마이그레이션 V24: `team_members`에 `leader_preference`/`extroversion_type`/
+  `extroversion_score` 컬럼 추가.
+- `TeamRequest.TeamMemberInput`에 같은 3개 필드 추가. `MatchingGroupCompletionService`가
+  `MatchingApplication`에서 값을 읽어 그대로 실어 보낸다.
+- `TeamConverter.determineLeaderSelectionMode(List<TeamMemberInput>)` 신규 — WANTS 응답
+  개수로 `leaderSelectionMode`를 실제로 판정(더 이상 `OPEN_NOMINATION` 하드코딩 아님).
+  `TeamConverter.toTeamMember()`가 3개 필드를 스냅샷하고 `isPreLeaderCandidate`도
+  `leaderPreference == WANTS` 기준으로 실제 계산한다.
+- `TeamService.createTeam()`이 `AUTO_ASSIGNED`(WANTS 1명)인 경우 팀 생성 시점에 바로
+  `TeamMember.assignAsLeader()`를 호출해 팀장을 확정한다.
+- 자세한 케이스①②③ 분기 로직과 팀장 추천 알고리즘은 [02-leader-election.md](./02-leader-election.md)
+  참고.
+- 테스트: `TeamServiceTest`(AUTO_ASSIGNED/CANDIDATE_VOTE 신규 케이스),
+  `MatchingGroupCompletionServiceTest`(TeamMemberInput 필드 전달 검증).
 
 ## 관련 화면
 

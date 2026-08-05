@@ -20,6 +20,7 @@ import org.cotato.gongmozip.domains.team.enums.TeamStatus;
 import org.cotato.gongmozip.domains.team.exception.TeamException;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
 import org.cotato.gongmozip.domains.team.repository.TeamRepository;
+import org.cotato.gongmozip.domains.team.service.LeaderElectionService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +42,9 @@ class TeamScheduleServiceTest {
 
     @Mock
     private ChatbotOrchestrationService chatbotOrchestrationService;
+
+    @Mock
+    private LeaderElectionService leaderElectionService;
 
     @InjectMocks
     private TeamScheduleService teamScheduleService;
@@ -187,5 +191,32 @@ class TeamScheduleServiceTest {
 
         // then
         verify(chatbotOrchestrationService).forceAdvanceGreetingIfDue(1L);
+    }
+
+    @DisplayName("팀장 선출 마감이 지난 팀 id 목록을 조회한다.")
+    @Test
+    void 팀장_선출_마감이_지난_팀_id_목록을_조회한다() {
+        // given
+        Team team1 =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        given(teamRepository.findByStatusAndLeaderSelectionDeadlineAtLessThanEqual(
+                        eq(TeamStatus.LEADER_SELECTING), any()))
+                .willReturn(List.of(team1));
+
+        // when
+        List<Long> dueTeamIds = teamScheduleService.findDueLeaderSelectionDeadlineTeamIds();
+
+        // then
+        assertThat(dueTeamIds).containsExactly(1L);
+    }
+
+    @DisplayName("팀 1개의 팀장 선출 마감을 처리하면 해당 팀만 마감 처리를 호출한다.")
+    @Test
+    void 팀_1개의_팀장_선출_마감을_처리하면_해당_팀만_마감_처리를_호출한다() {
+        // when
+        teamScheduleService.resolveLeaderSelectionDeadlineForTeam(1L);
+
+        // then
+        verify(leaderElectionService).resolveDeadlineIfDue(1L);
     }
 }

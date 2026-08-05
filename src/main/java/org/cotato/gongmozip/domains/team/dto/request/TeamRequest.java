@@ -3,8 +3,11 @@ package org.cotato.gongmozip.domains.team.dto.request;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import java.math.BigDecimal;
 import java.util.List;
+import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
+import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
 
 public final class TeamRequest {
 
@@ -17,7 +20,15 @@ public final class TeamRequest {
      */
     public record TeamCreationRequest(List<TeamMemberInput> members, InterestCategory preferredCategory) {}
 
-    public record TeamMemberInput(Long memberId, Long profileId) {}
+    // leaderPreference/extroversionType/extroversionScore는 매칭 신청(MatchingApplication)
+    // 시점 스냅샷을 그대로 전달받아 TeamMember에 옮겨 적는다 (팀장 선출/추천 알고리즘 입력값,
+    // docs/decisions/02-leader-election.md 참고).
+    public record TeamMemberInput(
+            Long memberId,
+            Long profileId,
+            LeaderPreference leaderPreference,
+            ExtroversionType extroversionType,
+            BigDecimal extroversionScore) {}
 
     public record ChatbotToggleRequest(boolean enabled) {}
 
