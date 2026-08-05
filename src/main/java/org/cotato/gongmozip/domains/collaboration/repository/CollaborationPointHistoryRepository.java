@@ -16,6 +16,8 @@ public interface CollaborationPointHistoryRepository extends JpaRepository<Colla
     // 변경 이력이 하나도 없는 회원을 첫 매칭 사용자로 판정할 때 사용한다
     boolean existsByMember(Member member);
 
+    java.util.List<CollaborationPointHistory> findAllByMemberOrderByCreatedAtDesc(Member member);
+
     // 음수 delta만 양수 손실량으로 뒤집어 최근 협업거리 감소 합계를 계산한다
     @Query(
             """
