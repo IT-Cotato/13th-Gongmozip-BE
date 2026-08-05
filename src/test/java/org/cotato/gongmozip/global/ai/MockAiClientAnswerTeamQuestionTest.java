@@ -3,6 +3,7 @@ package org.cotato.gongmozip.global.ai;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -73,5 +74,6 @@ class MockAiClientAnswerTeamQuestionTest {
 
         // then
         assertThat(answer).contains("궁금한 점을 말씀해주시면");
+        verifyNoInteractions(geminiClient);
     }
 }

@@ -49,7 +49,8 @@ public class GeminiClient {
                 new GeminiRequest(List.of(new GeminiRequest.Content(List.of(new GeminiRequest.Part(prompt)))));
         GeminiResponse response = restClient
                 .post()
-                .uri("/models/{model}:generateContent?key={apiKey}", model, apiKey)
+                .uri("/models/{model}:generateContent", model)
+                .header("x-goog-api-key", apiKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(request)
                 .retrieve()
