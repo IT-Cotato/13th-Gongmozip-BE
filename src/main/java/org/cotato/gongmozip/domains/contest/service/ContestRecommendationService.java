@@ -69,6 +69,16 @@ public class ContestRecommendationService {
 
         Profile representProfile = getRepresentProfile(member);
 
+        List<ContestSummaryResponse> recommendations = getRecommendationsForProfile(representProfile);
+        boolean isRecommended =
+                recommendations.stream().anyMatch(r -> r.contestId().equals(contestId));
+        if (!isRecommended) {
+            throw new ContestException(ContestErrorCode.NOT_RECOMMENDED_CONTEST);
+        }
+
+        InterestCategory category =
+                representProfile.getInterestCategories().stream().findFirst().orElse(InterestCategory.IT_AI_TECH);
+
         String characterName = surveySubmissionRepository
                 .findByMember(member)
                 .filter(s -> s.getStatus() == org.cotato.gongmozip.domains.survey.enums.SubmissionStatus.SUBMITTED)
@@ -79,7 +89,7 @@ public class ContestRecommendationService {
         String reason = String.format(
                 "이 공모전은 귀하의 선호 분야인 '%s' 카테고리에 속해 있으며, " + "대학생 팀 매칭 설문을 통해 분석된 귀하의 협업 캐릭터 '%s'의 성향과 목표에 "
                         + "매우 부합하여 AI에 의해 강력하게 추천되었습니다. 팀을 빌딩하여 프로젝트의 완성도를 높여보세요!",
-                getKoreanCategoryName(contest.getCategory()), characterName);
+                getKoreanCategoryName(category), characterName);
 
         return new RecommendationReasonResponse(reason);
     }
