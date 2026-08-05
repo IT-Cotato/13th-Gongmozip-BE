@@ -17,6 +17,8 @@ public enum ContestSuccessCode implements BaseSuccessCode {
     SHARE_PREVIEW_RETRIEVED(HttpStatus.OK, "CONTEST_200_5", "공유용 공모전 정보 조회에 성공하였습니다."),
     CONTEST_CANDIDATE_LIST_RETRIEVED(HttpStatus.OK, "CONTEST_200_6", "후보 공모전 리스트 조회에 성공하였습니다."),
     CONTEST_VOTE_SUBMITTED(HttpStatus.OK, "CONTEST_200_7", "공모전 투표에 성공하였습니다."),
+    RECOMMENDED_CONTESTS_RETRIEVED(HttpStatus.OK, "CONTEST_200_8", "추천 공모전 목록 조회에 성공하였습니다."),
+    RECOMMENDATION_REASON_RETRIEVED(HttpStatus.OK, "CONTEST_200_9", "추천 사유 조회에 성공하였습니다."),
 
     // 201
     CONTEST_CREATED(HttpStatus.CREATED, "CONTEST_201_1", "공모전 등록에 성공하였습니다."),

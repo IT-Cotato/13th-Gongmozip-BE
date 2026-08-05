@@ -252,4 +252,87 @@ class MemberServiceTest {
         // then
         then(redisUtil).should().delete("email:verified:" + TEST_EMAIL);
     }
+
+    @DisplayName("내 정보 조회 성공 테스트")
+    @Test
+    void 내_정보_조회_성공() {
+        // given
+        Long memberId = 1L;
+        Member member = Member.builder()
+                .email(TEST_EMAIL)
+                .name("홍길동")
+                .gender(Gender.MALE)
+                .birthDate(LocalDate.of(2000, 1, 1))
+                .snsType("GOOGLE")
+                .snsEmail("sns@gongmozip.com")
+                .marketingConsentEmail(true)
+                .marketingConsentSms(false)
+                .build();
+        given(memberRepository.findById(memberId)).willReturn(java.util.Optional.of(member));
+
+        // when
+        org.cotato.gongmozip.domains.member.dto.response.MemberResponse.MemberMeResponse response =
+                memberService.getMemberMe(memberId);
+
+        // then
+        org.assertj.core.api.Assertions.assertThat(response.email()).isEqualTo(TEST_EMAIL);
+        org.assertj.core.api.Assertions.assertThat(response.name()).isEqualTo("홍길동");
+        org.assertj.core.api.Assertions.assertThat(response.gender()).isEqualTo(Gender.MALE);
+        org.assertj.core.api.Assertions.assertThat(response.snsType()).isEqualTo("GOOGLE");
+        org.assertj.core.api.Assertions.assertThat(response.snsLinked()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(response.marketingConsentEmail())
+                .isTrue();
+        org.assertj.core.api.Assertions.assertThat(response.marketingConsentSms())
+                .isFalse();
+    }
+
+    @DisplayName("내 정보 수정 성공 테스트")
+    @Test
+    void 내_정보_수정_성공() {
+        // given
+        Long memberId = 1L;
+        Member member = Member.builder()
+                .email(TEST_EMAIL)
+                .name("이전이름")
+                .gender(Gender.FEMALE)
+                .birthDate(LocalDate.of(1990, 5, 5))
+                .build();
+        given(memberRepository.findById(memberId)).willReturn(java.util.Optional.of(member));
+        org.cotato.gongmozip.domains.member.dto.request.MemberRequest.UpdateMemberMeRequest request =
+                new org.cotato.gongmozip.domains.member.dto.request.MemberRequest.UpdateMemberMeRequest(
+                        "수정된이름", Gender.MALE, LocalDate.of(1995, 10, 10));
+
+        // when
+        memberService.updateMemberMe(memberId, request);
+
+        // then
+        org.assertj.core.api.Assertions.assertThat(member.getName()).isEqualTo("수정된이름");
+        org.assertj.core.api.Assertions.assertThat(member.getGender()).isEqualTo(Gender.MALE);
+        org.assertj.core.api.Assertions.assertThat(member.getBirthDate()).isEqualTo(LocalDate.of(1995, 10, 10));
+    }
+
+    @DisplayName("마케팅 동의 수정 성공 테스트")
+    @Test
+    void 마케팅_동의_수정_성공() {
+        // given
+        Long memberId = 1L;
+        Member member = Member.builder()
+                .email(TEST_EMAIL)
+                .marketingConsentEmail(false)
+                .marketingConsentSms(false)
+                .build();
+        given(memberRepository.findById(memberId)).willReturn(java.util.Optional.of(member));
+        org.cotato.gongmozip.domains.member.dto.request.MemberRequest.UpdateMarketingConsentRequest request =
+                new org.cotato.gongmozip.domains.member.dto.request.MemberRequest.UpdateMarketingConsentRequest(
+                        true, true);
+
+        // when
+        memberService.updateMarketingConsent(memberId, request);
+
+        // then
+        org.assertj.core.api.Assertions.assertThat(member.isMarketingConsentEmail())
+                .isTrue();
+        org.assertj.core.api.Assertions.assertThat(member.isMarketingConsentSms())
+                .isTrue();
+    }
 }

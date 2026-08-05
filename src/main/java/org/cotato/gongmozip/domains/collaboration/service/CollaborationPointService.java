@@ -25,7 +25,30 @@ public class CollaborationPointService {
     private static final int MATCHING_BLOCK_DAYS = 7;
 
     private final CollaborationPointHistoryRepository collaborationPointHistoryRepository;
+    private final org.cotato.gongmozip.domains.member.repository.MemberRepository memberRepository;
     private final Clock clock;
+
+    public org.cotato.gongmozip.domains.collaboration.dto.response.CollaborationResponse.CollaborationDistanceResponse
+            getCollaborationDistance(Long memberId) {
+        Member member = memberRepository
+                .findById(memberId)
+                .orElseThrow(() -> new org.cotato.gongmozip.domains.member.exception.MemberException(
+                        org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode.MEMBER_NOT_FOUND));
+        return org.cotato.gongmozip.domains.collaboration.converter.CollaborationConverter.toDistanceResponse(member);
+    }
+
+    public org.cotato.gongmozip.domains.collaboration.dto.response.CollaborationResponse
+                    .CollaborationHistoryListResponse
+            getCollaborationHistories(Long memberId, org.springframework.data.domain.Pageable pageable) {
+        Member member = memberRepository
+                .findById(memberId)
+                .orElseThrow(() -> new org.cotato.gongmozip.domains.member.exception.MemberException(
+                        org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode.MEMBER_NOT_FOUND));
+        org.springframework.data.domain.Page<CollaborationPointHistory> historiesPage =
+                collaborationPointHistoryRepository.findAllByMemberOrderByCreatedAtDesc(member, pageable);
+        return org.cotato.gongmozip.domains.collaboration.converter.CollaborationConverter.toHistoryListResponse(
+                historiesPage);
+    }
 
     // enum에 정의된 기본 변화량을 적용하는 일반 적립·차감 진입점
     @Transactional
