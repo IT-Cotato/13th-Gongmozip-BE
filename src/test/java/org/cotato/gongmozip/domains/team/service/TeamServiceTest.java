@@ -490,11 +490,13 @@ class TeamServiceTest {
     void 대화상대를_조회하면_챗봇_활성화_여부와_함께_팀원_목록을_반환한다() {
         // given
         LocalDateTime leaderSelectionDeadlineAt = LocalDateTime.of(2026, 8, 5, 18, 0);
+        LocalDateTime contestCandidateDeadlineAt = LocalDateTime.of(2026, 8, 6, 23, 0);
         Team team = Team.builder()
                 .teamId(100L)
                 .chatbotEnabled(true)
                 .status(TeamStatus.LEADER_SELECTING)
                 .leaderSelectionDeadlineAt(leaderSelectionDeadlineAt)
+                .contestCandidateDeadlineAt(contestCandidateDeadlineAt)
                 .build();
         TeamMember me = teamMemberOf(team, 1L, "나");
         TeamMember other = teamMemberOf(team, 2L, "김민정");
@@ -513,6 +515,7 @@ class TeamServiceTest {
         assertThat(response.chatbotEnabled()).isTrue();
         assertThat(response.status()).isEqualTo("LEADER_SELECTING");
         assertThat(response.leaderSelectionDeadlineAt()).isEqualTo(leaderSelectionDeadlineAt);
+        assertThat(response.contestCandidateDeadlineAt()).isEqualTo(contestCandidateDeadlineAt);
         assertThat(response.participantCount()).isEqualTo(2);
         assertThat(response.members()).anySatisfy(m -> assertThat(m.isMe()).isTrue());
         assertThat(response.members())

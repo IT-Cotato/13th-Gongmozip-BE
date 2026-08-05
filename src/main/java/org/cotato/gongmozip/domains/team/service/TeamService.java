@@ -262,6 +262,10 @@ public class TeamService {
                 .toList();
 
         return TeamConverter.toTeamMembersResponse(
-                memberResponses, team.isChatbotEnabled(), team.getStatus(), team.getLeaderSelectionDeadlineAt());
+                memberResponses,
+                team.isChatbotEnabled(),
+                team.getStatus(),
+                team.getLeaderSelectionDeadlineAt(),
+                team.getContestCandidateDeadlineAt());
     }
 }
