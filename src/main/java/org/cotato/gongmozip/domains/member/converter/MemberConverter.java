@@ -26,4 +26,18 @@ public class MemberConverter {
     public static SignUpResponse toSignUpResponse(Member member) {
         return new SignUpResponse(member.getMemberId(), member.getEmail());
     }
+
+    public static org.cotato.gongmozip.domains.member.dto.response.MemberResponse.MemberMeResponse toMemberMeResponse(
+            Member member) {
+        return new org.cotato.gongmozip.domains.member.dto.response.MemberResponse.MemberMeResponse(
+                member.getMemberId(),
+                member.getEmail(),
+                member.getName(),
+                member.getGender(),
+                member.getBirthDate(),
+                member.getSnsType(),
+                member.getSnsType() != null,
+                member.isMarketingConsentEmail(),
+                member.isMarketingConsentSms());
+    }
 }

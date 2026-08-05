@@ -108,4 +108,32 @@ public class MemberService {
         // 성별과 생년월일 등록
         member.registerRequiredInfo(request.gender(), request.birthDate());
     }
+
+    @Transactional(readOnly = true)
+    public org.cotato.gongmozip.domains.member.dto.response.MemberResponse.MemberMeResponse getMemberMe(Long memberId) {
+        Member member = memberRepository
+                .findById(memberId)
+                .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
+        return MemberConverter.toMemberMeResponse(member);
+    }
+
+    @Transactional
+    public void updateMemberMe(
+            Long memberId,
+            org.cotato.gongmozip.domains.member.dto.request.MemberRequest.UpdateMemberMeRequest request) {
+        Member member = memberRepository
+                .findById(memberId)
+                .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
+        member.updateInfo(request.name(), request.gender(), request.birthDate());
+    }
+
+    @Transactional
+    public void updateMarketingConsent(
+            Long memberId,
+            org.cotato.gongmozip.domains.member.dto.request.MemberRequest.UpdateMarketingConsentRequest request) {
+        Member member = memberRepository
+                .findById(memberId)
+                .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
+        member.updateMarketingConsents(request.marketingConsentEmail(), request.marketingConsentSms());
+    }
 }

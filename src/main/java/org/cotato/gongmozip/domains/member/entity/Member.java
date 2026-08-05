@@ -67,9 +67,37 @@ public class Member extends BaseEntity {
     @Column(name = "matching_blocked_until")
     private LocalDateTime matchingBlockedUntil;
 
+    @Column(name = "name")
+    private String name;
+
+    @Column(name = "sns_type")
+    private String snsType;
+
+    @Column(name = "sns_email")
+    private String snsEmail;
+
+    @Builder.Default
+    @Column(name = "marketing_consent_email", nullable = false)
+    private boolean marketingConsentEmail = false;
+
+    @Builder.Default
+    @Column(name = "marketing_consent_sms", nullable = false)
+    private boolean marketingConsentSms = false;
+
     public void registerRequiredInfo(Gender gender, LocalDate birthDate) {
         this.gender = gender;
         this.birthDate = birthDate;
+    }
+
+    public void updateInfo(String name, Gender gender, LocalDate birthDate) {
+        this.name = name;
+        this.gender = gender;
+        this.birthDate = birthDate;
+    }
+
+    public void updateMarketingConsents(boolean marketingConsentEmail, boolean marketingConsentSms) {
+        this.marketingConsentEmail = marketingConsentEmail;
+        this.marketingConsentSms = marketingConsentSms;
     }
 
     public void changePassword(String encodedPassword) {
