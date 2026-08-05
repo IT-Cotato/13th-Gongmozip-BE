@@ -31,11 +31,15 @@ class CollaborationPointServiceTest {
     @Mock
     private CollaborationPointHistoryRepository collaborationPointHistoryRepository;
 
+    @Mock
+    private org.cotato.gongmozip.domains.member.repository.MemberRepository memberRepository;
+
     private CollaborationPointService collaborationPointService;
 
     @BeforeEach
     void setUp() {
-        collaborationPointService = new CollaborationPointService(collaborationPointHistoryRepository, FIXED_CLOCK);
+        collaborationPointService =
+                new CollaborationPointService(collaborationPointHistoryRepository, memberRepository, FIXED_CLOCK);
     }
 
     @DisplayName("포인트를 적립하면 회원의 누적 포인트가 증가하고 히스토리가 저장된다.")
