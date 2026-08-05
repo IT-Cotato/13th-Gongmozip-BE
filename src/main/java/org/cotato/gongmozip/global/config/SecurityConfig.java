@@ -62,7 +62,10 @@ public class SecurityConfig {
                                 "/v3/api-docs/**", // swagger
                                 "/ws/**", // WebSocket(STOMP) 핸드셰이크 - 인증은 CONNECT 프레임에서 별도 처리
                                 "/chat-test.html", // 로컬 수동 테스트용 정적 페이지
-                                "/api/test/auth/quick-login" // [개발용] 이메일 인증 없이 토큰 발급
+                                "/api/test/auth/quick-login", // [개발용] 이메일 인증 없이 토큰 발급
+                                "/api/inquiries", // 문의 작성
+                                "/api/inquiries/list", // 문의 내역 조회
+                                "/api/inquiries/*" // 문의 상세 조회
                                 )
                         .permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/contests")
