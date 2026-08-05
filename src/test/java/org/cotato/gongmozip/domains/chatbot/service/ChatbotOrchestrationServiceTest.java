@@ -398,6 +398,22 @@ class ChatbotOrchestrationServiceTest {
                 .postChatbotCardMessage(any(), eq(MessageType.CONTEST_RECOMMEND_CARD), anyString(), anyString());
     }
 
+    @DisplayName("공모전이 확정되면 팀이 IN_PROGRESS로 전이되고 활용 안내 카드도 함께 발행된다.")
+    @Test
+    void 공모전이_확정되면_팀이_IN_PROGRESS로_전이되고_활용_안내_카드도_함께_발행된다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.CONTEST_DECIDED).build();
+
+        // when
+        chatbotOrchestrationService.advanceToInProgress(team);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.IN_PROGRESS);
+        verify(chatService).postChatbotMessage(eq(team), anyString());
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.CHATBOT_GUIDE_CARD), anyString(), anyString());
+    }
+
     @DisplayName("리뷰가 완료되면 팀이 COMPLETED로 전이되고 마무리 메시지가 발행된다.")
     @Test
     void 리뷰가_완료되면_팀이_COMPLETED로_전이되고_마무리_메시지가_발행된다() {

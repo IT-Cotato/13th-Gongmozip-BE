@@ -99,7 +99,7 @@ public class ContestVotingService {
                 team,
                 MessageType.CONTEST_SHARE_CARD,
                 sharer.getProfile().getNickname() + "님이 공모전을 공유했어요. 후보로 추가하려면 + 버튼을 눌러주세요.",
-                toContestShareMetadata(contest.getContestId()));
+                toContestIdMetadata(contest.getContestId()));
     }
 
     @Transactional
@@ -269,7 +269,11 @@ public class ContestVotingService {
         LocalDateTime teamCreatedAt = team.getCreatedAt();
         Duration halfway = Duration.between(teamCreatedAt, applyEndAt).dividedBy(2);
         team.scheduleCheckpoints(teamCreatedAt.plus(halfway), applyEndAt.minusDays(1));
-        chatService.postChatbotMessage(team, announcement);
+        chatService.postChatbotCardMessage(
+                team,
+                MessageType.CONTEST_RESULT_CARD,
+                announcement,
+                toContestIdMetadata(winner.getContest().getContestId()));
         chatbotOrchestrationService.advanceToInProgress(team);
     }
 
@@ -314,11 +318,13 @@ public class ContestVotingService {
         }
     }
 
-    private String toContestShareMetadata(Long contestId) {
+    // CONTEST_SHARE_CARD/CONTEST_RESULT_CARD 모두 {contestId: id} 형태로 내려, 프론트가 카드
+    // 종류와 무관하게 같은 방식으로 썸네일/제목/D-day를 조회해 렌더링할 수 있게 한다.
+    private String toContestIdMetadata(Long contestId) {
         try {
             return objectMapper.writeValueAsString(Map.of("contestId", contestId));
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException("공모전 공유 메타데이터 직렬화에 실패했습니다.", e);
+            throw new IllegalStateException("공모전 카드 메타데이터 직렬화에 실패했습니다.", e);
         }
     }
 

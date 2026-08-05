@@ -369,6 +369,8 @@ class ContestVotingServiceTest {
         // then
         assertThat(team.getStatus()).isEqualTo(TeamStatus.CONTEST_DECIDED);
         assertThat(team.getContest()).isEqualTo(contestA);
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.CONTEST_RESULT_CARD), anyString(), anyString());
         verify(chatbotOrchestrationService).advanceToInProgress(team);
     }
 
