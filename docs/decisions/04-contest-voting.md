@@ -82,7 +82,40 @@ unique를 건다.
   있으면 기존 개표 로직 그대로 적용. **Phase 8에서도 이 무작위 선택은 AI 추천으로 바꾸지
   않기로 결정** — 실제 LLM이 붙기 전까지는 무작위와 실질적 차이가 없어서 우선순위를 낮췄다
   ([08-ai.md](./08-ai.md) 참고). 자세한 내용은 [07-scheduler.md](./07-scheduler.md) 참고.
+- ~~공모전 추천 알고리즘~~ → 2026-08-05에 확정: 카테고리 내 마감이 가장 많이 남은 순서대로
+  최대 3개. 자세한 내용은 [08-ai.md](./08-ai.md) 참고.
+- ~~AI 추천 공모전이 실제 후보로 등록되지 않던 문제~~ → 2026-08-05 커버리지 점검 중 발견 후 해결.
+  `advanceToContestSelecting`이 `CONTEST_RECOMMEND_CARD`에 추천 공모전 id를 메타데이터로만
+  실어 보내고 `ContestCandidate`는 전혀 생성하지 않고 있었다 — "전체보기 클릭 시
+  `ContestCandidate` 전체 리스트로 이동한다"는 위 서술과 실제 동작이 어긋나 있던 것.
+  추천된 공모전을 `advanceToContestSelecting`에서 바로 `ContestCandidate`로 등록하도록
+  고쳤다. `addedByTeamMember`가 `nullable=false`라 이 시점에 이미 확정된 팀장을 등록자로
+  채운다(이 메서드는 항상 팀장 확정 직후에만 호출되므로 팀장 부재 케이스는 이론상 없음).
+  순환 의존(`ContestVotingService` → `ChatbotOrchestrationService`) 때문에
+  `ContestVotingService.addCandidate`를 호출하는 대신 `ChatbotOrchestrationService`가
+  `ContestCandidateRepository`를 직접 주입받아 처리한다.
+
+## 공모전 공유 (2026-08-05, 기능명세서 3.4.2/5.1.4)
+
+공모전 탭에서 상세 화면의 "채팅방에 공유하기"로 특정 채팅방(들)에 공모전을 공유하는 기능.
+**공유와 후보 등록은 별개 액션이다** — 공유는 팀원 누구나 볼 수 있는 카드 메시지를 남길
+뿐이고, 그 카드의 "+" 버튼을 눌러야 실제로 `ContestCandidate`가 생성된다(기존
+`addCandidate` 재사용, 별도 API 아님).
+
+- `MessageType.CONTEST_SHARE_CARD` 신규 추가.
+- `ContestVotingService.shareContest(teamId, memberId, contestId)` — `{"contestId": id}`
+  메타데이터를 담은 카드 메시지만 발행하고 `ContestCandidate`는 만들지 않는다. 공유 자체는
+  공모전 후보를 실제로 등록하는 게 아니라서 `CONTEST_SELECTING` 상태로 제한하지 않는다(다른
+  단계에서도 "이거 어때요?" 하고 공유만 해둘 수 있음).
+- 컨트롤러: `domains/contest/controller/ContestShareController.java` —
+  `POST /api/teams/{teamId}/contest-shares` (신규). 여러 채팅방에 공유하는 건 프론트가
+  선택한 방마다 이 API를 반복 호출하는 방식(기존 `addCandidate`와 동일한 "단일 팀 단위" 계약).
+- 후보 등록(카드의 "+" 버튼)은 기존 `POST /api/teams/{teamId}/contest-candidates`를 그대로
+  호출한다 — `CONTEST_SELECTING` 상태 제한과 중복 등록 방지(`DUPLICATE_CONTEST_CANDIDATE`)는
+  기존 로직 그대로 적용된다.
+- 테스트: `ContestVotingServiceTest`(공유 성공/공모전 없음 케이스).
 
 ## 관련 화면
 
-5.1.3.3 팀 공모전 추천 및 투표, 5.1.4 공모전 후보 추가, 투표결과_미투표, 공모전 동률
+5.1.3.3 팀 공모전 추천 및 투표, 5.1.4 공모전 공유, 공모전 후보 추가, 공모전 후보 추가 완료,
+투표결과_미투표, 공모전 동률, 3.4 공모전 목록, 3.4.1 공모전 정보(공유), 3.4.2 후보로 보내기

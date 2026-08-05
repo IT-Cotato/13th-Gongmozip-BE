@@ -34,5 +34,7 @@ public final class TeamResponse {
             int participantCount,
             String status,
             // LEADER_SELECTING(팀장 여부 투표/팀장 투표) 마감 시각. 그 외 상태에서는 null.
-            LocalDateTime leaderSelectionDeadlineAt) {}
+            LocalDateTime leaderSelectionDeadlineAt,
+            // CONTEST_SELECTING(공모전 후보/투표) 마감 시각. 그 외 상태에서는 null.
+            LocalDateTime contestCandidateDeadlineAt) {}
 }

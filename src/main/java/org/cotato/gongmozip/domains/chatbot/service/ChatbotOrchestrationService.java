@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
+import org.cotato.gongmozip.domains.contest.entity.ContestCandidate;
+import org.cotato.gongmozip.domains.contest.repository.ContestCandidateRepository;
 import org.cotato.gongmozip.domains.contest.repository.ContestRepository;
 import org.cotato.gongmozip.domains.team.converter.TeamConverter;
 import org.cotato.gongmozip.domains.team.entity.Team;
@@ -56,6 +58,7 @@ public class ChatbotOrchestrationService {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final ContestRepository contestRepository;
+    private final ContestCandidateRepository contestCandidateRepository;
     private final AiClient aiClient;
     // 이 프로젝트에는 Spring이 자동 구성한 ObjectMapper 빈이 없어 직접 생성한다.
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -204,8 +207,10 @@ public class ChatbotOrchestrationService {
         team.advanceStatus(TeamStatus.CONTEST_SELECTING);
         team.scheduleContestCandidateDeadline(LocalDateTime.now().toLocalDate().atTime(23, 0));
 
+        // 마감이 가장 많이 남은 순서대로 추천한다(팀이 막 꾸려진 시점이라 준비 기간이 넉넉한
+        // 공모전을 우선 보여주는 편이 낫다는 판단, 2026-08-05).
         List<Contest> openContests = contestRepository
-                .findAllWithFilterAndDeadlineAsc(
+                .findAllWithFilterAndDeadlineDesc(
                         null,
                         team.getPreferredCategory(),
                         "OPEN",
@@ -219,11 +224,45 @@ public class ChatbotOrchestrationService {
         if (recommendedContestIds.isEmpty()) {
             chatService.postChatbotMessage(team, CONTEST_SELECTION_PROMPT);
         } else {
+            registerRecommendedCandidates(team, openContests, recommendedContestIds);
             chatService.postChatbotCardMessage(
                     team,
                     MessageType.CONTEST_RECOMMEND_CARD,
                     CONTEST_SELECTION_PROMPT,
                     toIdsMetadata("contestIds", recommendedContestIds));
+        }
+    }
+
+    // AI가 추천한 공모전은 정보성 표시로 끝나지 않고 바로 투표 가능한 후보로 등록돼야 한다
+    // (Figma "공모전 후보 리스트" 화면이 추천 목록을 이미 후보로 전제하고 있음, 2026-08-05
+    // 커버리지 점검 중 발견). 후보를 등록한 사람(addedByTeamMember)은 nullable=false라
+    // 이 시점에 이미 확정된 팀장으로 채운다 — advanceToContestSelecting은 항상 팀장 확정
+    // 직후에만 호출되므로 팀장이 없는 경우는 이론상 없다.
+    private void registerRecommendedCandidates(
+            Team team, List<Contest> openContests, List<Long> recommendedContestIds) {
+        TeamMember leader =
+                teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE).stream()
+                        .filter(teamMember -> teamMember.getRole() == TeamRole.LEADER)
+                        .findFirst()
+                        .orElse(null);
+        if (leader == null) {
+            return;
+        }
+
+        Map<Long, Contest> contestById =
+                openContests.stream().collect(Collectors.toMap(Contest::getContestId, contest -> contest));
+        for (Long contestId : recommendedContestIds) {
+            Contest contest = contestById.get(contestId);
+            if (contest == null
+                    || contestCandidateRepository.existsByTeam_TeamIdAndContest_ContestId(
+                            team.getTeamId(), contestId)) {
+                continue;
+            }
+            contestCandidateRepository.save(ContestCandidate.builder()
+                    .team(team)
+                    .contest(contest)
+                    .addedByTeamMember(leader)
+                    .build());
         }
     }
 

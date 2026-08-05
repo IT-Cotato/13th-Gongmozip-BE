@@ -513,12 +513,43 @@ class TeamServiceTest {
         assertThat(response.chatbotEnabled()).isTrue();
         assertThat(response.status()).isEqualTo("LEADER_SELECTING");
         assertThat(response.leaderSelectionDeadlineAt()).isEqualTo(leaderSelectionDeadlineAt);
+        assertThat(response.contestCandidateDeadlineAt()).isNull();
         assertThat(response.participantCount()).isEqualTo(2);
         assertThat(response.members()).anySatisfy(m -> assertThat(m.isMe()).isTrue());
         assertThat(response.members())
                 .filteredOn(m -> m.memberId().equals(2L))
                 .singleElement()
                 .satisfies(m -> assertThat(m.profileId()).isEqualTo(200L));
+    }
+
+    @DisplayName("대화상대를 조회하면 공모전 후보 마감 시각도 함께 반환한다.")
+    @Test
+    void 대화상대를_조회하면_공모전_후보_마감_시각도_함께_반환한다() {
+        // given
+        LocalDateTime contestCandidateDeadlineAt = LocalDateTime.of(2026, 8, 6, 23, 0);
+        Team team = Team.builder()
+                .teamId(100L)
+                .chatbotEnabled(true)
+                .status(TeamStatus.CONTEST_SELECTING)
+                .contestCandidateDeadlineAt(contestCandidateDeadlineAt)
+                .build();
+        TeamMember me = teamMemberOf(team, 1L, "나");
+        TeamMember other = teamMemberOf(team, 2L, "김민정");
+
+        given(teamRepository.findById(100L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
+                .willReturn(Optional.of(me));
+        given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(me, other));
+        given(characterService.findAvatarsByMembers(any())).willReturn(Map.of());
+
+        // when
+        TeamMembersResponse response = teamService.getTeamMembers(100L, 1L);
+
+        // then
+        assertThat(response.status()).isEqualTo("CONTEST_SELECTING");
+        assertThat(response.leaderSelectionDeadlineAt()).isNull();
+        assertThat(response.contestCandidateDeadlineAt()).isEqualTo(contestCandidateDeadlineAt);
     }
 
     @DisplayName("대화상대 조회 시 캐릭터가 있는 팀원은 avatar가 채워지고, 없는 팀원은 null이다.")

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
 import java.util.List;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
+import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
 import org.cotato.gongmozip.global.ai.dto.LeaderCandidateSnapshot;
 import org.junit.jupiter.api.DisplayName;
@@ -136,6 +137,16 @@ class MockAiClientTest {
         Long second = aiClient.recommendTiebreakLeader(999L, team, List.of(1L, 2L));
 
         assertThat(first).isEqualTo(second);
+    }
+
+    @DisplayName("공모전 추천은 입력 순서(마감 내림차순)를 그대로 유지한 채 최대 3개만 자른다.")
+    @Test
+    void 공모전_추천은_입력_순서를_유지한_채_최대_3개로_제한한다() {
+        List<Long> orderedByDeadlineDesc = List.of(10L, 20L, 30L, 40L);
+
+        List<Long> recommended = aiClient.recommendContests(InterestCategory.IT_AI_TECH, orderedByDeadlineDesc);
+
+        assertThat(recommended).containsExactly(10L, 20L, 30L);
     }
 
     private LeaderCandidateSnapshot snapshot(

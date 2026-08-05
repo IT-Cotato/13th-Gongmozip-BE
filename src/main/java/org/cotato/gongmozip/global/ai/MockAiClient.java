@@ -1,7 +1,5 @@
 package org.cotato.gongmozip.global.ai;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -25,7 +23,6 @@ public class MockAiClient implements AiClient {
     private static final int MAX_CONTEST_RECOMMENDATIONS = 3;
     private static final int NEUTRAL_BONUS = 2;
     private static final int NO_MAJORITY_SCORE = 7;
-    private static final Random RANDOM = new Random();
 
     @Override
     public String generateSummary(String projectName, String role, String description) {
@@ -161,10 +158,13 @@ public class MockAiClient implements AiClient {
         return new Random(teamId * 31 + teamMemberId).nextLong();
     }
 
+    // 카테고리 내 마감이 가장 많이 남은 순서대로 최대 3개를 추천한다. 호출부
+    // (ChatbotOrchestrationService)가 이미 마감 내림차순으로 정렬해서 넘겨주므로, 여기서는
+    // 그 순서를 그대로 유지한 채 상위 N개만 자른다(더 이상 셔플하지 않음).
     @Override
     public List<Long> recommendContests(InterestCategory category, List<Long> openContestIds) {
-        log.info("AI contest recommendation simulation for category: {}", category);
-        return shuffledSample(openContestIds, MAX_CONTEST_RECOMMENDATIONS);
+        log.info("Rule-based contest recommendation (deadline desc) for category: {}", category);
+        return openContestIds.stream().limit(MAX_CONTEST_RECOMMENDATIONS).toList();
     }
 
     @Override
@@ -192,11 +192,5 @@ public class MockAiClient implements AiClient {
         }
 
         return "아직 그 질문에는 구체적으로 답하기 어려워요. " + "'역할 분담'이나 '타임라인'처럼 구체적으로 물어봐주세요!";
-    }
-
-    private List<Long> shuffledSample(List<Long> ids, int limit) {
-        List<Long> shuffled = new ArrayList<>(ids);
-        Collections.shuffle(shuffled, RANDOM);
-        return shuffled.stream().limit(limit).toList();
     }
 }

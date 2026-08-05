@@ -121,8 +121,14 @@ public final class TeamConverter {
             List<TeamMemberSummaryResponse> members,
             boolean chatbotEnabled,
             TeamStatus status,
-            LocalDateTime leaderSelectionDeadlineAt) {
+            LocalDateTime leaderSelectionDeadlineAt,
+            LocalDateTime contestCandidateDeadlineAt) {
         return new TeamMembersResponse(
-                members, chatbotEnabled, members.size(), status.name(), leaderSelectionDeadlineAt);
+                members,
+                chatbotEnabled,
+                members.size(),
+                status.name(),
+                leaderSelectionDeadlineAt,
+                contestCandidateDeadlineAt);
     }
 }

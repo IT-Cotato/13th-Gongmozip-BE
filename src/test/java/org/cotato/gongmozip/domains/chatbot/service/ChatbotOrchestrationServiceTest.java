@@ -14,6 +14,8 @@ import java.util.Optional;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
+import org.cotato.gongmozip.domains.contest.entity.ContestCandidate;
+import org.cotato.gongmozip.domains.contest.repository.ContestCandidateRepository;
 import org.cotato.gongmozip.domains.contest.repository.ContestRepository;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
@@ -52,6 +54,9 @@ class ChatbotOrchestrationServiceTest {
 
     @Mock
     private ContestRepository contestRepository;
+
+    @Mock
+    private ContestCandidateRepository contestCandidateRepository;
 
     @Mock
     private AiClient aiClient;
@@ -201,7 +206,7 @@ class ChatbotOrchestrationServiceTest {
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(lastToGreet));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(leader, lastToGreet));
-        given(contestRepository.findAllWithFilterAndDeadlineAsc(any(), any(), any(), any(), any()))
+        given(contestRepository.findAllWithFilterAndDeadlineDesc(any(), any(), any(), any(), any()))
                 .willReturn(new PageImpl<>(List.of()));
         given(aiClient.recommendContests(any(), any())).willReturn(List.of());
 
@@ -304,7 +309,7 @@ class ChatbotOrchestrationServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.TEAM_NOT_FOUND);
     }
 
-    @DisplayName("공모전 선정 단계 진입 시 추천 공모전이 있으면 추천 카드가 발행된다.")
+    @DisplayName("공모전 선정 단계 진입 시 추천 공모전이 있으면 추천 카드가 발행되고 후보로도 자동 등록된다.")
     @Test
     void 공모전_선정_단계_진입_시_추천_공모전이_있으면_추천_카드가_발행된다() {
         // given
@@ -313,14 +318,20 @@ class ChatbotOrchestrationServiceTest {
                 .status(TeamStatus.LEADER_DECIDED)
                 .preferredCategory(InterestCategory.IT_AI_TECH)
                 .build();
+        TeamMember leader = teamMemberOf(team, 10L, "김민정");
+        leader.assignAsLeader();
         Contest contest = Contest.builder()
                 .contestId(100L)
                 .title("공모전")
                 .category(InterestCategory.IT_AI_TECH)
                 .build();
-        given(contestRepository.findAllWithFilterAndDeadlineAsc(any(), any(), any(), any(), any()))
+        given(contestRepository.findAllWithFilterAndDeadlineDesc(any(), any(), any(), any(), any()))
                 .willReturn(new PageImpl<>(List.of(contest)));
         given(aiClient.recommendContests(any(), any())).willReturn(List.of(100L));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(leader));
+        given(contestCandidateRepository.existsByTeam_TeamIdAndContest_ContestId(1L, 100L))
+                .willReturn(false);
 
         // when
         chatbotOrchestrationService.advanceToContestSelecting(team);
@@ -330,6 +341,38 @@ class ChatbotOrchestrationServiceTest {
         assertThat(team.getContestCandidateDeadlineAt()).isNotNull();
         verify(chatService)
                 .postChatbotCardMessage(eq(team), eq(MessageType.CONTEST_RECOMMEND_CARD), anyString(), anyString());
+        verify(contestCandidateRepository).save(any(ContestCandidate.class));
+    }
+
+    @DisplayName("이미 후보로 등록된 추천 공모전은 중복 등록하지 않는다.")
+    @Test
+    void 이미_후보로_등록된_추천_공모전은_중복_등록하지_않는다() {
+        // given
+        Team team = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.LEADER_DECIDED)
+                .preferredCategory(InterestCategory.IT_AI_TECH)
+                .build();
+        TeamMember leader = teamMemberOf(team, 10L, "김민정");
+        leader.assignAsLeader();
+        Contest contest = Contest.builder()
+                .contestId(100L)
+                .title("공모전")
+                .category(InterestCategory.IT_AI_TECH)
+                .build();
+        given(contestRepository.findAllWithFilterAndDeadlineDesc(any(), any(), any(), any(), any()))
+                .willReturn(new PageImpl<>(List.of(contest)));
+        given(aiClient.recommendContests(any(), any())).willReturn(List.of(100L));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(leader));
+        given(contestCandidateRepository.existsByTeam_TeamIdAndContest_ContestId(1L, 100L))
+                .willReturn(true);
+
+        // when
+        chatbotOrchestrationService.advanceToContestSelecting(team);
+
+        // then
+        verify(contestCandidateRepository, never()).save(any());
     }
 
     @DisplayName("추천할 공모전이 없으면 일반 안내 메시지만 발행된다.")
@@ -341,7 +384,7 @@ class ChatbotOrchestrationServiceTest {
                 .status(TeamStatus.LEADER_DECIDED)
                 .preferredCategory(InterestCategory.IT_AI_TECH)
                 .build();
-        given(contestRepository.findAllWithFilterAndDeadlineAsc(any(), any(), any(), any(), any()))
+        given(contestRepository.findAllWithFilterAndDeadlineDesc(any(), any(), any(), any(), any()))
                 .willReturn(new PageImpl<>(List.of()));
         given(aiClient.recommendContests(any(), any())).willReturn(List.of());
 

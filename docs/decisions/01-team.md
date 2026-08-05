@@ -16,6 +16,7 @@
 | preferredCategory | `InterestCategory` | 매칭 시 팀 대표 카테고리 (공모전 추천 AI 입력값) |
 | leaderSelectionMode | `LeaderSelectionMode` | 팀 생성 시점에 1회 계산 후 고정. [02](./02-leader-election.md) 참고 |
 | contest | `Contest` FK, nullable | 투표로 확정되면 세팅 |
+| contestCandidateDeadlineAt | LocalDateTime, nullable | 공모전 후보/투표 마감 시각. `GET /api/teams/{teamId}/members`(`TeamMembersResponse.contestCandidateDeadlineAt`)로 노출 (2026-08-05). [04-contest-voting.md](./04-contest-voting.md) 참고 |
 | chatbotEnabled | boolean, default true | [03-chat.md](./03-chat.md) 참고 |
 | progressPercent | int, nullable | 중간점검 슬라이더 |
 | progressCheckAt | LocalDateTime, nullable | contest 확정 시 계산. [07-scheduler.md](./07-scheduler.md) |
