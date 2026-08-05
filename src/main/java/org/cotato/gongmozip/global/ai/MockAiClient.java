@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
@@ -17,12 +18,17 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class MockAiClient implements AiClient {
 
     private static final int MAX_LEADER_RECOMMENDATIONS = 2;
     private static final int MAX_CONTEST_RECOMMENDATIONS = 3;
     private static final int NEUTRAL_BONUS = 2;
     private static final int NO_MAJORITY_SCORE = 7;
+    private static final String ANSWER_TEAM_QUESTION_SYSTEM_PROMPT =
+            "너는 대학생 공모전 팀 프로젝트를 돕는 챗봇이야. 팀원의 질문에 2~4문장으로, 바로 실행할 수 있는 " + "조언 위주로 한국어 반말 없이 정중하게 답해줘. 질문: ";
+
+    private final GeminiClient geminiClient;
 
     @Override
     public String generateSummary(String projectName, String role, String description) {
@@ -169,12 +175,23 @@ public class MockAiClient implements AiClient {
 
     @Override
     public String answerTeamQuestion(String question) {
-        log.info("AI team question simulation for: {}", question);
-
         if (question == null || question.isBlank()) {
             return "궁금한 점을 말씀해주시면 도와드릴게요! 예) @챗봇 우리 역할 분담 추천해줘";
         }
 
+        if (geminiClient.isEnabled()) {
+            try {
+                return geminiClient.generateContent(ANSWER_TEAM_QUESTION_SYSTEM_PROMPT + question);
+            } catch (Exception e) {
+                log.warn("Gemini API 호출에 실패해 키워드 기반 응답으로 대체합니다.", e);
+            }
+        }
+
+        return answerWithKeywordFallback(question);
+    }
+
+    // Gemini 키가 없거나(로컬/테스트) 호출이 실패했을 때 쓰는 키워드 기반 응답.
+    private String answerWithKeywordFallback(String question) {
         if (question.contains("역할")) {
             return "역할 분담 추천이에요:\n"
                     + "- 기획/PM: 아이디어 정리와 일정 관리\n"

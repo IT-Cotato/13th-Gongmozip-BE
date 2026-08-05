@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
  */
 class MockAiClientTest {
 
-    private final MockAiClient aiClient = new MockAiClient();
+    private final MockAiClient aiClient = new MockAiClient(new GeminiClient("", "gemini-2.5-flash-lite"));
 
     @DisplayName("적합도 점수 표: 후보 유형 × 잔여 다수 유형 조합을 그대로 반영한다.")
     @Test
