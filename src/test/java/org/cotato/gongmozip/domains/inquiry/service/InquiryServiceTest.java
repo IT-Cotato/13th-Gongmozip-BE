@@ -76,7 +76,7 @@ class InquiryServiceTest {
         // given
         Inquiry matched = inquiry(1L, ENCODED_PASSWORD);
         Inquiry notMatched = inquiry(2L, "$2a$10$otherPassword");
-        given(inquiryRepository.findAllByEmailOrderByCreatedAtDesc(TEST_EMAIL))
+        given(inquiryRepository.findTop100ByEmailOrderByCreatedAtDesc(TEST_EMAIL))
                 .willReturn(List.of(matched, notMatched));
         given(passwordEncoder.matches(TEST_PASSWORD, ENCODED_PASSWORD)).willReturn(true);
         given(passwordEncoder.matches(TEST_PASSWORD, "$2a$10$otherPassword")).willReturn(false);
@@ -93,7 +93,8 @@ class InquiryServiceTest {
     @Test
     void 일치하는_문의가_없으면_문의_없음_예외가_발생한다() {
         // given
-        given(inquiryRepository.findAllByEmailOrderByCreatedAtDesc(TEST_EMAIL)).willReturn(List.of());
+        given(inquiryRepository.findTop100ByEmailOrderByCreatedAtDesc(TEST_EMAIL))
+                .willReturn(List.of());
 
         // when & then
         assertThatThrownBy(() -> inquiryService.getInquiries(new InquiryAuthRequest(TEST_EMAIL, TEST_PASSWORD)))
@@ -159,7 +160,8 @@ class InquiryServiceTest {
                 .title("문의 제목")
                 .content(longContent)
                 .build();
-        given(inquiryRepository.findAllByEmailOrderByCreatedAtDesc(TEST_EMAIL)).willReturn(List.of(inquiry));
+        given(inquiryRepository.findTop100ByEmailOrderByCreatedAtDesc(TEST_EMAIL))
+                .willReturn(List.of(inquiry));
         given(passwordEncoder.matches(TEST_PASSWORD, ENCODED_PASSWORD)).willReturn(true);
 
         // when

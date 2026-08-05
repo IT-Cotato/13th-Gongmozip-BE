@@ -31,7 +31,7 @@ public class InquiryService {
 
     public InquiryListResponse getInquiries(InquiryAuthRequest request) {
         // BCrypt 해시는 equality 조회가 불가하므로 이메일로 조회 후 비밀번호를 행 단위로 대조한다
-        List<Inquiry> matched = inquiryRepository.findAllByEmailOrderByCreatedAtDesc(request.email()).stream()
+        List<Inquiry> matched = inquiryRepository.findTop100ByEmailOrderByCreatedAtDesc(request.email()).stream()
                 .filter(inquiry -> passwordEncoder.matches(request.password(), inquiry.getPassword()))
                 .toList();
 
