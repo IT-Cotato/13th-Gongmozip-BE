@@ -1,5 +1,7 @@
 package org.cotato.gongmozip.domains.collaboration.controller;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -61,8 +63,11 @@ class CollaborationControllerTest {
     void getHistoriesReturnsList() throws Exception {
         Member member = member();
         CollaborationHistoryResponse history = new CollaborationHistoryResponse(1L, 10, "프로젝트 완주", LocalDateTime.now());
-        CollaborationHistoryListResponse response = new CollaborationHistoryListResponse(List.of(history));
-        given(collaborationPointService.getCollaborationHistories(1L)).willReturn(response);
+        CollaborationHistoryListResponse response =
+                new CollaborationHistoryListResponse(List.of(history), 0, 10, 1L, 1, false);
+        given(collaborationPointService.getCollaborationHistories(
+                        eq(1L), any(org.springframework.data.domain.Pageable.class)))
+                .willReturn(response);
 
         mockMvc.perform(get("/api/members/me/collaboration-distance/histories")
                         .with(user(new CustomUserDetails(member))))

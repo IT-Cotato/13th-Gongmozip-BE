@@ -111,4 +111,117 @@ class CollaborationPointServiceTest {
         assertThat(member.getMatchingBlockedUntil()).isEqualTo(LocalDateTime.of(2026, 8, 7, 13, 0));
         assertThat(member.getCollaborationPoint()).isEqualTo(90);
     }
+
+    @DisplayName("회원 존재 시 getCollaborationDistance가 게이지 정보를 올바르게 반환한다.")
+    @Test
+    void 회원_존재_시_getCollaborationDistance가_게이지_정보를_올바르게_반환한다() {
+        // given
+        Long memberId = 1L;
+        Member member =
+                Member.builder().memberId(memberId).collaborationPoint(300).build();
+        given(memberRepository.findById(memberId)).willReturn(java.util.Optional.of(member));
+
+        // when
+        org.cotato.gongmozip.domains.collaboration.dto.response.CollaborationResponse.CollaborationDistanceResponse
+                response = collaborationPointService.getCollaborationDistance(memberId);
+
+        // then
+        assertThat(response.collaborationPoint()).isEqualTo(300);
+        assertThat(response.maxCollaborationPoint()).isEqualTo(500);
+        assertThat(response.gaugePercent()).isEqualTo(60.0);
+    }
+
+    @DisplayName("getCollaborationDistance 호출 시 회원을 찾지 못하면 MEMBER_NOT_FOUND 예외가 발생한다.")
+    @Test
+    void getCollaborationDistance_호출_시_회원_미존재_시_예외가_발생한다() {
+        // given
+        Long memberId = 1L;
+        given(memberRepository.findById(memberId)).willReturn(java.util.Optional.empty());
+
+        // when & then
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> collaborationPointService.getCollaborationDistance(memberId))
+                .isInstanceOf(org.cotato.gongmozip.domains.member.exception.MemberException.class)
+                .hasMessage(
+                        org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode.MEMBER_NOT_FOUND
+                                .getMessage());
+    }
+
+    @DisplayName("회원 존재 시 getCollaborationHistories가 페이징 처리된 변경 내역을 최신순으로 반환한다.")
+    @Test
+    void 회원_존재_시_getCollaborationHistories가_페이징_처리된_변경_내역을_반환한다() {
+        // given
+        Long memberId = 1L;
+        Member member = Member.builder().memberId(memberId).build();
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 5);
+
+        CollaborationPointHistory history = CollaborationPointHistory.builder()
+                .collaborationPointHistoryId(10L)
+                .member(member)
+                .delta(10)
+                .reasonCode(CollaborationPointReason.REVIEW_WRITTEN)
+                .build();
+
+        org.springframework.data.domain.Page<CollaborationPointHistory> page =
+                new org.springframework.data.domain.PageImpl<>(
+                        java.util.Collections.singletonList(history), pageable, 1);
+
+        given(memberRepository.findById(memberId)).willReturn(java.util.Optional.of(member));
+        given(collaborationPointHistoryRepository.findAllByMemberOrderByCreatedAtDesc(member, pageable))
+                .willReturn(page);
+
+        // when
+        org.cotato.gongmozip.domains.collaboration.dto.response.CollaborationResponse.CollaborationHistoryListResponse
+                response = collaborationPointService.getCollaborationHistories(memberId, pageable);
+
+        // then
+        assertThat(response.histories()).hasSize(1);
+        assertThat(response.histories().get(0).reason()).isEqualTo("팀원 리뷰 작성 완료");
+        assertThat(response.page()).isEqualTo(0);
+        assertThat(response.size()).isEqualTo(5);
+        assertThat(response.totalElements()).isEqualTo(1L);
+        assertThat(response.hasNext()).isFalse();
+    }
+
+    @DisplayName("getCollaborationHistories 호출 시 회원을 찾지 못하면 MEMBER_NOT_FOUND 예외가 발생한다.")
+    @Test
+    void getCollaborationHistories_호출_시_회원_미존재_시_예외가_발생한다() {
+        // given
+        Long memberId = 1L;
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 5);
+        given(memberRepository.findById(memberId)).willReturn(java.util.Optional.empty());
+
+        // when & then
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> collaborationPointService.getCollaborationHistories(memberId, pageable))
+                .isInstanceOf(org.cotato.gongmozip.domains.member.exception.MemberException.class)
+                .hasMessage(
+                        org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode.MEMBER_NOT_FOUND
+                                .getMessage());
+    }
+
+    @DisplayName("변경 이력이 존재하지 않을 경우 빈 이력 목록이 페이징 결과와 함께 반환된다.")
+    @Test
+    void 이력이_존재하지_않을_경우_빈_이력_목록이_반환된다() {
+        // given
+        Long memberId = 1L;
+        Member member = Member.builder().memberId(memberId).build();
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 5);
+
+        org.springframework.data.domain.Page<CollaborationPointHistory> emptyPage =
+                new org.springframework.data.domain.PageImpl<>(java.util.Collections.emptyList(), pageable, 0);
+
+        given(memberRepository.findById(memberId)).willReturn(java.util.Optional.of(member));
+        given(collaborationPointHistoryRepository.findAllByMemberOrderByCreatedAtDesc(member, pageable))
+                .willReturn(emptyPage);
+
+        // when
+        org.cotato.gongmozip.domains.collaboration.dto.response.CollaborationResponse.CollaborationHistoryListResponse
+                response = collaborationPointService.getCollaborationHistories(memberId, pageable);
+
+        // then
+        assertThat(response.histories()).isEmpty();
+        assertThat(response.totalElements()).isEqualTo(0L);
+        assertThat(response.totalPages()).isEqualTo(0);
+    }
 }
