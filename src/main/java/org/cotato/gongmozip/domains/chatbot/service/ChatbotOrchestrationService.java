@@ -11,15 +11,20 @@ import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.repository.ContestRepository;
+import org.cotato.gongmozip.domains.team.converter.TeamConverter;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
+import org.cotato.gongmozip.domains.team.enums.LeaderCandidacyStatus;
+import org.cotato.gongmozip.domains.team.enums.LeaderSelectionMode;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
+import org.cotato.gongmozip.domains.team.enums.TeamRole;
 import org.cotato.gongmozip.domains.team.enums.TeamStatus;
 import org.cotato.gongmozip.domains.team.exception.TeamException;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
 import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
 import org.cotato.gongmozip.domains.team.repository.TeamRepository;
 import org.cotato.gongmozip.global.ai.AiClient;
+import org.cotato.gongmozip.global.ai.dto.LeaderCandidateSnapshot;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +46,9 @@ public class ChatbotOrchestrationService {
     private static final String IN_PROGRESS_PROMPT = "공모전이 정해졌어요! 이제 팀원들과 함께 준비를 시작해보세요. 언제든 저의 도움이 필요하면 태그해주세요.\n\n"
             + "활용 예시\n@챗봇 우리 역할 분담 추천해줘\n@챗봇 우리 타임라인 추천해줘";
     private static final String REVIEW_COMPLETE_PROMPT = "모든 팀원이 서로에게 리뷰를 남겼어요. 수고 많으셨어요! 팀 프로젝트가 여기서 마무리됩니다.";
+    // 팀장 여부 투표/팀장 투표 시작(=LEADER_SELECTING 진입) 후 이 시간 안에 결과가 나지 않으면
+    // 스케줄러가 강제로 확정한다(GREETING 타임아웃과 동일한 정책, docs/decisions/02-leader-election.md).
+    private static final int LEADER_SELECTION_TIMEOUT_HOURS = 2;
     private static final int CONTEST_RECOMMENDATION_POOL_SIZE = 10;
     private static final String CHATBOT_MENTION_PREFIX = "@챗봇";
 
@@ -52,11 +60,28 @@ public class ChatbotOrchestrationService {
     // 이 프로젝트에는 Spring이 자동 구성한 ObjectMapper 빈이 없어 직접 생성한다.
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /** 팀 생성 직후 호출되어 인사 유도 단계를 시작한다. */
+    /**
+     * 팀 생성 직후 호출되어 인사 유도 단계를 시작한다. AUTO_ASSIGNED(매칭 신청 시점 팀장 희망
+     * "네" 1명)면 인사 메시지 자체에 팀장 안내를 포함시킨다 (docs/decisions/01-team.md 참고).
+     */
     @Transactional
     public void startGreeting(Team team) {
         team.advanceStatus(TeamStatus.GREETING);
-        chatService.postChatbotMessage(team, GREETING_PROMPT);
+        chatService.postChatbotMessage(team, greetingPromptFor(team));
+    }
+
+    private String greetingPromptFor(Team team) {
+        if (team.getLeaderSelectionMode() != LeaderSelectionMode.AUTO_ASSIGNED) {
+            return GREETING_PROMPT;
+        }
+        List<TeamMember> activeMembers =
+                teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE);
+        return activeMembers.stream()
+                .filter(teamMember -> teamMember.getRole() == TeamRole.LEADER)
+                .findFirst()
+                .map(leader -> GREETING_PROMPT + "\n\n" + leader.getProfile().getNickname()
+                        + "님이 매칭 시점에 팀장 참여를 희망하셔서 팀장으로 확정되었어요!")
+                .orElse(GREETING_PROMPT);
     }
 
     /**
@@ -81,7 +106,7 @@ public class ChatbotOrchestrationService {
         List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
         boolean allGreeted = activeMembers.stream().allMatch(teamMember -> teamMember.getGreetedAt() != null);
         if (allGreeted) {
-            advanceToLeaderSelecting(team, activeMembers);
+            advanceAfterGreeting(team, activeMembers);
         }
     }
 
@@ -98,15 +123,63 @@ public class ChatbotOrchestrationService {
         }
 
         List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
-        advanceToLeaderSelecting(team, activeMembers);
+        advanceAfterGreeting(team, activeMembers);
     }
 
-    private void advanceToLeaderSelecting(Team team, List<TeamMember> activeMembers) {
-        team.advanceStatus(TeamStatus.LEADER_SELECTING);
+    /**
+     * 전원 인사가 끝난 뒤 leaderSelectionMode에 따라 분기한다
+     * (docs/decisions/02-leader-election.md 케이스①②③).
+     * - AUTO_ASSIGNED(①): LEADER_SELECTING을 건너뛰고 바로 팀장 확정 안내 후 공모전 단계로.
+     * - CANDIDATE_VOTE(③): 팀장 여부 투표 없이 사전 후보 전원을 바로 후보 등록하고 투표 카드 발행.
+     * - OPEN_NOMINATION(②): 기존과 동일하게 AI 추천 2명을 담은 팀장 여부 투표 카드 발행.
+     */
+    private void advanceAfterGreeting(Team team, List<TeamMember> activeMembers) {
+        if (team.getLeaderSelectionMode() == LeaderSelectionMode.AUTO_ASSIGNED) {
+            TeamMember leader = activeMembers.stream()
+                    .filter(teamMember -> teamMember.getRole() == TeamRole.LEADER)
+                    .findFirst()
+                    .orElseThrow(() -> new TeamException(TeamErrorCode.INVALID_TEAM_STATUS));
+            team.advanceStatus(TeamStatus.LEADER_DECIDED);
+            chatService.postChatbotCardMessage(
+                    team,
+                    MessageType.LEADER_RESULT_CARD,
+                    leader.getProfile().getNickname() + "님이 팀장으로 확정되었어요! 이제 공모전을 골라볼까요?",
+                    toIdMetadata("leaderTeamMemberId", leader.getTeamMemberId()));
+            advanceToContestSelecting(team);
+            return;
+        }
 
-        List<Long> activeMemberIds =
-                activeMembers.stream().map(TeamMember::getTeamMemberId).toList();
-        List<Long> recommendedIds = aiClient.recommendLeaderCandidates(activeMemberIds);
+        team.advanceStatus(TeamStatus.LEADER_SELECTING);
+        team.scheduleLeaderSelectionDeadline(LocalDateTime.now().plusHours(LEADER_SELECTION_TIMEOUT_HOURS));
+        if (team.getLeaderSelectionMode() == LeaderSelectionMode.CANDIDATE_VOTE) {
+            postCandidateVoteCard(activeMembers, team);
+        } else {
+            postLeaderNominationCard(team, activeMembers);
+        }
+    }
+
+    // 사전 후보(매칭 신청 시점 팀장 희망 "네")가 2명 이상이면 "팀장 여부 투표" 단계 없이 바로
+    // 후보 전원을 대상으로 투표 카드를 발행한다. 비후보 팀원의 leaderCandidacy도 함께 확정해야
+    // LeaderElectionService.castVote()의 "전원 응답 완료" 선행조건을 만족한다.
+    private void postCandidateVoteCard(List<TeamMember> activeMembers, Team team) {
+        activeMembers.forEach(teamMember -> teamMember.updateLeaderCandidacy(
+                teamMember.isPreLeaderCandidate() ? LeaderCandidacyStatus.WANTS : LeaderCandidacyStatus.DOES_NOT_WANT));
+        List<Long> candidateIds = activeMembers.stream()
+                .filter(TeamMember::isPreLeaderCandidate)
+                .map(TeamMember::getTeamMemberId)
+                .toList();
+        chatService.postChatbotCardMessage(
+                team,
+                MessageType.LEADER_VOTE_CARD,
+                "팀장 희망자가 여러 명이에요. 팀장이 되면 좋을 것 같은 팀원에게 투표해주세요!",
+                toIdsMetadata("candidateTeamMemberIds", candidateIds));
+    }
+
+    private void postLeaderNominationCard(Team team, List<TeamMember> activeMembers) {
+        List<LeaderCandidateSnapshot> snapshots = activeMembers.stream()
+                .map(TeamConverter::toLeaderCandidateSnapshot)
+                .toList();
+        List<Long> recommendedIds = aiClient.recommendLeaderCandidates(team.getTeamId(), snapshots);
         String recommendedNames = activeMembers.stream()
                 .filter(member -> recommendedIds.contains(member.getTeamMemberId()))
                 .map(member -> member.getProfile().getNickname())
@@ -194,6 +267,16 @@ public class ChatbotOrchestrationService {
             return objectMapper.writeValueAsString(Map.of(key, ids));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("AI 추천 메타데이터 직렬화에 실패했습니다.", e);
+        }
+    }
+
+    // LeaderElectionService.toLeaderResultMetadata와 동일한 JSON 형태({key: 단일 id})를 내야
+    // 프론트가 LEADER_RESULT_CARD를 어느 경로로 받았든 같은 방식으로 파싱할 수 있다.
+    private String toIdMetadata(String key, Long id) {
+        try {
+            return objectMapper.writeValueAsString(Map.of(key, id));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("팀장 결과 메타데이터 직렬화에 실패했습니다.", e);
         }
     }
 }

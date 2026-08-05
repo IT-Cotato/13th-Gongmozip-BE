@@ -142,7 +142,8 @@ class LeaderElectionServiceTest {
         // then
         assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
         assertThat(List.of(a.getRole(), b.getRole())).contains(TeamRole.LEADER);
-        verify(chatService).postChatbotMessage(eq(team), anyString());
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
     }
 
     @DisplayName("후보가 1명뿐이면 투표 없이 바로 팀장으로 확정된다.")
@@ -167,7 +168,10 @@ class LeaderElectionServiceTest {
         // then
         assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
         assertThat(onlyCandidate.getRole()).isEqualTo(TeamRole.LEADER);
-        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
+        verify(chatService, never())
+                .postChatbotCardMessage(any(), eq(MessageType.LEADER_VOTE_CARD), anyString(), any());
     }
 
     @DisplayName("후보가 2명 이상이면 팀장 투표 카드가 발행되고 아직 팀장은 정해지지 않는다.")
@@ -318,7 +322,8 @@ class LeaderElectionServiceTest {
         // then
         assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
         assertThat(voter1.getRole()).isEqualTo(TeamRole.LEADER);
-        verify(chatService).postChatbotMessage(eq(team), anyString());
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
     }
 
     @DisplayName("전원이 투표했는데 동률이면 재투표 안내 카드가 발행되고 팀장은 정해지지 않는다.")
@@ -337,7 +342,7 @@ class LeaderElectionServiceTest {
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter1, voter2));
         given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
-        given(aiClient.recommendTiebreakLeader(any())).willReturn(10L);
+        given(aiClient.recommendTiebreakLeader(any(), any(), any())).willReturn(10L);
 
         LeaderVote existing = LeaderVote.builder()
                 .team(team)
@@ -368,6 +373,70 @@ class LeaderElectionServiceTest {
                         eq(team), eq(MessageType.LEADER_VOTE_CARD), anyString(), metadataCaptor.capture());
         assertThat(metadataCaptor.getValue()).contains("10").contains("20");
         assertThat(metadataCaptor.getValue()).contains("aiRecommendedTeamMemberId");
+    }
+
+    @DisplayName("재투표(2라운드)도 동률이면 더 재투표하지 않고 AI 추천 후보로 바로 확정된다.")
+    @Test
+    void 재투표도_동률이면_AI_추천으로_바로_확정된다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember voter1 = teamMemberOf(team, 10L, "김철수");
+        voter1.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember voter2 = teamMemberOf(team, 20L, "이해은");
+        voter2.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(voter2));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(voter1, voter2));
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);
+        given(aiClient.recommendTiebreakLeader(any(), any(), any())).willReturn(10L);
+        given(leaderVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(1L, 20L, 2))
+                .willReturn(false);
+
+        // 1라운드가 이미 동률로 끝난 상태 — 2라운드 eligible 후보도 그대로 10L/20L
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(voter1)
+                                .candidateTeamMember(voter1)
+                                .round(1)
+                                .build(),
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(voter2)
+                                .candidateTeamMember(voter2)
+                                .round(1)
+                                .build()));
+        // 2라운드 재투표도 다시 동률
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 2))
+                .willReturn(List.of(
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(voter1)
+                                .candidateTeamMember(voter1)
+                                .round(2)
+                                .build(),
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(voter2)
+                                .candidateTeamMember(voter2)
+                                .round(2)
+                                .build()));
+
+        // when
+        leaderElectionService.castVote(1L, 20L, 20L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
+        assertThat(voter1.getRole()).isEqualTo(TeamRole.LEADER);
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
+        verify(chatService, never())
+                .postChatbotCardMessage(any(), eq(MessageType.LEADER_VOTE_CARD), anyString(), anyString());
+        verify(chatbotOrchestrationService).advanceToContestSelecting(team);
     }
 
     @DisplayName("LEADER_SELECTING 상태가 아니면 AI 추천 수락에 실패한다.")
@@ -428,7 +497,8 @@ class LeaderElectionServiceTest {
         // then
         assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
         assertThat(recommended.getRole()).isEqualTo(TeamRole.LEADER);
-        verify(chatService).postChatbotMessage(eq(team), anyString());
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
         verify(chatbotOrchestrationService).advanceToContestSelecting(team);
     }
 
@@ -623,6 +693,108 @@ class LeaderElectionServiceTest {
         assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
         verify(chatService, never()).postChatbotMessage(any(), anyString());
         verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
+
+    @DisplayName("LEADER_SELECTING이 아니면 마감 처리를 하지 않는다.")
+    @Test
+    void LEADER_SELECTING이_아니면_마감_처리를_하지_않는다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        leaderElectionService.resolveDeadlineIfDue(1L);
+
+        // then
+        verify(teamMemberRepository, never()).findByTeamIdAndStatus(any(), any());
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
+
+    @DisplayName("마감 시점에 후보 등록(팀장 여부 투표)이 안 끝났으면, 응답 안 한 사람은 아니요로 간주하고 확정한다.")
+    @Test
+    void 마감_시점에_응답_안_한_사람은_아니요로_간주되어_확정된다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember onlyCandidate = teamMemberOf(team, 10L, "김철수");
+        onlyCandidate.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember neverResponded = teamMemberOf(team, 20L, "이해은");
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(onlyCandidate, neverResponded));
+
+        // when
+        leaderElectionService.resolveDeadlineIfDue(1L);
+
+        // then
+        assertThat(neverResponded.getLeaderCandidacy()).isEqualTo(LeaderCandidacyStatus.DOES_NOT_WANT);
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
+        assertThat(onlyCandidate.getRole()).isEqualTo(TeamRole.LEADER);
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("후보 등록은 끝났지만 아무도 투표하지 않은 채 마감되면 무작위로 임시 팀장을 지정한다.")
+    @Test
+    void 후보_등록은_끝났지만_투표가_없으면_무작위로_임시_팀장을_지정한다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember candidate1 = teamMemberOf(team, 10L, "김철수");
+        candidate1.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember candidate2 = teamMemberOf(team, 20L, "이해은");
+        candidate2.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(candidate1, candidate2));
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1)).willReturn(List.of());
+
+        // when
+        leaderElectionService.resolveDeadlineIfDue(1L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
+        assertThat(List.of(candidate1.getRole(), candidate2.getRole())).contains(TeamRole.LEADER);
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("후보 등록은 끝났고 마감 시점에 일부라도 투표가 있으면 있는 대로 개표한다.")
+    @Test
+    void 후보_등록은_끝났고_일부_투표가_있으면_있는_대로_개표한다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember candidate1 = teamMemberOf(team, 10L, "김철수");
+        candidate1.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember candidate2 = teamMemberOf(team, 20L, "이해은");
+        candidate2.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember candidate3 = teamMemberOf(team, 30L, "박준수");
+        candidate3.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(candidate1, candidate2, candidate3));
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(LeaderVote.builder()
+                        .team(team)
+                        .voterTeamMember(candidate1)
+                        .candidateTeamMember(candidate2)
+                        .round(1)
+                        .build()));
+
+        // when
+        leaderElectionService.resolveDeadlineIfDue(1L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
+        assertThat(candidate2.getRole()).isEqualTo(TeamRole.LEADER);
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
     }
 
     private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {
