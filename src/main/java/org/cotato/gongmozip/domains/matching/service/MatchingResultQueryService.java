@@ -38,14 +38,16 @@ public class MatchingResultQueryService {
         Optional<MatchingApplication> applicationResult =
                 matchingApplicationRepository.findResultApplication(memberId, today);
         if (applicationResult.isEmpty()) {
-            // 응답 마감은 다음 날 12시이므로 자정이 지나도 이전 날짜 PROPOSED 결과가 화면에서
-            // 사라지면 안 된다. 오늘 신청이 없을 때만 아직 열린 이전 결과를 fallback으로 찾는다.
-            // deadline 자체가 아니라 PROPOSED 상태를 기준으로 해 12시 작업 직전의 경쟁 구간도 덮는다.
-            applicationResult =
-                    matchingGroupMemberRepository
-                            .findOpenResultApplications(memberId, MatchingGroupStatus.PROPOSED, PageRequest.of(0, 1))
-                            .stream()
-                            .findFirst();
+            // 응답 마감은 다음 날 12시이므로 자정이 지나도 이전 날짜 결과가 화면에서 사라지면 안 된다.
+            // 오늘 신청이 없을 때만 응답 중이거나 이미 확정된 이전 결과를 fallback으로 찾는다.
+            // deadline 자체가 아니라 그룹 상태를 기준으로 해 12시 작업 직전의 경쟁 구간도 덮는다.
+            applicationResult = matchingGroupMemberRepository
+                    .findOpenResultApplications(
+                            memberId,
+                            List.of(MatchingGroupStatus.PROPOSED, MatchingGroupStatus.CONFIRMED),
+                            PageRequest.of(0, 1))
+                    .stream()
+                    .findFirst();
         }
         return applicationResult
                 .map(application -> toResult(memberId, application))

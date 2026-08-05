@@ -1,6 +1,7 @@
 package org.cotato.gongmozip.domains.matching.repository;
 
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.cotato.gongmozip.domains.matching.entity.MatchingApplication;
@@ -96,9 +97,11 @@ public interface MatchingGroupMemberRepository extends JpaRepository<MatchingGro
             LEFT JOIN FETCH application.matchingBatch
             JOIN groupMember.matchingGroup matchingGroup
             WHERE groupMember.member.memberId = :memberId
-              AND matchingGroup.status = :groupStatus
+              AND matchingGroup.status IN :groupStatuses
             ORDER BY application.applicationDate DESC, application.matchingApplicationId DESC
             """)
     List<MatchingApplication> findOpenResultApplications(
-            @Param("memberId") Long memberId, @Param("groupStatus") MatchingGroupStatus groupStatus, Pageable pageable);
+            @Param("memberId") Long memberId,
+            @Param("groupStatuses") Collection<MatchingGroupStatus> groupStatuses,
+            Pageable pageable);
 }
