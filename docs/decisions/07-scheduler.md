@@ -1,4 +1,4 @@
-# 07. 스케줄러 (중간점검 / 제출확인 / 인사 유도 타임아웃)
+# 07. 스케줄러 (중간점검 / 제출확인 / 인사 유도 타임아웃 / 팀장 선출 마감)
 
 ## 배경/목적
 
@@ -69,6 +69,12 @@
   `ChatbotOrchestrationService.recordGreetingAndAdvance`의 "전원 인사 완료 시 다음 단계로"
   로직을 `advanceToLeaderSelecting(team, activeMembers)`로 추출해, 정상 경로(전원 응답)와
   타임아웃 강제 경로(`forceAdvanceGreetingIfDue`) 둘 다 재사용한다.
+
+- **팀장 선출 마감 (2026-08-05)**: 팀장 여부 투표/팀장 투표 단계도 공모전 투표와 동일하게
+  마감 없이는 무한정 `LEADER_SELECTING`에 머무를 수 있는 문제가 있었다. `Team.leaderSelectionDeadlineAt`
+  (마이그레이션 V25)을 추가하고 공모전과 동일한 조회/처리 분리·5분 간격 cron 패턴을 그대로
+  적용했다. 상세 로직(하위 단계 판정, 마감 시 처리 방식)은 [02-leader-election.md](./02-leader-election.md)
+  참고.
 
 ## 미정 / 추후 확인 필요
 
