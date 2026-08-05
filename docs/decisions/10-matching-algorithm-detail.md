@@ -2,10 +2,10 @@
 
 ## 문서 목적과 상태
 
-이 문서는 매칭 신청부터 14시 배치 실행, 팀 구성, 결과 저장과 공개 후 본인 결과 조회까지의 정책과 구현을 한곳에서 설명한다.
+이 문서는 매칭 신청부터 14시 배치 실행, 팀 구성, 결과 저장·공개·응답과 실제 Team 확정까지의 정책과 구현을 한곳에서 설명한다.
 다른 설계 문서를 먼저 읽지 않아도 이해할 수 있도록 필요한 배경, 계산식, 실행 순서와 검증 방법을 모두 포함한다.
 
-> **기준일 (2026-08-03)**: 이 문서는 현재 PR의 구현을 설명하는 설계·검증 문서다.
+> **기준일 (2026-08-05)**: 이 문서는 현재 구현을 설명하는 설계·검증 문서다.
 > 각 `구현 코드` 링크는 현재 파일의 실제 라인을 가리킨다. 리팩터링으로 줄 번호가 달라지면 링크 옆의 클래스와 메서드 이름을 기준으로 찾는다.
 
 이번 범위에 포함되는 것은 다음과 같다.
@@ -17,11 +17,12 @@
 - Brute Force와 Multi-start Greedy 혼합 방식
 - 14시 배치, 결과 저장, 16시 공개 시각
 - 16시 이후 본인의 팀·팀원·궁합 점수 조회
+- 결과 수락·패스, 다음 날 12시 응답 마감과 패널티
+- 수락 인원에 따른 실제 Team 생성과 피해 사용자 자동 재배정
 - JDBC ShedLock과 배치 유니크 제약
 
-결과 수락·패스 이후 그룹 정리·재배정·실제 Team 생성과 앱 내 알림은 포함하지 않는다. 기존 철회 API는
-`PROPOSED` 신청도 패스할 수 있지만, 제안 그룹에서 해당 팀원을 제거하거나 나머지 팀원을 재배정하는
-후속 처리는 아직 없다. 이 흐름은 다음 PR에서 수락·패스 정책과 함께 완성한다.
+앱 내 알림과 알림 전달 인프라는 포함하지 않는다. 결과 조회·응답·그룹 정리·실제 Team 생성과
+자동 재배정까지는 알림 없이도 백엔드 상태 전이가 완결되도록 구현되어 있다.
 
 ## 문서 읽는 순서
 
@@ -56,9 +57,13 @@
 | 휴리스틱 탐색 | 여러 시작 순서로 Greedy를 실행하고 교환 개선 | [`MultiStartGreedyMatchingAlgorithm.match()`](../../src/main/java/org/cotato/gongmozip/domains/matching/algorithm/MultiStartGreedyMatchingAlgorithm.java#L42-L82) |
 | 결과 저장 | 팀·팀원 저장, 신청 상태 변경, 입력 전체 포함 검증 | [`MatchingResultPersistenceService.persistSuccess()`](../../src/main/java/org/cotato/gongmozip/domains/matching/service/MatchingResultPersistenceService.java#L46-L74) |
 | 결과 조회 API | 인증 회원의 오늘 결과 조회 요청을 읽기 서비스로 전달 | [`MatchingResultController.getTodayResult()`](../../src/main/java/org/cotato/gongmozip/domains/matching/controller/MatchingResultController.java#L40-L45) |
-| 결과 조회 정책 | 공개 시각과 신청 상태를 확인한 뒤 저장된 그룹·팀원·점수 반환 | [`MatchingResultQueryService.getTodayResult()`](../../src/main/java/org/cotato/gongmozip/domains/matching/service/MatchingResultQueryService.java#L35-L87) |
+| 결과 조회 정책 | 오늘 신청을 우선하고 열린·확정된 이전 결과를 fallback으로 조회 | [`MatchingResultQueryService.getTodayResult()`](../../src/main/java/org/cotato/gongmozip/domains/matching/service/MatchingResultQueryService.java#L35-L128) |
+| 결과 응답 | 공개된 제안 결과의 수락·패스와 그룹 상태 전이 | [`MatchingResponseService`](../../src/main/java/org/cotato/gongmozip/domains/matching/service/MatchingResponseService.java#L48-L151) |
+| Team 확정 | 유효 수락자 3명 또는 4명으로 실제 Team 생성 | [`MatchingGroupCompletionService.completeIfReady()`](../../src/main/java/org/cotato/gongmozip/domains/matching/service/MatchingGroupCompletionService.java#L31-L74) |
+| 응답 마감 | 마감된 미응답자를 처리하고 Team 확정 또는 재배정 | [`MatchingResponseDeadlineService.processGroup()`](../../src/main/java/org/cotato/gongmozip/domains/matching/service/MatchingResponseDeadlineService.java#L51-L116) |
 | DB 구조 | 배치·신청 연결·유니크 제약·ShedLock 테이블 | [`V21__implement_matching_batch.sql`](../../src/main/resources/db/migration/V21__implement_matching_batch.sql#L3-L91) |
 | 동적 풀·3인 팀 | 분위 범위와 그룹 모드, 3·4인 팀 제약 | [`V22__support_dynamic_matching_pools_and_three_person_teams.sql`](../../src/main/resources/db/migration/V22__support_dynamic_matching_pools_and_three_person_teams.sql#L1-L21) |
+| 응답·재배정 스키마 | 응답 마감·Team 연결·응답 출처·재배정 이력 | [`V23__implement_matching_responses_and_reassignment.sql`](../../src/main/resources/db/migration/V23__implement_matching_responses_and_reassignment.sql#L1-L93) |
 
 ## 1. 전체 처리 흐름
 
@@ -87,12 +92,18 @@
 Brute Force 시간 초과 시 전체 입력으로 Greedy fallback
   ↓
 3·4인 MatchingGroup, 원본 신청, 미배정 결과 저장
+  → 제안 그룹이 저장되면 패스는 공개 전후와 관계없이 가능
   ↓
 15:30 새 풀 시작 중단 기준(best effort)
   ↓
-16:00 결과 공개 가능
+16:00 결과 공개·수락 가능
   ↓
 GET /api/matching/results/me/today로 본인 결과 조회
+  ↓
+각 그룹원이 다음 날 12:00 전까지 수락 또는 패스
+  ├─ 유효 인원 3명 또는 4명이 모두 수락: 실제 Team 생성, 그룹 CONFIRMED
+  ├─ 패스로 유효 인원이 3명 미만: 그룹 CANCELED, 피해자 자동 재배정
+  └─ 12:00 미응답: 패널티 적용 후 Team 확정 또는 그룹 EXPIRED·피해자 재배정
 ```
 
 카테고리가 다른 신청자는 어떤 예외에서도 섞지 않는다.
@@ -704,6 +715,10 @@ MatchingBatch
 
 MatchingGroup
   1 ─── 0..1 MatchingReason
+  1 ─── 0..1 Team
+
+MatchingApplication
+  1 ─── 0..N MatchingApplication  // sourceApplication 기반 재배정 이력
 ```
 
 ### 11.2 MatchingBatch
@@ -724,7 +739,6 @@ MatchingBatch
   elapsedMillis
   startedAt
   completedAt
-  publishedAt
   retryCount
   failureMessage
 ```
@@ -760,6 +774,12 @@ MatchingGroup
   honestyHumilitySimilarityScore
   extroversionComplementScore
   status
+  responseDeadlineAt
+  confirmedAt
+  canceledAt
+  expiredAt
+  confirmedTeamSize
+  team
 ```
 
 `teamSize`와 실제 `MatchingGroupMember` 수가 일치해야 한다. 기존 category와 skillGroup 호환 필드는
@@ -767,6 +787,10 @@ MatchingGroup
 DB의 `chk_matching_groups_team_size`는 `teamSize`를 3 또는 4로 제한한다. 저장 전 `MatchedTeam`과
 `MatchingPlan`이 팀 크기·중복·배정자와 미배정자의 분리를 검증하고, 결과 조회 시에는 저장된
 `teamSize`와 실제 `MatchingGroupMember` 수가 같은지 다시 확인한다.
+
+새 그룹은 `PROPOSED`와 `responseDeadlineAt=applicationDate D+1 12:00`으로 시작한다. 응답 결과에 따라
+실제 Team이 만들어지면 `CONFIRMED`, 패스로 유효 인원이 3명 미만이면 `CANCELED`, 마감에도 Team을
+만들지 못하면 `EXPIRED`로 닫힌다. 확정·취소·만료 시각과 실제 확정 인원은 해당 스냅샷 필드에 남긴다.
 
 ### 11.4 MatchingGroupMember와 신청 상태
 
@@ -784,6 +808,26 @@ DB의 `chk_matching_groups_team_size`는 `teamSize`를 3 또는 4로 제한한�
 
 그룹원은 정확히 3명 또는 4명이고 모두 서로 다른 신청이어야 한다.
 `MatchingGroupMember.member`와 `matchingApplication.member`는 같아야 한다.
+
+배정 직후 `MatchingGroupMember.responseStatus`는 `PENDING`이다. 사용자가 응답하면 `ACCEPTED` 또는
+`PASSED`, 마감 작업이 미응답자를 처리하면 `EXPIRED`가 되며 `responseSource`에 `USER` 또는
+`DEADLINE_JOB`을 저장한다. 패스와 자동 만료는 계산된 `passPenalty`도 응답 스냅샷으로 남긴다.
+수동 패스와 자동 만료는 최근 7일의 기존 `PASSED` 횟수를 기준으로 `3, 5, 7, 9, 11` 순서의 같은
+감점 정책을 사용하고 11에서 상한을 둔다. 양수 감점값은 그룹원 응답에 저장하고 협업거리 원장에는
+음수 변화량으로 기록한다. 결과가 생성된 `PROPOSED` 신청은 기존 자정 철회 제한 대신 그룹의
+`responseDeadlineAt`까지 패스할 수 있다.
+
+신청 상태는 그룹 응답에 따라 다음처럼 이어진다.
+
+```text
+PROPOSED
+  ├─ 최종 Team 구성원으로 확정: MATCHED
+  ├─ 직접 패스 또는 자동 만료: PASSED
+  └─ 다른 구성원의 패스·미응답으로 재배정 대상이 됨: REASSIGN_PENDING
+```
+
+자동 재배정은 원본 신청의 배치·그룹 이력을 덮어쓰지 않고 `sourceApplication`, `reassignmentCount`,
+`reassignmentReason`을 가진 새 `WAITING` 신청을 생성한다.
 
 ### 11.5 트랜잭션
 
@@ -813,32 +857,45 @@ DB의 `chk_matching_groups_team_size`는 `teamSize`를 3 또는 4로 제한한�
 실패 저장은 별도 `REQUIRES_NEW` 트랜잭션으로 처리해 해당 풀 신청을 안전하게 복구한다. 한 풀 실패가
 다른 카테고리나 풀의 성공 결과를 롤백하지 않는다.
 
+수락·패스는 한 쓰기 트랜잭션에서 `MatchingGroup → MatchingGroupMember ID 오름차순 → Member` 순으로
+잠근다. 마지막 응답에서 Team 생성이 필요하면 `TeamService` 저장과 신청·그룹 상태 전이도 같은
+트랜잭션에 참여하므로 일부 상태만 커밋되지 않는다. 마감 작업은 그룹마다 `REQUIRES_NEW`로 분리하고,
+자동 재배정 신청 생성도 해당 그룹 응답 트랜잭션에 함께 참여한다.
+
 ### 11.6 오늘의 본인 결과 조회
 
-> **구현 코드:** 응답 계약은 [`MatchingResultResponse`](../../src/main/java/org/cotato/gongmozip/domains/matching/dto/response/MatchingResultResponse.java#L18-L53), 상태 판정은 [`MatchingResultQueryService`](../../src/main/java/org/cotato/gongmozip/domains/matching/service/MatchingResultQueryService.java#L35-L161), fetch join 조회는 [`MatchingApplicationRepository.findResultApplication()`](../../src/main/java/org/cotato/gongmozip/domains/matching/repository/MatchingApplicationRepository.java#L27-L41)과 [`MatchingGroupMemberRepository`](../../src/main/java/org/cotato/gongmozip/domains/matching/repository/MatchingGroupMemberRepository.java#L14-L38)에 있다.
+> **구현 코드:** 응답 계약은 [`MatchingResultResponse`](../../src/main/java/org/cotato/gongmozip/domains/matching/dto/response/MatchingResultResponse.java#L18-L53), 상태 판정은 [`MatchingResultQueryService`](../../src/main/java/org/cotato/gongmozip/domains/matching/service/MatchingResultQueryService.java#L35-L161), 당일 조회는 [`MatchingApplicationRepository.findResultApplication()`](../../src/main/java/org/cotato/gongmozip/domains/matching/repository/MatchingApplicationRepository.java#L27-L41), 이전 결과 fallback과 그룹 조회는 [`MatchingGroupMemberRepository`](../../src/main/java/org/cotato/gongmozip/domains/matching/repository/MatchingGroupMemberRepository.java#L55-L106)에 있다.
 
 ```http
 GET /api/matching/results/me/today
 ```
 
-URL로 다른 회원이나 그룹 ID를 받지 않고 인증 회원 ID와 한국 시간 기준 오늘 날짜로 신청을 찾는다.
-조회는 `readOnly` 트랜잭션이며 결과 상태를 바꾸지 않는다.
+URL로 다른 회원이나 그룹 ID를 받지 않는다. 먼저 인증 회원 ID와 한국 시간 기준 오늘 날짜로 신청을
+찾고, 오늘 신청이 없을 때만 그룹 상태가 `PROPOSED` 또는 `CONFIRMED`인 과거 결과 중 가장 최근
+신청 하나를 fallback으로 찾는다. fallback에는 전날로 한정하는 날짜 조건이 없으며 신청일과 신청 ID
+내림차순으로 한 건만 선택한다. 조회는 `readOnly` 트랜잭션이며 결과 상태를 바꾸지 않는다.
 
 | `resultStatus` | 의미 | 팀·점수 공개 |
 |---|---|---|
-| `NOT_APPLIED` | 오늘 신청 이력이 없음 | 공개하지 않음 |
-| `WITHDRAWN` | 신청을 취소했거나 패스함 | 공개하지 않음 |
-| `NOT_PUBLISHED` | 결과가 저장됐더라도 `publishedAt` 전 | 공개하지 않음 |
+| `NOT_APPLIED` | 오늘 신청도 없고 fallback 가능한 이전 결과도 없음 | 공개하지 않음 |
+| `WITHDRAWN` | 신청을 취소했거나 패스함 | 결과 생성 전 취소·패스는 비공개, 결과 생성 후 패스는 공개 시각 이후 기존 그룹·점수 공개 |
+| `NOT_PUBLISHED` | 결과가 저장됐더라도 정책으로 계산한 `publishedAt` 전 | 공개하지 않음 |
 | `PROCESSING` | 공개 시각이 지났지만 배치가 아직 처리 중 | 공개하지 않음 |
 | `UNMATCHED` | 팀 크기 계획에서 미배정되어 신청이 `FAILED` | 공개하지 않음 |
-| `MATCHED` | 공개된 `PROPOSED` 또는 확정된 `MATCHED` 신청 | 3명 또는 4명의 팀과 저장 점수 공개 |
+| `MATCHED` | 공개된 `PROPOSED`, `MATCHED` 또는 피해자의 `REASSIGN_PENDING` 신청 | 3명 또는 4명의 제안 그룹과 저장 점수 공개 |
 
-공개 시각 판정은 `now >= publishedAt`이다. 공개 전에는 `MatchingGroupMember` 조회 자체를 실행하지
-않아 팀원 ID나 점수가 직렬화 단계 이전부터 노출되지 않게 한다. 배정 결과는 다음 순서로 읽는다.
+공개 시각은 `MatchingTimePolicy`가 신청일과 YML의 `result-publish-time`으로 계산하며, 판정은
+`now >= publishedAt`이다. 일반 신청은 공개 전에 `MatchingGroupMember`를 조회하지 않는다. 다만
+`PASSED` 신청은 결과 생성 전 패스인지 결과 생성 후 패스인지 구분하기 위해 본인 membership 존재 여부를
+먼저 확인한다. 어떤 경우에도 공개 전에는 그룹원 목록과 점수를 반환하지 않는다.
+
+배정 결과는 다음 순서로 읽는다.
 
 ```text
 인증 회원 + 오늘 날짜로 MatchingApplication 조회
-  → MatchingBatch.publishedAt 검증
+  ├─ 존재: 오늘 신청 사용
+  └─ 없음: 과거 PROPOSED·CONFIRMED 그룹의 최신 신청 한 건 fallback
+  → MatchingTimePolicy로 신청일의 공개 시각 계산·검증
   → 본인 MatchingGroupMember로 MatchingGroup 확인
   → 같은 그룹의 3명 또는 4명 신청·회원·선택 프로필 fetch join
   → 저장된 matchingScore와 항목별 점수 반환
@@ -848,8 +905,32 @@ URL로 다른 회원이나 그룹 ID를 받지 않고 인증 회원 ID와 한국
 `leaderPreference`, 현재 `responseStatus`, 본인 여부를 포함한다. 궁합 점수는 현재 프로필이나 설문으로
 재계산하지 않고 `MatchingGroup`에 저장된 총점과 8개 세부 점수를 그대로 사용한다.
 
-결과 조회는 수락·패스·재배정·실제 `Team` 생성을 수행하지 않는다. 이 상태 전이들은 후속 PR의
-쓰기 기능으로 분리한다.
+최상위 응답에는 `responseDeadlineAt`, `groupStatus`, 본인의 `myResponseStatus`,
+`confirmedTeamSize`, 실제 Team이 생성된 경우 `teamId`도 포함한다.
+
+결과 조회 자체는 수락·패스·재배정·실제 `Team` 생성을 수행하지 않는다. 이 상태 전이는
+`MatchingResponseService`, `MatchingResponseDeadlineService`, `MatchingGroupCompletionService`,
+`MatchingReassignmentService`의 쓰기 트랜잭션으로 분리되어 있다.
+
+### 11.7 결과 응답과 Team 확정
+
+```http
+GET  /api/matching/groups/{matchingGroupId}/responses
+POST /api/matching/groups/{matchingGroupId}/accept
+POST /api/matching/applications/{applicationId}/withdraw
+```
+
+응답 현황은 해당 그룹원만 공개 이후 조회할 수 있다. 수락은 공개 이후이면서 마감 전인 `PENDING`
+응답만 허용하고, 같은 수락 요청의 재시도에는 기존 상태와 `teamId`를 멱등하게 반환한다. 수락은 패스로
+번복할 수 없다.
+
+통합 철회 API는 결과 그룹원이 없는 신청에는 기존 무료 취소·패널티 패스 정책을 적용하고, 결과 그룹원이
+있으면 공개 전후와 관계없이 마감 전 `PASSED` 응답으로 처리한다. 같은 패스 요청의 재시도에는 저장된
+`passPenalty`를 반환해 협업거리를 다시 차감하지 않는다.
+
+3인 제안에서 한 명이 패스하거나 4인 제안에서 두 명이 패스하면 유효 인원이 3명 미만이므로 그룹을
+`CANCELED`로 닫고 피해자만 자동 재배정한다. 4인 제안에서 한 명이 패스한 경우에는 남은 3명의 응답을
+계속 기다리며, 세 명이 모두 수락하면 3인 Team으로 확정한다.
 
 ## 12. 스케줄러와 중복 실행 방지
 
@@ -861,6 +942,7 @@ URL로 다른 회원이나 그룹 ID를 받지 않고 인증 회원 ID와 한국
 - zone: `Asia/Seoul`
 - 새 풀 시작 중단 기준: 15:30(best effort)
 - 공개 시각: 16:00
+- 응답 마감: 신청일 다음 날 12:00, 마감 대상 재조회 주기 5분
 
 ### 12.2 JDBC ShedLock
 
@@ -875,7 +957,21 @@ ShedLock은 여러 인스턴스의 동시 진입을 막고, 배치 유니크 제
 Redis 분산 락을 사용하지 않는 이유는 하루 한 번의 저경합 배치, MySQL 결과 저장 의존성, 장기 TTL
 연장과 소유권 관리 복잡성, DB 유니크 제약이 어차피 필요하다는 점 때문이다.
 
-### 12.3 현재 장애 복구 제한
+### 12.3 응답 마감 작업
+
+> **구현 코드:** [`MatchingResponseDeadlineJobs`](../../src/main/java/org/cotato/gongmozip/domains/scheduler/MatchingResponseDeadlineJobs.java#L17-L42)와 [`MatchingResponseDeadlineService`](../../src/main/java/org/cotato/gongmozip/domains/matching/service/MatchingResponseDeadlineService.java#L43-L116).
+
+- cron: `0 */5 * * * *`
+- zone: `Asia/Seoul`
+- 락 이름: `matching-response-deadline`
+- `lockAtMostFor`: `PT10M`
+- 조회 조건: `PROPOSED`이면서 `responseDeadlineAt <= now`
+
+대상 ID는 읽기 트랜잭션으로 먼저 조회하고, 그룹마다 독립된 `REQUIRES_NEW` 트랜잭션에서 그룹·그룹원·
+회원 순으로 잠가 처리한다. 한 그룹이 실패해도 다음 그룹 처리는 계속하며, 실패한 `PROPOSED` 그룹은
+다음 5분 주기에 다시 조회한다.
+
+### 12.4 현재 장애 복구 제한
 
 배치를 `RUNNING`으로 커밋한 뒤 알고리즘 계산과 결과 저장은 트랜잭션 밖에서 이어진다. 이 구간에서
 프로세스가 강제 종료되면 배치가 `RUNNING`으로 남을 수 있다. 현재 처리 대상 조회는 `PENDING`과
@@ -902,9 +998,12 @@ Redis 분산 락을 사용하지 않는 이유는 하루 한 번의 저경합 �
 | Brute Force·Greedy·결정성 | [`MatchingAlgorithmsTest`](../../src/test/java/org/cotato/gongmozip/domains/matching/algorithm/MatchingAlgorithmsTest.java#L43-L107) |
 | 알고리즘 선택·fallback | [`MatchingAlgorithmSelectorTest`](../../src/test/java/org/cotato/gongmozip/domains/matching/algorithm/MatchingAlgorithmSelectorTest.java#L40-L62) |
 | 준비·선점·성공·실패 저장 | [`MatchingBatchIntegrationTest`](../../src/test/java/org/cotato/gongmozip/domains/matching/service/MatchingBatchIntegrationTest.java#L82-L230) |
-| 결과 공개 시각·상태·응답 매핑 | [`MatchingResultQueryServiceTest`](../../src/test/java/org/cotato/gongmozip/domains/matching/service/MatchingResultQueryServiceTest.java#L56-L167) |
+| 결과 공개 시각·당일/이전 결과 fallback·응답 매핑 | [`MatchingResultQueryServiceTest`](../../src/test/java/org/cotato/gongmozip/domains/matching/service/MatchingResultQueryServiceTest.java#L61-L276) |
 | 결과 조회 컨트롤러 응답 | [`MatchingResultControllerTest`](../../src/test/java/org/cotato/gongmozip/domains/matching/controller/MatchingResultControllerTest.java#L42-L84) |
 | 저장 결과의 실제 조회 쿼리 | [`MatchingBatchIntegrationTest`](../../src/test/java/org/cotato/gongmozip/domains/matching/service/MatchingBatchIntegrationTest.java#L86-L154) |
+| 수락·패스·3/4인 Team 확정 | [`MatchingResponseServiceTest`](../../src/test/java/org/cotato/gongmozip/domains/matching/service/MatchingResponseServiceTest.java), [`MatchingResponseIntegrationTest`](../../src/test/java/org/cotato/gongmozip/domains/matching/service/MatchingResponseIntegrationTest.java) |
+| 응답 마감·패널티·재배정 | [`MatchingResponseDeadlineServiceTest`](../../src/test/java/org/cotato/gongmozip/domains/matching/service/MatchingResponseDeadlineServiceTest.java), [`MatchingReassignmentServiceTest`](../../src/test/java/org/cotato/gongmozip/domains/matching/service/MatchingReassignmentServiceTest.java) |
+| 마감 스케줄러의 그룹별 실패 격리 | [`MatchingResponseDeadlineJobsTest`](../../src/test/java/org/cotato/gongmozip/domains/scheduler/MatchingResponseDeadlineJobsTest.java) |
 | 품질 손실률·성능 | [`MatchingAlgorithmBenchmarkTest`](../../src/test/java/org/cotato/gongmozip/domains/matching/benchmark/MatchingAlgorithmBenchmarkTest.java#L31-L140) |
 
 ### 13.1 분류
@@ -953,7 +1052,10 @@ Redis 분산 락을 사용하지 않는 이유는 하루 한 번의 저경합 �
 - 3인 팀과 세 명의 원본 신청 연결 저장
 - 실패 후 같은 배치·시드·변경 없는 입력 재선점
 - 16시 전 팀원·점수 비공개와 공개 이후 3명·4명 결과 조회
-- 신청 없음·처리 중·미배정·철회 상태 응답과 컨트롤러 매핑
+- 오늘 신청 없음·확정된 이전 결과 fallback·처리 중·미배정·철회 상태 응답과 컨트롤러 매핑
+- 결과 생성 후 패스의 공개 전 차단과 공개 후 기존 그룹 정보 반환
+- 수락·패스 멱등성, 4인 제안에서 3인 확정, 3명 미만 그룹 취소와 피해자 재배정
+- 12시 미응답 패널티, Team 확정 또는 그룹 만료, 실패 그룹의 다음 주기 재시도
 
 DB 유니크 충돌, 병합 풀 메타데이터 저장, 계산 중 패스, 15시 30분 hard deadline, stale `RUNNING`,
 ShedLock 다중 인스턴스 동작은 현재 통합 테스트 범위에 포함되지 않는다.
@@ -1015,10 +1117,12 @@ ShedLock 다중 인스턴스 동작은 현재 통합 테스트 범위에 포함�
 - Greedy 앵커는 재배정 > WANTS > 그 외
 - 전체 plan은 배정 수 > 재배정 수 > 평균 > WANTS 수 > 최저점 > 분산 > ID 순으로 비교
 - 14시 실행, 15시 30분 새 작업 시작 중단 기준(best effort), 16시 공개
-- 공개 전 결과 차단, 공개 후 본인 결과만 조회
+- 공개 전 결과 차단, 오늘 신청 우선 후 열린·확정된 이전 본인 결과 fallback
 - JDBC ShedLock과 DB 유니크 제약 사용, Redis 분산 락 미사용
 - stale `RUNNING`과 이전 신청일 미처리 배치의 자동 복구는 후속 운영 범위
-- `PROPOSED` 패스 뒤 그룹 정리·재배정·실제 Team 생성은 후속 결과 응답 범위
+- 신청일 다음 날 12시까지 수락·패스, 이후 미응답 자동 만료와 패널티
+- 유효 수락자 3명 또는 4명이 모두 응답하면 실제 Team 생성과 그룹 `CONFIRMED`
+- 패스·미응답으로 Team을 만들 수 없으면 피해자를 새 신청으로 자동 재배정
 - 알림은 별도 담당 범위
 
 ## 16. 벤치마크 기록
@@ -1032,19 +1136,19 @@ Brute Force 약 493ms, 16명 Greedy 약 313ms, 20명 Greedy 약 465ms였고 비�
 
 ### 16.1 현재 정책 구현 후 재측정
 
-2026-08-03 현재 정책의 합성 fixture와 개발 장비에서 측정한 결과는 다음과 같다.
+2026-08-05 현재 정책의 합성 fixture와 개발 장비에서 다시 측정한 결과는 다음과 같다.
 
 | 입력 | 결과 |
 |---|---|
 | 3~10명 | Greedy 평균 궁합 손실률 0% |
 | 11명 | Greedy 평균 궁합 손실률 0.38% |
 | 12명 | Greedy 평균 궁합 손실률 0% |
-| 13·14·15·16·20명 Greedy | 약 108~353ms |
-| 50명 Greedy | 약 18,317ms |
-| 12명 유효 풀 24개 순차 Brute Force | 약 2,557ms |
+| 13·14·15·16·20명 Greedy | 약 192~653ms |
+| 12명 유효 풀 24개 순차 Brute Force | 약 4,249ms |
 
 모든 비교 입력에서 배정 인원수와 재배정 대상자 배정 수가 Brute Force와 같았고, 10개 fixture에서
-p95 1%·최대 3% 품질 기준을 만족했다. 벤치마크 테스트 2개는 총 약 22.6초에 완료됐다. 따라서
+p95 1%·최대 3% 품질 기준을 만족했다. 벤치마크 테스트 2개의 순수 테스트 실행시간은 약 7.4초였다.
+따라서
 `MATCHING_BRUTEFORCE_MAX_POOL_SIZE=12`,
 `MATCHING_GREEDY_RESTART_COUNT=50`, `MATCHING_FALLBACK_RESERVE=PT10M` 기본값을 유지한다.
 
