@@ -67,4 +67,37 @@ public class MemberController {
         memberService.registerRequiredInfo(request, userDetails.getMemberId());
         return BaseResponseFormatter.success(MemberSuccessCode.REQUIRED_INFO_REGISTERED);
     }
+
+    @Operation(summary = "내 기본 정보 조회")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = MemberErrorCode.class)
+    @org.springframework.web.bind.annotation.GetMapping("/me")
+    public ResponseEntity<
+                    BaseResponse<org.cotato.gongmozip.domains.member.dto.response.MemberResponse.MemberMeResponse>>
+            getMyInfo(@AuthenticationPrincipal CustomUserDetails userDetails) {
+        org.cotato.gongmozip.domains.member.dto.response.MemberResponse.MemberMeResponse response =
+                memberService.getMemberMe(userDetails.getMemberId());
+        return BaseResponseFormatter.success(MemberSuccessCode.MEMBER_DETAIL_RETRIEVED, response);
+    }
+
+    @Operation(summary = "내 기본 정보 수정")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = MemberErrorCode.class)
+    @org.springframework.web.bind.annotation.PatchMapping("/me")
+    public ResponseEntity<BaseResponse<Void>> updateMyInfo(
+            @RequestBody @Valid
+                    org.cotato.gongmozip.domains.member.dto.request.MemberRequest.UpdateMemberMeRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        memberService.updateMemberMe(userDetails.getMemberId(), request);
+        return BaseResponseFormatter.success(MemberSuccessCode.MEMBER_DETAIL_UPDATED);
+    }
+
+    @Operation(summary = "마케팅 수신동의 여부 수정")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = MemberErrorCode.class)
+    @org.springframework.web.bind.annotation.PatchMapping("/me/marketing-consents")
+    public ResponseEntity<BaseResponse<Void>> updateMarketingConsent(
+            @RequestBody @Valid
+                    org.cotato.gongmozip.domains.member.dto.request.MemberRequest.UpdateMarketingConsentRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        memberService.updateMarketingConsent(userDetails.getMemberId(), request);
+        return BaseResponseFormatter.success(MemberSuccessCode.MARKETING_CONSENT_UPDATED);
+    }
 }
