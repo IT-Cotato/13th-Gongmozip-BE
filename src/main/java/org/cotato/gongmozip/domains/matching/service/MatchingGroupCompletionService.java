@@ -97,6 +97,11 @@ public class MatchingGroupCompletionService {
                 || !memberId.equals(application.getProfile().getMember().getMemberId())) {
             throw new IllegalStateException("매칭 신청의 회원과 선택 프로필 소유자가 일치하지 않습니다.");
         }
-        return new TeamMemberInput(memberId, application.getProfile().getProfileId());
+        return new TeamMemberInput(
+                memberId,
+                application.getProfile().getProfileId(),
+                application.getLeaderPreference(),
+                application.getExtroversionType(),
+                application.getExtroversionScore());
     }
 }

@@ -36,6 +36,7 @@ import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.TeamMembersRe
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
 import org.cotato.gongmozip.domains.team.enums.ChatRoomSortType;
+import org.cotato.gongmozip.domains.team.enums.LeaderSelectionMode;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
 import org.cotato.gongmozip.domains.team.exception.TeamException;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
@@ -79,9 +80,11 @@ public class TeamService {
             throw new TeamException(TeamErrorCode.DUPLICATE_TEAM_MEMBER_INPUT);
         }
 
-        Team team = teamRepository.save(TeamConverter.toTeam(request.preferredCategory()));
+        LeaderSelectionMode leaderSelectionMode = TeamConverter.determineLeaderSelectionMode(members);
+        Team team = teamRepository.save(TeamConverter.toTeam(request.preferredCategory(), leaderSelectionMode));
 
         LocalDateTime joinedAt = LocalDateTime.now();
+        TeamMember autoAssignedLeader = null;
         for (TeamMemberInput input : members) {
             Member member = memberRepository
                     .findById(input.memberId())
@@ -89,7 +92,23 @@ public class TeamService {
             Profile profile = profileRepository
                     .findById(input.profileId())
                     .orElseThrow(() -> new ProfileException(ProfileErrorCode.PROFILE_NOT_FOUND));
-            teamMemberRepository.save(TeamConverter.toTeamMember(team, member, profile, joinedAt));
+            TeamMember teamMember = teamMemberRepository.save(TeamConverter.toTeamMember(
+                    team,
+                    member,
+                    profile,
+                    input.leaderPreference(),
+                    input.extroversionType(),
+                    input.extroversionScore(),
+                    joinedAt));
+            if (leaderSelectionMode == LeaderSelectionMode.AUTO_ASSIGNED && teamMember.isPreLeaderCandidate()) {
+                autoAssignedLeader = teamMember;
+            }
+        }
+
+        // AUTO_ASSIGNED(팀장 희망 "네" 1명)는 투표 없이 팀 생성 시점에 바로 팀장을 확정한다.
+        // LEADER_SELECTING 단계 자체를 건너뛰는 처리는 ChatbotOrchestrationService가 담당한다.
+        if (autoAssignedLeader != null) {
+            autoAssignedLeader.assignAsLeader();
         }
 
         chatbotOrchestrationService.startGreeting(team);
@@ -242,6 +261,7 @@ public class TeamService {
                         avatarsByMemberId.get(teamMember.getMember().getMemberId())))
                 .toList();
 
-        return TeamConverter.toTeamMembersResponse(memberResponses, team.isChatbotEnabled(), team.getStatus());
+        return TeamConverter.toTeamMembersResponse(
+                memberResponses, team.isChatbotEnabled(), team.getStatus(), team.getLeaderSelectionDeadlineAt());
     }
 }

@@ -6,13 +6,16 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
+import java.math.BigDecimal;
 import java.util.List;
 import org.cotato.gongmozip.domains.matching.entity.MatchingGroup;
 import org.cotato.gongmozip.domains.matching.entity.MatchingGroupMember;
+import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.matching.enums.MatchingApplicationStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingGroupMemberStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingGroupStatus;
 import org.cotato.gongmozip.domains.matching.support.MatchingResponseFixture;
+import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamCreationRequest;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.service.TeamService;
@@ -52,6 +55,11 @@ class MatchingGroupCompletionServiceTest {
         ArgumentCaptor<TeamCreationRequest> requestCaptor = ArgumentCaptor.forClass(TeamCreationRequest.class);
         verify(teamService).createTeam(requestCaptor.capture());
         assertThat(requestCaptor.getValue().members()).hasSize(3);
+        assertThat(requestCaptor.getValue().members()).allSatisfy(input -> {
+            assertThat(input.leaderPreference()).isEqualTo(LeaderPreference.NEUTRAL);
+            assertThat(input.extroversionType()).isEqualTo(ExtroversionType.A);
+            assertThat(input.extroversionScore()).isEqualByComparingTo(new BigDecimal("50.00"));
+        });
     }
 
     @Test
