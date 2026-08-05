@@ -69,6 +69,13 @@ public class Team extends BaseEntity {
     @Column(name = "contest_candidate_deadline_at")
     private LocalDateTime contestCandidateDeadlineAt;
 
+    // 팀장 여부 투표/팀장 투표 마감 시각. LEADER_SELECTING 진입 시(팀장 여부 투표 카드 또는
+    // 후보 투표 카드 발행 시점) 세팅되며, 스케줄러가 이 시각이 지났는데도 팀이 LEADER_SELECTING
+    // 이면 강제로 결과를 확정한다 (docs/decisions/02-leader-election.md 참고). AUTO_ASSIGNED는
+    // 대기 없이 즉시 확정되므로 세팅되지 않는다.
+    @Column(name = "leader_selection_deadline_at")
+    private LocalDateTime leaderSelectionDeadlineAt;
+
     // 중간점검/제출확인 카드가 이미 발행되었는지 추적하는 멱등성 플래그(스케줄러 중복 발행 방지).
     @Column(name = "progress_check_notified_at")
     private LocalDateTime progressCheckNotifiedAt;
@@ -101,6 +108,10 @@ public class Team extends BaseEntity {
 
     public void scheduleContestCandidateDeadline(LocalDateTime contestCandidateDeadlineAt) {
         this.contestCandidateDeadlineAt = contestCandidateDeadlineAt;
+    }
+
+    public void scheduleLeaderSelectionDeadline(LocalDateTime leaderSelectionDeadlineAt) {
+        this.leaderSelectionDeadlineAt = leaderSelectionDeadlineAt;
     }
 
     public void markProgressCheckNotified(LocalDateTime notifiedAt) {

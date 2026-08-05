@@ -82,4 +82,19 @@ class TeamSchedulerJobsTest {
         verify(teamScheduleService).forceAdvanceGreetingForTeam(1L);
         verify(teamScheduleService).forceAdvanceGreetingForTeam(2L);
     }
+
+    @DisplayName("한 팀의 팀장 선출 마감 처리가 실패해도 나머지 팀은 계속 처리된다.")
+    @Test
+    void 한_팀의_팀장_선출_마감_처리가_실패해도_나머지_팀은_계속_처리된다() {
+        // given
+        given(teamScheduleService.findDueLeaderSelectionDeadlineTeamIds()).willReturn(List.of(1L, 2L));
+        willThrow(new RuntimeException("boom")).given(teamScheduleService).resolveLeaderSelectionDeadlineForTeam(1L);
+
+        // when
+        teamSchedulerJobs.resolveLeaderSelectionDeadlines();
+
+        // then
+        verify(teamScheduleService).resolveLeaderSelectionDeadlineForTeam(1L);
+        verify(teamScheduleService).resolveLeaderSelectionDeadlineForTeam(2L);
+    }
 }

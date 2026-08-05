@@ -17,4 +17,6 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
             TeamStatus status, LocalDateTime now);
 
     List<Team> findByStatusAndCreatedAtLessThanEqual(TeamStatus status, LocalDateTime cutoff);
+
+    List<Team> findByStatusAndLeaderSelectionDeadlineAtLessThanEqual(TeamStatus status, LocalDateTime now);
 }
