@@ -11,6 +11,7 @@ import org.cotato.gongmozip.domains.matching.dto.request.MatchingApplicationRequ
 import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
 import org.cotato.gongmozip.domains.matching.exception.codes.MatchingSuccessCode;
 import org.cotato.gongmozip.domains.matching.service.MatchingApplicationService;
+import org.cotato.gongmozip.domains.matching.service.MatchingWithdrawalService;
 import org.cotato.gongmozip.global.exception.GlobalErrorCode;
 import org.cotato.gongmozip.global.response.BaseResponse;
 import org.cotato.gongmozip.global.response.BaseResponseFormatter;
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MatchingApplicationController {
 
     private final MatchingApplicationService matchingApplicationService;
+    private final MatchingWithdrawalService matchingWithdrawalService;
 
     @Operation(
             summary = "매칭 신청 자격 및 오늘 참여 현황 조회",
@@ -113,8 +115,8 @@ public class MatchingApplicationController {
                     서버가 신청일과 한국 시간 기준 현재 시각을 비교해 처리 방식을 결정
 
                     - 신청일 14시 전: `FREE_CANCEL`로 처리하며 협업거리 감점 X
-                    - 신청일 14시 이상 자정 전: `PENALIZED_PASS`로 처리하며 협업거리를 차감
-                    - 신청일 다음 날 00시부터: 철회할 수 없습니다.
+                    - 결과 생성 전 신청일 14시 이상 자정 전: `PENALIZED_PASS`로 처리하며 협업거리를 차감
+                    - `PROPOSED` 결과: 공개 전후와 관계없이 다음 날 12시 전까지 `PENALIZED_PASS`로 처리합니다.
 
                     패스 감점은 최근 7일 패스 횟수에 따라 3m → 5m → 7m → 9m → 11m로 증가하며 최대 11m입니다.
                     취소 또는 패스가 완료되어도 해당 날짜의 신청 이력은 유지되므로 같은 날 재신청할 수 없습니다.
@@ -125,7 +127,7 @@ public class MatchingApplicationController {
             @Parameter(description = "철회할 본인 매칭 신청 ID", example = "100", required = true) @PathVariable("applicationId")
                     Long applicationId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
-        WithdrawalResponse response = matchingApplicationService.withdraw(userDetails.getMemberId(), applicationId);
+        WithdrawalResponse response = matchingWithdrawalService.withdraw(userDetails.getMemberId(), applicationId);
         return BaseResponseFormatter.success(MatchingSuccessCode.APPLICATION_WITHDRAWN, response);
     }
 }

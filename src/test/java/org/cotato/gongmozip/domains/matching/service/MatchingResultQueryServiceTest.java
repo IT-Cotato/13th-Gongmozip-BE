@@ -10,7 +10,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import org.cotato.gongmozip.domains.matching.config.MatchingAlgorithmProperties;
 import org.cotato.gongmozip.domains.matching.entity.MatchingApplication;
 import org.cotato.gongmozip.domains.matching.entity.MatchingBatch;
 import org.cotato.gongmozip.domains.matching.entity.MatchingGroup;
@@ -18,6 +17,7 @@ import org.cotato.gongmozip.domains.matching.entity.MatchingGroupMember;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.matching.enums.MatchingApplicationStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingGroupMemberStatus;
+import org.cotato.gongmozip.domains.matching.enums.MatchingGroupStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingResultStatus;
 import org.cotato.gongmozip.domains.matching.repository.MatchingApplicationRepository;
 import org.cotato.gongmozip.domains.matching.repository.MatchingGroupMemberRepository;
@@ -25,12 +25,14 @@ import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.survey.enums.CharacterType;
+import org.cotato.gongmozip.domains.team.entity.Team;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
 
 @ExtendWith(MockitoExtension.class)
 class MatchingResultQueryServiceTest {
@@ -51,9 +53,8 @@ class MatchingResultQueryServiceTest {
 
     @BeforeEach
     void setUp() {
-        MatchingAlgorithmProperties properties = new MatchingAlgorithmProperties();
         matchingResultQueryService = new MatchingResultQueryService(
-                matchingApplicationRepository, matchingGroupMemberRepository, matchingTimePolicy, properties);
+                matchingApplicationRepository, matchingGroupMemberRepository, matchingTimePolicy);
         given(matchingTimePolicy.today()).willReturn(TODAY);
     }
 
@@ -76,6 +77,9 @@ class MatchingResultQueryServiceTest {
         MatchingApplication application = application(1L, MatchingApplicationStatus.PROPOSED, batch());
         given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(application));
         given(matchingTimePolicy.now()).willReturn(PUBLISHED_AT.minusSeconds(1));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingTimePolicy.isResultPublished(TODAY, PUBLISHED_AT.minusSeconds(1)))
+                .willReturn(false);
 
         var response = matchingResultQueryService.getTodayResult(1L);
 
@@ -100,6 +104,8 @@ class MatchingResultQueryServiceTest {
 
         given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(mine));
         given(matchingTimePolicy.now()).willReturn(PUBLISHED_AT);
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingTimePolicy.isResultPublished(TODAY, PUBLISHED_AT)).willReturn(true);
         given(matchingGroupMemberRepository.findResultMembership(mine)).willReturn(Optional.of(myMembership));
         given(matchingGroupMemberRepository.findResultMembers(group)).willReturn(members);
 
@@ -123,12 +129,49 @@ class MatchingResultQueryServiceTest {
                 });
     }
 
+    @DisplayName("오늘 신청이 없으면 확정된 전날 결과와 팀 ID를 반환한다")
+    @Test
+    void returnsConfirmedPreviousDayResultWhenTodayApplicationDoesNotExist() {
+        LocalDate previousDay = TODAY.minusDays(1);
+        LocalDateTime previousPublishedAt = previousDay.atTime(16, 0);
+        MatchingBatch batch = batch(previousDay);
+        MatchingApplication mine = application(1L, MatchingApplicationStatus.MATCHED, batch, previousDay);
+        MatchingApplication teammateTwo = application(2L, MatchingApplicationStatus.MATCHED, batch, previousDay);
+        MatchingApplication teammateThree = application(3L, MatchingApplicationStatus.MATCHED, batch, previousDay);
+        MatchingGroup group = group(batch);
+        group.confirm(
+                Team.builder().teamId(99L).build(), 3, previousDay.plusDays(1).atTime(12, 0));
+        MatchingGroupMember myMembership = groupMember(11L, group, mine);
+        List<MatchingGroupMember> members =
+                List.of(myMembership, groupMember(12L, group, teammateTwo), groupMember(13L, group, teammateThree));
+
+        given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.empty());
+        given(matchingGroupMemberRepository.findOpenResultApplications(
+                        1L, List.of(MatchingGroupStatus.PROPOSED, MatchingGroupStatus.CONFIRMED), PageRequest.of(0, 1)))
+                .willReturn(List.of(mine));
+        given(matchingTimePolicy.now()).willReturn(PUBLISHED_AT);
+        given(matchingTimePolicy.resultPublishAt(previousDay)).willReturn(previousPublishedAt);
+        given(matchingTimePolicy.isResultPublished(previousDay, PUBLISHED_AT)).willReturn(true);
+        given(matchingGroupMemberRepository.findResultMembership(mine)).willReturn(Optional.of(myMembership));
+        given(matchingGroupMemberRepository.findResultMembers(group)).willReturn(members);
+
+        var response = matchingResultQueryService.getTodayResult(1L);
+
+        assertThat(response.resultStatus()).isEqualTo(MatchingResultStatus.MATCHED);
+        assertThat(response.applicationDate()).isEqualTo(previousDay);
+        assertThat(response.groupStatus()).isEqualTo(MatchingGroupStatus.CONFIRMED);
+        assertThat(response.teamId()).isEqualTo(99L);
+    }
+
     @DisplayName("공개 시각 이후 미배정 신청은 팀원 정보 없이 UNMATCHED를 반환한다")
     @Test
     void returnsUnmatchedWithoutGroupLookup() {
         MatchingApplication application = application(1L, MatchingApplicationStatus.FAILED, batch());
         given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(application));
         given(matchingTimePolicy.now()).willReturn(PUBLISHED_AT.plusMinutes(1));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingTimePolicy.isResultPublished(TODAY, PUBLISHED_AT.plusMinutes(1)))
+                .willReturn(true);
 
         var response = matchingResultQueryService.getTodayResult(1L);
 
@@ -144,6 +187,9 @@ class MatchingResultQueryServiceTest {
         MatchingApplication application = application(1L, MatchingApplicationStatus.MATCHING, batch());
         given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(application));
         given(matchingTimePolicy.now()).willReturn(PUBLISHED_AT.plusMinutes(1));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingTimePolicy.isResultPublished(TODAY, PUBLISHED_AT.plusMinutes(1)))
+                .willReturn(true);
 
         var response = matchingResultQueryService.getTodayResult(1L);
 
@@ -152,11 +198,12 @@ class MatchingResultQueryServiceTest {
         verify(matchingGroupMemberRepository, never()).findResultMembership(application);
     }
 
-    @DisplayName("취소나 패스 신청은 공개 시각과 무관하게 WITHDRAWN을 반환한다")
+    @DisplayName("무료 취소 신청은 공개 시각과 무관하게 WITHDRAWN을 반환한다")
     @Test
     void returnsWithdrawnForCanceledApplication() {
         MatchingApplication application = application(1L, MatchingApplicationStatus.CANCELED, null);
         given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(application));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
 
         var response = matchingResultQueryService.getTodayResult(1L);
 
@@ -165,18 +212,90 @@ class MatchingResultQueryServiceTest {
         verify(matchingTimePolicy, never()).now();
     }
 
+    @DisplayName("결과 생성 전에 패널티 철회한 신청은 공개 시각 전에도 WITHDRAWN을 반환한다")
+    @Test
+    void returnsWithdrawnBeforePublicationWhenPassedWithoutResultMembership() {
+        MatchingApplication application = application(1L, MatchingApplicationStatus.PASSED, null);
+        given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(application));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingGroupMemberRepository.findResultMembership(application)).willReturn(Optional.empty());
+
+        var response = matchingResultQueryService.getTodayResult(1L);
+
+        assertThat(response.resultStatus()).isEqualTo(MatchingResultStatus.WITHDRAWN);
+        assertThat(response.applicationStatus()).isEqualTo(MatchingApplicationStatus.PASSED);
+        assertThat(response.matchingGroupId()).isNull();
+        assertThat(response.members()).isEmpty();
+        verify(matchingTimePolicy, never()).now();
+    }
+
+    @DisplayName("결과 생성 후 공개 전에 철회하면 기존 그룹 정보는 공개 시각까지 숨긴다")
+    @Test
+    void hidesPassedResultMembershipBeforePublication() {
+        MatchingBatch batch = batch();
+        MatchingApplication application = application(1L, MatchingApplicationStatus.PASSED, batch);
+        MatchingGroup group = group(batch);
+        MatchingGroupMember membership = groupMember(11L, group, application);
+        LocalDateTime beforePublish = PUBLISHED_AT.minusSeconds(1);
+        given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(application));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingGroupMemberRepository.findResultMembership(application)).willReturn(Optional.of(membership));
+        given(matchingTimePolicy.now()).willReturn(beforePublish);
+        given(matchingTimePolicy.isResultPublished(TODAY, beforePublish)).willReturn(false);
+
+        var response = matchingResultQueryService.getTodayResult(1L);
+
+        assertThat(response.resultStatus()).isEqualTo(MatchingResultStatus.NOT_PUBLISHED);
+        assertThat(response.matchingGroupId()).isNull();
+        assertThat(response.members()).isEmpty();
+        verify(matchingGroupMemberRepository, never()).findResultMembers(group);
+    }
+
+    @DisplayName("결과 생성 후 철회한 신청은 공개 시각 이후 기존 그룹 정보와 WITHDRAWN을 반환한다")
+    @Test
+    void returnsPassedResultMembershipAfterPublication() {
+        MatchingBatch batch = batch();
+        MatchingApplication mine = application(1L, MatchingApplicationStatus.PASSED, batch);
+        MatchingApplication teammateTwo = application(2L, MatchingApplicationStatus.PROPOSED, batch);
+        MatchingApplication teammateThree = application(3L, MatchingApplicationStatus.PROPOSED, batch);
+        MatchingGroup group = group(batch);
+        MatchingGroupMember myMembership = groupMember(11L, group, mine);
+        List<MatchingGroupMember> members =
+                List.of(myMembership, groupMember(12L, group, teammateTwo), groupMember(13L, group, teammateThree));
+        given(matchingApplicationRepository.findResultApplication(1L, TODAY)).willReturn(Optional.of(mine));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(PUBLISHED_AT);
+        given(matchingGroupMemberRepository.findResultMembership(mine)).willReturn(Optional.of(myMembership));
+        given(matchingTimePolicy.now()).willReturn(PUBLISHED_AT);
+        given(matchingTimePolicy.isResultPublished(TODAY, PUBLISHED_AT)).willReturn(true);
+        given(matchingGroupMemberRepository.findResultMembers(group)).willReturn(members);
+
+        var response = matchingResultQueryService.getTodayResult(1L);
+
+        assertThat(response.resultStatus()).isEqualTo(MatchingResultStatus.WITHDRAWN);
+        assertThat(response.matchingGroupId()).isEqualTo(group.getMatchingGroupId());
+        assertThat(response.members()).hasSize(3);
+    }
+
     private MatchingBatch batch() {
+        return batch(TODAY);
+    }
+
+    private MatchingBatch batch(LocalDate applicationDate) {
         return MatchingBatch.builder()
                 .matchingBatchId(10L)
-                .applicationDate(TODAY)
+                .applicationDate(applicationDate)
                 .category(InterestCategory.IT_AI_TECH)
                 .poolOrdinal(1)
-                .publishedAt(PUBLISHED_AT)
                 .build();
     }
 
     private MatchingApplication application(
             Long memberId, MatchingApplicationStatus status, MatchingBatch matchingBatch) {
+        return application(memberId, status, matchingBatch, TODAY);
+    }
+
+    private MatchingApplication application(
+            Long memberId, MatchingApplicationStatus status, MatchingBatch matchingBatch, LocalDate applicationDate) {
         Member member = Member.builder().memberId(memberId).build();
         Profile profile = Profile.builder()
                 .profileId(memberId * 10)
@@ -188,7 +307,7 @@ class MatchingResultQueryServiceTest {
                 .member(member)
                 .profile(profile)
                 .matchingBatch(matchingBatch)
-                .applicationDate(TODAY)
+                .applicationDate(applicationDate)
                 .status(status)
                 .leaderPreference(memberId == 1 ? LeaderPreference.WANTS : LeaderPreference.NEUTRAL)
                 .contestCategory(InterestCategory.IT_AI_TECH)
@@ -212,6 +331,7 @@ class MatchingResultQueryServiceTest {
                 .conscientiousnessSimilarityScore(score("10.00"))
                 .honestyHumilitySimilarityScore(score("10.00"))
                 .extroversionComplementScore(score("10.00"))
+                .status(MatchingGroupStatus.PROPOSED)
                 .build();
     }
 

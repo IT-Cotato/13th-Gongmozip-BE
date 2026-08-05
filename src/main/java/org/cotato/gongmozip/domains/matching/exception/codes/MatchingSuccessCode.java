@@ -16,6 +16,8 @@ public enum MatchingSuccessCode implements BaseSuccessCode {
     MATCHING_REASON_RETRIEVED(HttpStatus.OK, "MATCHING_200_5", "AI 매칭 추천 사유 조회 성공"),
     LEADER_RECOMMENDATION_RETRIEVED(HttpStatus.OK, "MATCHING_200_6", "AI 팀장 추천 조회 성공"),
     MATCHING_RESULT_RETRIEVED(HttpStatus.OK, "MATCHING_200_7", "오늘의 매칭 결과를 조회했습니다."),
+    MATCHING_GROUP_RESPONSES_RETRIEVED(HttpStatus.OK, "MATCHING_200_8", "매칭 그룹 응답 현황을 조회했습니다."),
+    MATCHING_RESPONSE_ACCEPTED(HttpStatus.OK, "MATCHING_200_9", "매칭 결과를 수락했습니다."),
 
     // 201 Created
     APPLICATION_CREATED(HttpStatus.CREATED, "MATCHING_201_1", "매칭풀 입장이 완료되었습니다."),

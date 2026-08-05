@@ -105,10 +105,6 @@ public class MatchingBatch extends BaseEntity {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
-    // 사용자에게 결과를 공개하기로 예약한 시각이다. 현재 기본값은 신청일 당일 16시다.
-    @Column(name = "published_at", nullable = false)
-    private LocalDateTime publishedAt;
-
     // FAILED 배치를 다시 시작한 횟수다. 최초 실행은 0이며 실패 후 재시작할 때 증가한다.
     @Column(name = "retry_count", nullable = false)
     private int retryCount;

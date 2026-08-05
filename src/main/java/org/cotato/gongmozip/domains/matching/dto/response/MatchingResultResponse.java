@@ -7,6 +7,7 @@ import java.util.List;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.matching.enums.MatchingApplicationStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingGroupMemberStatus;
+import org.cotato.gongmozip.domains.matching.enums.MatchingGroupStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingResultStatus;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.survey.enums.CharacterType;
@@ -26,7 +27,12 @@ public final class MatchingResultResponse {
             Integer teamSize,
             BigDecimal matchingScore,
             MatchingScoreBreakdown scoreBreakdown,
-            List<MatchingResultMemberResponse> members) {
+            List<MatchingResultMemberResponse> members,
+            LocalDateTime responseDeadlineAt,
+            MatchingGroupStatus groupStatus,
+            MatchingGroupMemberStatus myResponseStatus,
+            Integer confirmedTeamSize,
+            Long teamId) {
 
         public TodayMatchingResultResponse {
             members = members == null ? List.of() : List.copyOf(members);

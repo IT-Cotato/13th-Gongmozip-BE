@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import org.cotato.gongmozip.domains.matching.algorithm.MatchingAlgorithmSelector;
@@ -141,11 +142,10 @@ class MatchingBatchIntegrationTest {
 
         Clock afterPublishClock = Clock.fixed(
                 applicationDate.atTime(16, 1).atZone(clock.getZone()).toInstant(), clock.getZone());
+        MatchingAlgorithmProperties properties = new MatchingAlgorithmProperties();
+        properties.setResultPublishTime(LocalTime.of(16, 0));
         MatchingResultQueryService resultQueryService = new MatchingResultQueryService(
-                applicationRepository,
-                groupMemberRepository,
-                new MatchingTimePolicy(afterPublishClock),
-                new MatchingAlgorithmProperties());
+                applicationRepository, groupMemberRepository, new MatchingTimePolicy(afterPublishClock, properties));
         var result = resultQueryService.getTodayResult(resultMember.getMemberId());
 
         assertThat(result.resultStatus()).isEqualTo(MatchingResultStatus.MATCHED);

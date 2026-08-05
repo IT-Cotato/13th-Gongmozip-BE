@@ -18,15 +18,19 @@ import org.cotato.gongmozip.domains.collaboration.repository.CollaborationPointH
 import org.cotato.gongmozip.domains.collaboration.service.CollaborationPointService;
 import org.cotato.gongmozip.domains.matching.dto.request.MatchingApplicationRequest.ApplyRequest;
 import org.cotato.gongmozip.domains.matching.entity.MatchingApplication;
+import org.cotato.gongmozip.domains.matching.entity.MatchingGroupMember;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.matching.enums.MatchingApplicationStatus;
+import org.cotato.gongmozip.domains.matching.enums.MatchingGroupMemberStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingIneligibilityReason;
 import org.cotato.gongmozip.domains.matching.enums.WithdrawalType;
 import org.cotato.gongmozip.domains.matching.exception.MatchingException;
 import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
 import org.cotato.gongmozip.domains.matching.repository.MatchingApplicationRepository;
+import org.cotato.gongmozip.domains.matching.repository.MatchingGroupMemberRepository;
 import org.cotato.gongmozip.domains.matching.score.ProjectScoreProvider;
 import org.cotato.gongmozip.domains.matching.score.SkillScoreCalculator;
+import org.cotato.gongmozip.domains.matching.support.MatchingResponseFixture;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
@@ -76,6 +80,9 @@ class MatchingApplicationServiceTest {
     private MatchingApplicationRepository matchingApplicationRepository;
 
     @Mock
+    private MatchingGroupMemberRepository matchingGroupMemberRepository;
+
+    @Mock
     private CollaborationPointHistoryRepository collaborationPointHistoryRepository;
 
     @Mock
@@ -99,8 +106,9 @@ class MatchingApplicationServiceTest {
                 profileCertificationRepository,
                 surveySubmissionRepository,
                 matchingApplicationRepository,
+                matchingGroupMemberRepository,
                 collaborationPointHistoryRepository,
-                collaborationPointService,
+                new MatchingPassPenaltyService(matchingApplicationRepository, collaborationPointService),
                 projectScoreProvider,
                 new SkillScoreCalculator(),
                 matchingTimePolicy);
@@ -179,6 +187,30 @@ class MatchingApplicationServiceTest {
         verify(matchingTimePolicy, never()).resolveWithdrawalType(any(LocalDate.class));
     }
 
+    @DisplayName("결과 공개 전에도 제안된 신청은 패널티 철회 가능으로 반환한다.")
+    @Test
+    void proposedApplicationIsWithdrawableBeforeResultPublication() {
+        MatchingGroupMember membership = MatchingResponseFixture.groupMember(
+                1L, MatchingResponseFixture.group(20L, 4), 1L, MatchingGroupMemberStatus.PENDING);
+        Member member = membership.getMember();
+        MatchingApplication application = membership.getMatchingApplication();
+        LocalDateTime beforePublish = MatchingResponseFixture.PUBLISHED_AT.minusSeconds(1);
+        given(memberRepository.findById(member.getMemberId())).willReturn(Optional.of(member));
+        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.now()).willReturn(beforePublish);
+        given(matchingApplicationRepository.findByMemberAndApplicationDate(member, TODAY))
+                .willReturn(Optional.of(application));
+        given(matchingGroupMemberRepository.findResultMembership(application)).willReturn(Optional.of(membership));
+
+        var response = matchingApplicationService.getTodayApplication(member.getMemberId());
+
+        assertThat(response.withdrawal().withdrawable()).isTrue();
+        assertThat(response.withdrawal().type()).isEqualTo(WithdrawalType.PENALIZED_PASS);
+        assertThat(response.withdrawal().deadlineAt())
+                .isEqualTo(membership.getMatchingGroup().getResponseDeadlineAt());
+        verify(matchingTimePolicy, never()).isResultPublished(any(), any());
+    }
+
     @DisplayName("신청할 때 역량과 설문 및 협업거리를 신청 엔티티에 스냅샷으로 저장한다.")
     @Test
     void applyStoresSnapshot() {
@@ -243,6 +275,24 @@ class MatchingApplicationServiceTest {
         assertThatThrownBy(() -> matchingApplicationService.apply(member.getMemberId(), request))
                 .isInstanceOf(MatchingException.class)
                 .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.ALREADY_APPLIED_TODAY);
+    }
+
+    @DisplayName("이전 매칭 응답이 열려 있으면 다음 날 직접 신청보다 자동 재매칭을 우선한다.")
+    @Test
+    void openPreviousResponseBlocksDirectApplication() {
+        Member member = Member.builder().memberId(1L).build();
+        ApplyRequest request = new ApplyRequest(10L, InterestCategory.IT_AI_TECH, LeaderPreference.NEUTRAL, true);
+        given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
+        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.now()).willReturn(NOW);
+        given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
+        given(matchingGroupMemberRepository.existsOpenResponseForMember(any(), any(), any()))
+                .willReturn(true);
+
+        assertThatThrownBy(() -> matchingApplicationService.apply(member.getMemberId(), request))
+                .isInstanceOf(MatchingException.class)
+                .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.MATCHING_REASSIGNMENT_CONFLICT);
+        verify(matchingApplicationRepository, never()).existsByMemberAndApplicationDate(any(), any());
     }
 
     @DisplayName("작성한 프로필이 없으면 매칭을 신청할 수 없다.")

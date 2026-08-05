@@ -40,6 +40,7 @@ public class MatchingResultPersistenceService {
     private final MatchingApplicationRepository matchingApplicationRepository;
     private final MatchingGroupRepository matchingGroupRepository;
     private final MatchingGroupMemberRepository matchingGroupMemberRepository;
+    private final MatchingTimePolicy matchingTimePolicy;
     private final Clock clock;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -106,7 +107,10 @@ public class MatchingResultPersistenceService {
                 .conscientiousnessSimilarityScore(score.conscientiousnessSimilarityScore())
                 .honestyHumilitySimilarityScore(score.honestyHumilitySimilarityScore())
                 .extroversionComplementScore(score.extroversionComplementScore())
-                .status(MatchingGroupStatus.IN_PROGRESS)
+                // 알고리즘이 팀 조합을 만들었다고 즉시 실제 Team이 되는 것은 아니다.
+                // 여기서는 사용자의 수락/패스를 기다리는 제안 결과와 다음 날 12시 마감만 저장한다.
+                .status(MatchingGroupStatus.PROPOSED)
+                .responseDeadlineAt(matchingTimePolicy.responseDeadline(batch.getApplicationDate()))
                 .build();
     }
 
@@ -118,6 +122,7 @@ public class MatchingResultPersistenceService {
                 .matchingGroup(group)
                 .matchingApplication(application)
                 .member(application.getMember())
+                // 실제 응답은 16시 공개 후 받으므로 결과 저장 시 모든 그룹원을 PENDING으로 시작한다.
                 .responseStatus(MatchingGroupMemberStatus.PENDING)
                 .build();
     }

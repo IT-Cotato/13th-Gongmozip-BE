@@ -39,5 +39,5 @@ public class MatchingAlgorithmProperties {
 
     // 계산 결과를 사용자에게 공개하기로 예약한 시각이다.
     @NotNull
-    private LocalTime resultPublishTime = LocalTime.of(16, 0);
+    private LocalTime resultPublishTime;
 }

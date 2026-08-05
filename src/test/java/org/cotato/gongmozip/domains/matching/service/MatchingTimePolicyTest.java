@@ -6,7 +6,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
+import org.cotato.gongmozip.domains.matching.config.MatchingAlgorithmProperties;
 import org.cotato.gongmozip.domains.matching.enums.WithdrawalType;
 import org.cotato.gongmozip.domains.matching.exception.MatchingException;
 import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
@@ -46,7 +49,46 @@ class MatchingTimePolicyTest {
                 .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.WITHDRAWAL_NOT_ALLOWED);
     }
 
+    @DisplayName("YML 공개 시각 정책을 신청일에 적용하고 정각부터 공개한다.")
+    @Test
+    void 공개_시각을_신청일에_적용한다() {
+        MatchingTimePolicy policy = policyAt("2026-07-31T07:00:00Z");
+        LocalDateTime publishedAt = APPLICATION_DATE.atTime(16, 0);
+
+        assertThat(policy.resultPublishAt(APPLICATION_DATE)).isEqualTo(publishedAt);
+        assertThat(policy.isResultPublished(APPLICATION_DATE, publishedAt.minusNanos(1)))
+                .isFalse();
+        assertThat(policy.isResultPublished(APPLICATION_DATE, publishedAt)).isTrue();
+    }
+
+    @DisplayName("14시 전에는 오늘을 가장 가까운 매칭 날짜로 반환한다.")
+    @Test
+    void 매칭_시작_전에는_오늘을_반환한다() {
+        MatchingTimePolicy policy = policyAt("2026-07-31T04:59:59Z");
+
+        assertThat(policy.nextAvailableMatchingDate(APPLICATION_DATE)).isEqualTo(APPLICATION_DATE);
+    }
+
+    @DisplayName("14시 정각부터는 오늘 매칭이 시작됐으므로 다음 날을 반환한다.")
+    @Test
+    void 매칭_시작_시각부터는_다음_날을_반환한다() {
+        MatchingTimePolicy policy = policyAt("2026-07-31T05:00:00Z");
+
+        assertThat(policy.nextAvailableMatchingDate(APPLICATION_DATE)).isEqualTo(APPLICATION_DATE.plusDays(1));
+    }
+
+    @DisplayName("원본 신청의 다음 날이 아직 미래라면 그 날짜보다 앞당기지 않는다.")
+    @Test
+    void 가장_이른_재배정일을_보존한다() {
+        MatchingTimePolicy policy = policyAt("2026-07-31T03:00:00Z");
+        LocalDate earliestDate = APPLICATION_DATE.plusDays(2);
+
+        assertThat(policy.nextAvailableMatchingDate(earliestDate)).isEqualTo(earliestDate);
+    }
+
     private MatchingTimePolicy policyAt(String instant) {
-        return new MatchingTimePolicy(Clock.fixed(Instant.parse(instant), KOREA_ZONE));
+        MatchingAlgorithmProperties properties = new MatchingAlgorithmProperties();
+        properties.setResultPublishTime(LocalTime.of(16, 0));
+        return new MatchingTimePolicy(Clock.fixed(Instant.parse(instant), KOREA_ZONE), properties);
     }
 }

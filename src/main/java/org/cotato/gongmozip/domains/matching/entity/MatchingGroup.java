@@ -4,13 +4,16 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -18,6 +21,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.cotato.gongmozip.domains.matching.enums.MatchingGroupStatus;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
+import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.global.entity.BaseEntity;
 
 /**
@@ -37,7 +41,7 @@ public class MatchingGroup extends BaseEntity {
     @Column(name = "matching_group_id", nullable = false, updatable = false)
     private Long matchingGroupId;
 
-    @ManyToOne(fetch = jakarta.persistence.FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "matching_batch_id")
     private MatchingBatch matchingBatch;
 
@@ -83,4 +87,52 @@ public class MatchingGroup extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
     private MatchingGroupStatus status;
+
+    @Column(name = "response_deadline_at")
+    private LocalDateTime responseDeadlineAt;
+
+    @Column(name = "confirmed_at")
+    private LocalDateTime confirmedAt;
+
+    @Column(name = "canceled_at")
+    private LocalDateTime canceledAt;
+
+    @Column(name = "expired_at")
+    private LocalDateTime expiredAt;
+
+    @Column(name = "confirmed_team_size")
+    private Integer confirmedTeamSize;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "team_id", unique = true)
+    private Team team;
+
+    public void confirm(Team team, int confirmedTeamSize, LocalDateTime confirmedAt) {
+        if (status != MatchingGroupStatus.PROPOSED) {
+            throw new IllegalStateException("제안 중인 매칭 그룹만 확정할 수 있습니다.");
+        }
+        if (team == null || confirmedTeamSize < 3 || confirmedTeamSize > 4) {
+            throw new IllegalArgumentException("확정 팀은 실제 팀과 3명 또는 4명의 인원이 필요합니다.");
+        }
+        this.team = team;
+        this.confirmedTeamSize = confirmedTeamSize;
+        this.confirmedAt = confirmedAt;
+        this.status = MatchingGroupStatus.CONFIRMED;
+    }
+
+    public void cancel(LocalDateTime canceledAt) {
+        if (status != MatchingGroupStatus.PROPOSED) {
+            throw new IllegalStateException("제안 중인 매칭 그룹만 취소할 수 있습니다.");
+        }
+        this.canceledAt = canceledAt;
+        this.status = MatchingGroupStatus.CANCELED;
+    }
+
+    public void expire(LocalDateTime expiredAt) {
+        if (status != MatchingGroupStatus.PROPOSED) {
+            throw new IllegalStateException("제안 중인 매칭 그룹만 만료할 수 있습니다.");
+        }
+        this.expiredAt = expiredAt;
+        this.status = MatchingGroupStatus.EXPIRED;
+    }
 }

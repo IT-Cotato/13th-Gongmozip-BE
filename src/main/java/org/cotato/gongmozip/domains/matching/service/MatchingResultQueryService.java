@@ -6,18 +6,20 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import org.cotato.gongmozip.domains.matching.config.MatchingAlgorithmProperties;
 import org.cotato.gongmozip.domains.matching.entity.MatchingApplication;
 import org.cotato.gongmozip.domains.matching.entity.MatchingBatch;
 import org.cotato.gongmozip.domains.matching.entity.MatchingGroup;
 import org.cotato.gongmozip.domains.matching.entity.MatchingGroupMember;
 import org.cotato.gongmozip.domains.matching.enums.MatchingApplicationStatus;
+import org.cotato.gongmozip.domains.matching.enums.MatchingGroupStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingResultStatus;
 import org.cotato.gongmozip.domains.matching.exception.MatchingException;
 import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
 import org.cotato.gongmozip.domains.matching.repository.MatchingApplicationRepository;
 import org.cotato.gongmozip.domains.matching.repository.MatchingGroupMemberRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,47 +32,78 @@ public class MatchingResultQueryService {
     private final MatchingApplicationRepository matchingApplicationRepository;
     private final MatchingGroupMemberRepository matchingGroupMemberRepository;
     private final MatchingTimePolicy matchingTimePolicy;
-    private final MatchingAlgorithmProperties properties;
 
     public TodayMatchingResultResponse getTodayResult(Long memberId) {
         LocalDate today = matchingTimePolicy.today();
-        return matchingApplicationRepository
-                .findResultApplication(memberId, today)
+        Optional<MatchingApplication> applicationResult =
+                matchingApplicationRepository.findResultApplication(memberId, today);
+        if (applicationResult.isEmpty()) {
+            // 응답 마감은 다음 날 12시이므로 자정이 지나도 이전 날짜 결과가 화면에서 사라지면 안 된다.
+            // 오늘 신청이 없을 때만 응답 중이거나 이미 확정된 이전 결과를 fallback으로 찾는다.
+            // deadline 자체가 아니라 그룹 상태를 기준으로 해 12시 작업 직전의 경쟁 구간도 덮는다.
+            applicationResult = matchingGroupMemberRepository
+                    .findOpenResultApplications(
+                            memberId,
+                            List.of(MatchingGroupStatus.PROPOSED, MatchingGroupStatus.CONFIRMED),
+                            PageRequest.of(0, 1))
+                    .stream()
+                    .findFirst();
+        }
+        return applicationResult
                 .map(application -> toResult(memberId, application))
                 .orElseGet(() -> emptyResult(MatchingResultStatus.NOT_APPLIED));
     }
 
     private TodayMatchingResultResponse toResult(Long memberId, MatchingApplication application) {
-        LocalDateTime publishedAt = resolvePublishedAt(application);
+        LocalDate applicationDate = resolveApplicationDate(application);
+        LocalDateTime publishedAt = matchingTimePolicy.resultPublishAt(applicationDate);
         MatchingApplicationStatus applicationStatus = application.getStatus();
 
-        if (applicationStatus == MatchingApplicationStatus.CANCELED
-                || applicationStatus == MatchingApplicationStatus.PASSED) {
+        if (applicationStatus == MatchingApplicationStatus.CANCELED) {
             return applicationOnlyResult(MatchingResultStatus.WITHDRAWN, application, publishedAt);
         }
+
+        Optional<MatchingGroupMember> membershipResult = Optional.empty();
+        if (applicationStatus == MatchingApplicationStatus.PASSED) {
+            membershipResult = matchingGroupMemberRepository.findResultMembership(application);
+            // 결과 그룹이 만들어지기 전에 철회한 신청은 공개할 결과가 없으므로 즉시 철회 완료로 응답한다.
+            if (membershipResult.isEmpty()) {
+                return applicationOnlyResult(MatchingResultStatus.WITHDRAWN, application, publishedAt);
+            }
+        }
+
         // 계산이 먼저 끝나더라도 공개 시각 전에는 그룹·팀원·점수를 조회하지 않는다.
-        if (matchingTimePolicy.now().isBefore(publishedAt)) {
+        if (!matchingTimePolicy.isResultPublished(applicationDate, matchingTimePolicy.now())) {
             return applicationOnlyResult(MatchingResultStatus.NOT_PUBLISHED, application, publishedAt);
         }
         if (applicationStatus == MatchingApplicationStatus.FAILED) {
             return applicationOnlyResult(MatchingResultStatus.UNMATCHED, application, publishedAt);
         }
         if (applicationStatus != MatchingApplicationStatus.PROPOSED
-                && applicationStatus != MatchingApplicationStatus.MATCHED) {
+                && applicationStatus != MatchingApplicationStatus.MATCHED
+                && applicationStatus != MatchingApplicationStatus.PASSED
+                && applicationStatus != MatchingApplicationStatus.REASSIGN_PENDING) {
             return applicationOnlyResult(MatchingResultStatus.PROCESSING, application, publishedAt);
         }
 
-        MatchingGroupMember membership = matchingGroupMemberRepository
-                .findResultMembership(application)
-                .orElseThrow(() -> new MatchingException(MatchingErrorCode.MATCHING_GROUP_NOT_FOUND));
+        if (applicationStatus != MatchingApplicationStatus.PASSED) {
+            membershipResult = matchingGroupMemberRepository.findResultMembership(application);
+        }
+        MatchingGroupMember membership =
+                membershipResult.orElseThrow(() -> new MatchingException(MatchingErrorCode.MATCHING_GROUP_NOT_FOUND));
         MatchingGroup group = membership.getMatchingGroup();
         validateResultBelongsToApplication(application, group);
 
         List<MatchingGroupMember> groupMembers = matchingGroupMemberRepository.findResultMembers(group);
+
+        // 결과 화면은 저장된 신청 당시 프로필과 점수를 신뢰한다. 신청-배치-그룹 연결이 깨졌다면
+        // 일부 정보만 반환하지 않고 서버 데이터 오류로 즉시 드러내도록 정합성을 검증한다.
         validateGroupMembers(group, groupMembers, application);
 
         return new TodayMatchingResultResponse(
-                MatchingResultStatus.MATCHED,
+                applicationStatus == MatchingApplicationStatus.PASSED
+                        ? MatchingResultStatus.WITHDRAWN
+                        : MatchingResultStatus.MATCHED,
                 application.getMatchingApplicationId(),
                 application.getApplicationDate(),
                 applicationStatus,
@@ -82,20 +115,43 @@ public class MatchingResultQueryService {
                 toScoreBreakdown(group),
                 groupMembers.stream()
                         .map(groupMember -> toMember(memberId, groupMember))
-                        .toList());
+                        .toList(),
+                group.getResponseDeadlineAt(),
+                group.getStatus(),
+                membership.getResponseStatus(),
+                group.getConfirmedTeamSize(),
+                group.getTeam() == null ? null : group.getTeam().getTeamId());
     }
 
-    private LocalDateTime resolvePublishedAt(MatchingApplication application) {
-        MatchingBatch batch = application.getMatchingBatch();
-        if (batch != null) {
-            return batch.getPublishedAt();
+    private LocalDate resolveApplicationDate(MatchingApplication application) {
+        if (application.getApplicationDate() != null) {
+            return application.getApplicationDate();
         }
-        return LocalDateTime.of(application.getApplicationDate(), properties.getResultPublishTime());
+        MatchingBatch batch = application.getMatchingBatch();
+        if (batch != null && batch.getApplicationDate() != null) {
+            return batch.getApplicationDate();
+        }
+        throw new MatchingException(MatchingErrorCode.MATCHING_RESULT_NOT_PUBLISHED);
     }
 
     private TodayMatchingResultResponse emptyResult(MatchingResultStatus resultStatus) {
         return new TodayMatchingResultResponse(
-                resultStatus, null, null, null, null, null, null, null, null, null, List.of());
+                resultStatus,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     private TodayMatchingResultResponse applicationOnlyResult(
@@ -111,7 +167,12 @@ public class MatchingResultQueryService {
                 null,
                 null,
                 null,
-                List.of());
+                List.of(),
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     private MatchingScoreBreakdown toScoreBreakdown(MatchingGroup group) {

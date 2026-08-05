@@ -9,18 +9,19 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.cotato.gongmozip.domains.collaboration.enums.CollaborationPointReason;
 import org.cotato.gongmozip.domains.collaboration.repository.CollaborationPointHistoryRepository;
-import org.cotato.gongmozip.domains.collaboration.service.CollaborationPointService;
 import org.cotato.gongmozip.domains.matching.converter.MatchingApplicationConverter;
 import org.cotato.gongmozip.domains.matching.dto.request.MatchingApplicationRequest.ApplyRequest;
 import org.cotato.gongmozip.domains.matching.entity.MatchingApplication;
 import org.cotato.gongmozip.domains.matching.enums.MatchingApplicationStatus;
+import org.cotato.gongmozip.domains.matching.enums.MatchingGroupMemberStatus;
+import org.cotato.gongmozip.domains.matching.enums.MatchingGroupStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingIneligibilityReason;
 import org.cotato.gongmozip.domains.matching.enums.WithdrawalType;
 import org.cotato.gongmozip.domains.matching.exception.MatchingException;
 import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
 import org.cotato.gongmozip.domains.matching.repository.MatchingApplicationRepository;
+import org.cotato.gongmozip.domains.matching.repository.MatchingGroupMemberRepository;
 import org.cotato.gongmozip.domains.matching.score.ProjectScoreProvider;
 import org.cotato.gongmozip.domains.matching.score.SkillScoreCalculator;
 import org.cotato.gongmozip.domains.matching.vo.SkillScoreSnapshot;
@@ -45,17 +46,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class MatchingApplicationService {
 
-    // 패스 정책: 최근 7일 패스 횟수마다 2m씩 증가하고 최대 11m까지만 차감한다
-    private static final int FIRST_PASS_PENALTY = 3;
-    private static final int PASS_PENALTY_STEP = 2;
-    private static final int MAX_PASS_PENALTY = 11;
-    private static final int PASS_REPEAT_WINDOW_DAYS = 7;
-
     // 참여 인원 집계 상태와 철회 가능한 상태는 목적이 달라 별도로 관리한다
     private static final EnumSet<MatchingApplicationStatus> PARTICIPATING_STATUSES =
             EnumSet.of(MatchingApplicationStatus.WAITING, MatchingApplicationStatus.MATCHING);
-    private static final EnumSet<MatchingApplicationStatus> WITHDRAWABLE_STATUSES = EnumSet.of(
-            MatchingApplicationStatus.WAITING, MatchingApplicationStatus.MATCHING, MatchingApplicationStatus.PROPOSED);
+    private static final EnumSet<MatchingApplicationStatus> PRE_RESULT_WITHDRAWABLE_STATUSES =
+            EnumSet.of(MatchingApplicationStatus.WAITING, MatchingApplicationStatus.MATCHING);
 
     private final MemberRepository memberRepository;
     private final ProfileRepository profileRepository;
@@ -64,8 +59,9 @@ public class MatchingApplicationService {
     private final ProfileCertificationRepository profileCertificationRepository;
     private final SurveySubmissionRepository surveySubmissionRepository;
     private final MatchingApplicationRepository matchingApplicationRepository;
+    private final MatchingGroupMemberRepository matchingGroupMemberRepository;
     private final CollaborationPointHistoryRepository collaborationPointHistoryRepository;
-    private final CollaborationPointService collaborationPointService;
+    private final MatchingPassPenaltyService matchingPassPenaltyService;
     private final ProjectScoreProvider projectScoreProvider;
     private final SkillScoreCalculator skillScoreCalculator;
     private final MatchingTimePolicy matchingTimePolicy;
@@ -90,6 +86,9 @@ public class MatchingApplicationService {
         // 협업거리 제한
         boolean matchingRestricted = member.isMatchingBlockedAt(now);
         boolean applicationOpen = matchingTimePolicy.isApplicationOpen();
+        // 이전 제안에 PENDING/ACCEPTED로 남아 있으면 12시 마감 결과에 따라 자동 재매칭될 수 있다.
+        // 이때 직접 신청까지 받으면 같은 날 신청이 두 개 생길 수 있으므로 자격 단계부터 막는다.
+        boolean reassignmentPending = hasOpenResponse(memberId);
 
         // 모든 신청 불가 사유를 List로 반환
         List<MatchingIneligibilityReason> reasons = new ArrayList<>();
@@ -107,6 +106,9 @@ public class MatchingApplicationService {
         }
         if (matchingRestricted) {
             reasons.add(MatchingIneligibilityReason.MATCHING_RESTRICTED);
+        }
+        if (reassignmentPending) {
+            reasons.add(MatchingIneligibilityReason.REASSIGNMENT_PENDING);
         }
         if (hasProfile && !hasAnyProjectEvaluationReadyProfile(member)) {
             reasons.add(MatchingIneligibilityReason.PROJECT_EVALUATION_NOT_READY);
@@ -148,6 +150,11 @@ public class MatchingApplicationService {
         LocalDateTime now = matchingTimePolicy.now();
         if (member.isMatchingBlockedAt(now)) {
             throw new MatchingException(MatchingErrorCode.MATCHING_RESTRICTED);
+        }
+        // 자격 조회 이후 상태가 바뀌는 경쟁 상황도 있으므로 실제 신청 트랜잭션 안에서 다시 검사한다.
+        // 자동 재매칭을 우선하고 직접 신청을 차단한다는 정책의 최종 방어선이다.
+        if (hasOpenResponse(memberId)) {
+            throw new MatchingException(MatchingErrorCode.MATCHING_REASSIGNMENT_CONFLICT);
         }
         if (matchingApplicationRepository.existsByMemberAndApplicationDate(member, applicationDate)) {
             throw new MatchingException(MatchingErrorCode.ALREADY_APPLIED_TODAY);
@@ -192,7 +199,7 @@ public class MatchingApplicationService {
                 application, matchingTimePolicy.applicationDeadline(applicationDate));
     }
 
-    // 통합 철회 — 현재 시각을 기준 무료 취소와 패널티 패스(협업 거리 감소)를 결정
+    // 결과 생성 전 철회 처리. PROPOSED 신청은 MatchingWithdrawalService가 그룹 패스 흐름으로 보낸다.
     @Transactional
     public WithdrawalResponse withdraw(Long memberId, Long applicationId) {
         // 회원과 신청을 같은 트랜잭션에서 잠가 중복 철회와 협업거리 중복 차감을 막는다
@@ -200,7 +207,7 @@ public class MatchingApplicationService {
         MatchingApplication application = matchingApplicationRepository
                 .findByIdAndMemberIdWithLock(applicationId, memberId)
                 .orElseThrow(() -> new MatchingException(MatchingErrorCode.APPLICATION_NOT_FOUND));
-        if (!WITHDRAWABLE_STATUSES.contains(application.getStatus())) {
+        if (!PRE_RESULT_WITHDRAWABLE_STATUSES.contains(application.getStatus())) {
             throw new MatchingException(MatchingErrorCode.INVALID_APPLICATION_STATUS);
         }
 
@@ -211,11 +218,8 @@ public class MatchingApplicationService {
             application.cancel(now);
         } else {
             // 패스 횟수는 신청 상태 이력으로 계산하고 실제 협업거리 변경은 공용 서비스에 위임한다
-            penalty = calculateNextPassPenalty(member, now);
-            collaborationPointService.changePoint(
-                    member, null, CollaborationPointReason.MATCHING_PASS_PENALTY, -penalty);
+            penalty = matchingPassPenaltyService.apply(member, now);
             application.pass(now);
-            // TODO: 임시 팀/매칭 결과 구현 시 패스하지 않은 나머지 팀원을 재배정 풀로 복귀
         }
 
         return MatchingApplicationConverter.toWithdrawalResponse(
@@ -228,11 +232,14 @@ public class MatchingApplicationService {
     private WithdrawalAvailability resolveWithdrawalAvailability(Member member, MatchingApplication application) {
         // 기본 설정(철회 불가)
         WithdrawalAvailability withdrawal = MatchingApplicationConverter.toUnavailableWithdrawalAvailability();
-        if (WITHDRAWABLE_STATUSES.contains(application.getStatus())) {
+        if (application.getStatus() == MatchingApplicationStatus.PROPOSED) {
+            return resolveProposedWithdrawalAvailability(member, application);
+        }
+        if (PRE_RESULT_WITHDRAWABLE_STATUSES.contains(application.getStatus())) {
             try {
                 WithdrawalType type = matchingTimePolicy.resolveWithdrawalType(application.getApplicationDate());
                 int penalty = type == WithdrawalType.PENALIZED_PASS
-                        ? calculateNextPassPenalty(member, matchingTimePolicy.now())
+                        ? matchingPassPenaltyService.calculateNextPenalty(member, matchingTimePolicy.now())
                         : 0;
                 LocalDateTime deadline = type == WithdrawalType.FREE_CANCEL
                         ? matchingTimePolicy.applicationDeadline(application.getApplicationDate())
@@ -245,12 +252,32 @@ public class MatchingApplicationService {
         return withdrawal;
     }
 
-    // 현재 요청까지 포함했을 때 적용할 다음 패스 감점을 계산한다
-    private int calculateNextPassPenalty(Member member, LocalDateTime now) {
-        long recentPassCount = matchingApplicationRepository.countByMemberAndStatusAndCanceledAtGreaterThanEqual(
-                member, MatchingApplicationStatus.PASSED, now.minusDays(PASS_REPEAT_WINDOW_DAYS));
-        long calculatedPenalty = FIRST_PASS_PENALTY + recentPassCount * PASS_PENALTY_STEP;
-        return (int) Math.min(calculatedPenalty, MAX_PASS_PENALTY);
+    private WithdrawalAvailability resolveProposedWithdrawalAvailability(
+            Member member, MatchingApplication application) {
+        LocalDateTime now = matchingTimePolicy.now();
+        // PROPOSED부터는 기존 신청일 기준 철회 시간이 아니라 제안 그룹의 응답 마감 시각을 따른다.
+        // 결과 공개 전에도 패널티 철회는 허용하며, 그룹과 본인 응답이 모두 열려 있을 때만 가능으로 노출한다.
+        return matchingGroupMemberRepository
+                .findResultMembership(application)
+                .filter(groupMember -> groupMember.getResponseStatus() == MatchingGroupMemberStatus.PENDING)
+                .filter(groupMember -> groupMember.getMatchingGroup().getStatus() == MatchingGroupStatus.PROPOSED)
+                .filter(groupMember -> groupMember.getMatchingGroup().getResponseDeadlineAt() != null)
+                .filter(groupMember ->
+                        now.isBefore(groupMember.getMatchingGroup().getResponseDeadlineAt()))
+                .map(groupMember -> MatchingApplicationConverter.toWithdrawalAvailability(
+                        WithdrawalType.PENALIZED_PASS,
+                        matchingPassPenaltyService.calculateNextPenalty(member, now),
+                        groupMember.getMatchingGroup().getResponseDeadlineAt()))
+                .orElseGet(MatchingApplicationConverter::toUnavailableWithdrawalAvailability);
+    }
+
+    private boolean hasOpenResponse(Long memberId) {
+        // 시각만 보고 판단하지 않는다. 12시가 지났어도 마감 작업이 그룹을 닫기 전에는 자동
+        // 재매칭 생성 여부가 확정되지 않았으므로, 상태 전이가 끝날 때까지 직접 신청을 차단한다.
+        return matchingGroupMemberRepository.existsOpenResponseForMember(
+                memberId,
+                MatchingGroupStatus.PROPOSED,
+                List.of(MatchingGroupMemberStatus.PENDING, MatchingGroupMemberStatus.ACCEPTED));
     }
 
     private boolean hasAnyProjectEvaluationReadyProfile(Member member) {
