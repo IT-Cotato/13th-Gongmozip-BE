@@ -22,6 +22,7 @@ public enum ContestSuccessCode implements BaseSuccessCode {
     CONTEST_CREATED(HttpStatus.CREATED, "CONTEST_201_1", "공모전 등록에 성공하였습니다."),
     CONTEST_SCRAPPED(HttpStatus.CREATED, "CONTEST_201_2", "공모전 스크랩에 성공하였습니다."),
     CONTEST_CANDIDATE_ADDED(HttpStatus.CREATED, "CONTEST_201_3", "후보 공모전 추가에 성공하였습니다."),
+    CONTEST_SHARED(HttpStatus.CREATED, "CONTEST_201_4", "공모전 공유에 성공하였습니다."),
 
     // 204
     CONTEST_DELETED(HttpStatus.NO_CONTENT, "CONTEST_204_1", "공모전 삭제에 성공하였습니다."),

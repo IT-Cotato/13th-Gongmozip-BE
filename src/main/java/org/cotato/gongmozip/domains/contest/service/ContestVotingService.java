@@ -81,6 +81,27 @@ public class ContestVotingService {
         return ContestVotingConverter.toContestCandidateItemResponse(saved, LocalDateTime.now());
     }
 
+    /**
+     * 공모전 탭에서 공유한 공모전을 채팅방에 카드로 남긴다(기능명세서 3.4.2/5.1.4). 이 시점에는
+     * 후보로 등록되지 않는다 — 후보 등록은 카드의 "+" 버튼을 눌러 {@link #addCandidate}를
+     * 별도로 호출해야 한다. 공유 자체는 공모전 선정 단계가 아니어도(다른 팀 상태에서도) 할 수
+     * 있게 팀 상태를 제한하지 않는다.
+     */
+    @Transactional
+    public void shareContest(Long teamId, Long memberId, Long contestId) {
+        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        TeamMember sharer = requireActiveMember(teamId, memberId);
+        Contest contest = contestRepository
+                .findById(contestId)
+                .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_NOT_FOUND));
+
+        chatService.postChatbotCardMessage(
+                team,
+                MessageType.CONTEST_SHARE_CARD,
+                sharer.getProfile().getNickname() + "님이 공모전을 공유했어요. 후보로 추가하려면 + 버튼을 눌러주세요.",
+                toContestShareMetadata(contest.getContestId()));
+    }
+
     @Transactional
     public void removeCandidate(Long teamId, Long memberId, Long contestCandidateId) {
         requireTeamInContestSelecting(teamId);
@@ -290,6 +311,14 @@ public class ContestVotingService {
             return objectMapper.writeValueAsString(Map.of("contestCandidateIds", contestCandidateIds));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("공모전 후보 메타데이터 직렬화에 실패했습니다.", e);
+        }
+    }
+
+    private String toContestShareMetadata(Long contestId) {
+        try {
+            return objectMapper.writeValueAsString(Map.of("contestId", contestId));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("공모전 공유 메타데이터 직렬화에 실패했습니다.", e);
         }
     }
 

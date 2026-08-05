@@ -138,6 +138,51 @@ class ContestVotingServiceTest {
         verify(chatService).postSystemMessage(eq(team), anyString());
     }
 
+    @DisplayName("공모전을 공유하면 팀 상태와 무관하게 공유 카드가 발행되고 후보로 등록되지 않는다.")
+    @Test
+    void 공모전을_공유하면_상태와_무관하게_공유_카드가_발행된다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.IN_PROGRESS).build();
+        TeamMember member = teamMemberOf(team, 10L, "김철수");
+        Contest contest = Contest.builder()
+                .contestId(100L)
+                .title("공모전")
+                .status(org.cotato.gongmozip.domains.contest.enums.ContestStatus.OPEN)
+                .applyEndAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(member));
+        given(contestRepository.findById(100L)).willReturn(Optional.of(contest));
+
+        // when
+        contestVotingService.shareContest(1L, 10L, 100L);
+
+        // then
+        org.mockito.ArgumentCaptor<String> metadataCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(chatService)
+                .postChatbotCardMessage(
+                        eq(team), eq(MessageType.CONTEST_SHARE_CARD), anyString(), metadataCaptor.capture());
+        assertThat(metadataCaptor.getValue()).contains("contestId").contains("100");
+        verify(contestCandidateRepository, never()).save(any());
+    }
+
+    @DisplayName("존재하지 않는 공모전을 공유하면 실패한다.")
+    @Test
+    void 존재하지_않는_공모전을_공유하면_실패한다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.IN_PROGRESS).build();
+        TeamMember member = teamMemberOf(team, 10L, "김철수");
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(member));
+        given(contestRepository.findById(999L)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> contestVotingService.shareContest(1L, 10L, 999L))
+                .isInstanceOf(ContestException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ContestErrorCode.CONTEST_NOT_FOUND);
+    }
+
     @DisplayName("존재하지 않는 후보를 삭제하면 실패한다.")
     @Test
     void 존재하지_않는_후보를_삭제하면_실패한다() {

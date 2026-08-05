@@ -37,6 +37,8 @@ public final class ContestRequest {
 
     public record AddContestCandidateRequest(@NotNull(message = "공모전 id는 필수 입력 항목입니다.") Long contestId) {}
 
+    public record ShareContestRequest(@NotNull(message = "공모전 id는 필수 입력 항목입니다.") Long contestId) {}
+
     public record SubmitContestVoteRequest(
             @NotEmpty(message = "투표할 공모전을 최소 1개 선택해주세요.") List<Long> contestCandidateIds) {}
 }
