@@ -84,9 +84,10 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
 
 - 팀장 변경(수동 위임) 기능 — 챗봇 안내 문구에 언급되지만 화면/플로우 미정. TeamMember.role
   갱신 API로 충분해 보이나 별도 스코프로 분리 예정.
-- `domains/team/controller/TeamTestController.java`(`POST /api/test/teams`) — 매칭 연동이
-  실제로 완료됐으니(위 참고) 삭제 대상이지만, 로컬 수동 테스트 용도로 아직 쓰이고 있어 이번
-  변경 범위에서는 남겨뒀다. 삭제 여부는 팀 논의 후 결정.
+- **(2026-08-06 삭제)** `domains/team/controller/TeamTestController.java`(`POST /api/test/teams`) —
+  매칭 연동이 실제로 완료돼(위 참고) 더 이상 필요 없어 삭제했다. `chat-test.html`의 "빠른 준비"
+  버튼도 이미 `TeamMemberInput`에 추가된 필드(leaderPreference 등)를 안 보내고 있어 어차피
+  실패하던 상태였다 — 함께 제거했다. 자세한 내용은 [03-chat.md](./03-chat.md) 참고.
 
 ## 구현 현황 (Phase 1 완료)
 

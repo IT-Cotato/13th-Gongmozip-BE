@@ -36,17 +36,9 @@
 <p>Phase 4 개발 전 STOMP 연결/전송/수신 동작을 눈으로 확인하기 위한 로컬 테스트 페이지입니다.</p>
 
 <fieldset>
-  <legend>빠른 준비 (개발용 - 이메일 인증/회원가입 없이 테스트 계정+팀 생성)</legend>
-  <label for="quickEmail">테스트용 이메일 (쉼표로 여러 명 입력 시 전원이 같은 팀으로 생성됨)</label>
-  <input type="text" id="quickEmail" placeholder="test1@gongmozip.com, test2@gongmozip.com" value="test1@gongmozip.com, test2@gongmozip.com" />
-  <button id="quickSetupBtn">테스트 계정들 준비 + 같은 팀으로 생성</button>
-  <div id="quickStatus"></div>
-</fieldset>
-
-<fieldset>
   <legend>연결 설정</legend>
   <label for="token">JWT Access Token (Bearer 제외, 순수 토큰)</label>
-  <input type="text" id="token" placeholder="/api/auth/login 응답의 accessToken 또는 위 빠른 준비 버튼 사용" />
+  <input type="text" id="token" placeholder="/api/auth/login 응답의 accessToken" />
 
   <label for="teamId">Team ID</label>
   <input type="text" id="teamId" placeholder="예: 1" />
@@ -130,75 +122,8 @@
     $('sendBtn').disabled = !connected;
   }
 
-  $('quickSetupBtn').addEventListener('click', async () => {
-    const emails = $('quickEmail')
-      .value.split(',')
-      .map((e) => e.trim())
-      .filter((e) => e.length > 0);
-
-    if (emails.length === 0) {
-      alert('이메일을 최소 1개 입력해주세요.');
-      return;
-    }
-
-    $('quickStatus').textContent = '처리 중...';
-
-    try {
-      // 1. 이메일마다 quick-login으로 계정 확보 (없으면 자동 생성)
-      const accounts = [];
-      for (const email of emails) {
-        const loginRes = await fetch('/api/test/auth/quick-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
-        });
-        if (!loginRes.ok) throw new Error('quick-login 실패(' + email + '): ' + loginRes.status);
-        const account = await loginRes.json();
-        accounts.push({ email, ...account });
-      }
-
-      // 2. 전원을 멤버로 넣어 팀 하나 생성 (첫 번째 계정의 토큰으로 호출)
-      const teamRes = await fetch('/api/test/teams', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + accounts[0].accessToken,
-        },
-        body: JSON.stringify({
-          members: accounts.map((a) => ({ memberId: a.memberId, profileId: a.profileId })),
-          preferredCategory: 'IT_AI_TECH',
-        }),
-      });
-      if (!teamRes.ok) throw new Error('팀 생성 실패: ' + teamRes.status);
-      const { teamId } = await teamRes.json();
-
-      // 3. 이 탭은 첫 번째 계정으로 바로 연결 준비
-      $('token').value = accounts[0].accessToken;
-      $('teamId').value = teamId;
-
-      // 4. 나머지 계정 토큰은 다른 브라우저 탭에 붙여넣을 수 있도록 목록으로 노출
-      const listHtml = accounts
-        .map(
-          (a, i) =>
-            '<div style="margin-top:4px;"><b>' +
-            (i === 0 ? '이 탭: ' : '다른 탭용: ') +
-            escapeHtml(a.email) +
-            '</b><br><textarea readonly rows="2" style="font-size:11px;">' +
-            a.accessToken +
-            '</textarea></div>',
-        )
-        .join('');
-      $('quickStatus').innerHTML =
-        'teamId=' + teamId + ' (' + accounts.length + '명) 준비 완료' + listHtml;
-      log(accounts.length + '명 계정과 팀(' + teamId + ') 준비 완료. 다른 탭에는 위 토큰을 붙여넣고 같은 teamId로 연결하세요.');
-    } catch (e) {
-      $('quickStatus').textContent = '실패: ' + e.message;
-      log('빠른 준비 실패: ' + e.message, 'error');
-    }
-  });
-
-  // 채팅방 생성 시점(빠른 준비 버튼)에 이미 발행된 챗봇 인사 메시지 등은 실시간 구독으로는
-  // 볼 수 없으므로(구독 전에 이미 브로드캐스트됨), 연결 시 과거 메시지를 먼저 불러와 채운다.
+  // 채팅방 생성 시점에 이미 발행된 챗봇 인사 메시지 등은 실시간 구독으로는 볼 수 없으므로
+  // (구독 전에 이미 브로드캐스트됨), 연결 시 과거 메시지를 먼저 불러와 채운다.
   async function loadMessageHistory(token, teamId) {
     const res = await fetch('/api/teams/' + teamId + '/messages', {
       headers: { Authorization: 'Bearer ' + token },
