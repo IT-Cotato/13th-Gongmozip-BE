@@ -100,7 +100,11 @@ class S3ServiceTest {
         s3Service.deleteFile(imageUrl);
 
         // then
-        org.mockito.Mockito.verify(s3Client, org.mockito.Mockito.times(1))
-                .deleteObject(any(software.amazon.awssdk.services.s3.model.DeleteObjectRequest.class));
+        org.mockito.ArgumentCaptor<software.amazon.awssdk.services.s3.model.DeleteObjectRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(software.amazon.awssdk.services.s3.model.DeleteObjectRequest.class);
+        org.mockito.Mockito.verify(s3Client, org.mockito.Mockito.times(1)).deleteObject(captor.capture());
+
+        assertThat(captor.getValue().bucket()).isEqualTo("gongmozip-contest-images-test");
+        assertThat(captor.getValue().key()).isEqualTo("members/profiles/photo.png");
     }
 }

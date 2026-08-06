@@ -55,7 +55,7 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
               AND tm.status = :status
               AND t.status IN :teamStatuses
               AND tm.isCompletedProjectDeleted = false
-            ORDER BY t.completedAt DESC, t.updatedAt DESC
+            ORDER BY t.completedAt DESC, t.updatedAt DESC, t.teamId DESC
             """,
             countQuery =
                     """

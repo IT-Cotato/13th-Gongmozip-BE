@@ -182,5 +182,7 @@ class MyPageControllerTest {
                         .with(user(userDetails)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("MYPAGE_200_6"));
+
+        org.mockito.Mockito.verify(myPageService, org.mockito.Mockito.times(1)).deleteCompletedProject(1L, 10L);
     }
 }

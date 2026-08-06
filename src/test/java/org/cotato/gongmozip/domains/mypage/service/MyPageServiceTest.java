@@ -153,9 +153,16 @@ class MyPageServiceTest {
         // given
         given(memberRepository.existsById(1L)).willReturn(true);
 
+        org.cotato.gongmozip.domains.contest.entity.Contest contest =
+                org.cotato.gongmozip.domains.contest.entity.Contest.builder()
+                        .contestId(15L)
+                        .title("2026 AI 해커톤")
+                        .build();
+
         org.cotato.gongmozip.domains.team.entity.Team team = org.cotato.gongmozip.domains.team.entity.Team.builder()
                 .teamId(10L)
                 .status(org.cotato.gongmozip.domains.team.enums.TeamStatus.SUBMITTED)
+                .contest(contest)
                 .contestDecidedAt(LocalDateTime.of(2026, 8, 1, 12, 0))
                 .completedAt(LocalDateTime.of(2026, 8, 5, 12, 0))
                 .build();
@@ -164,9 +171,21 @@ class MyPageServiceTest {
                         .team(team)
                         .build();
 
+        org.springframework.data.domain.PageRequest pageRequest = org.springframework.data.domain.PageRequest.of(
+                0,
+                10,
+                org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Direction.DESC,
+                        "team.completedAt",
+                        "team.updatedAt",
+                        "team.teamId"));
+
         given(teamMemberRepository.findCompletedProjects(
-                        eq(1L), eq(org.cotato.gongmozip.domains.team.enums.TeamMemberStatus.ACTIVE), any(), any()))
-                .willReturn(new PageImpl<>(List.of(teamMember)));
+                        eq(1L),
+                        eq(org.cotato.gongmozip.domains.team.enums.TeamMemberStatus.ACTIVE),
+                        any(),
+                        eq(pageRequest)))
+                .willReturn(new PageImpl<>(List.of(teamMember), pageRequest, 1L));
 
         // when
         CompletedProjectsResponse response = myPageService.getCompletedProjects(1L, 0, 10);
@@ -175,7 +194,15 @@ class MyPageServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.projects()).hasSize(1);
         assertThat(response.projects().get(0).teamId()).isEqualTo(10L);
+        assertThat(response.projects().get(0).contestId()).isEqualTo(15L);
+        assertThat(response.projects().get(0).contestTitle()).isEqualTo("2026 AI 해커톤");
+        assertThat(response.projects().get(0).completedAt()).isEqualTo("2026-08-05");
         assertThat(response.projects().get(0).medal()).isEqualTo("스프린트 완주 메달");
+        assertThat(response.projects().get(0).award()).isNull();
+        assertThat(response.page()).isEqualTo(0);
+        assertThat(response.size()).isEqualTo(10);
+        assertThat(response.totalElements()).isEqualTo(1L);
+        assertThat(response.totalPages()).isEqualTo(1);
     }
 
     @Test

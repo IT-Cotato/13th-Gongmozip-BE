@@ -24,6 +24,8 @@ import org.springframework.mail.MailException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
@@ -153,7 +155,16 @@ public class MemberService {
 
         String oldImageUrl = member.getProfileImageUrl();
         if (oldImageUrl != null && !oldImageUrl.equals(request.profileImageUrl())) {
-            s3Service.deleteFile(oldImageUrl);
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        s3Service.deleteFile(oldImageUrl);
+                    }
+                });
+            } else {
+                s3Service.deleteFile(oldImageUrl);
+            }
         }
 
         member.updateProfileImage(request.profileImageUrl());

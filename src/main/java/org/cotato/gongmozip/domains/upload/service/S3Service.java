@@ -16,6 +16,7 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
+@lombok.extern.slf4j.Slf4j
 @Service
 @RequiredArgsConstructor
 public class S3Service {
@@ -140,7 +141,7 @@ public class S3Service {
                         .build();
                 s3Client.deleteObject(deleteObjectRequest);
             } catch (Exception e) {
-                // Log and ignore to prevent blocking user profile updates if S3 deletion fails
+                log.warn("Failed to delete S3 file. imageUrl: {}, error: {}", imageUrl, e.getMessage(), e);
             }
         }
     }
