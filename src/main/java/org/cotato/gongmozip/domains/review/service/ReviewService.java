@@ -61,7 +61,7 @@ public class ReviewService {
             throw new ReviewException(ReviewErrorCode.ALREADY_REVIEWED);
         }
 
-        Review saved = reviewRepository.save(ReviewConverter.toReview(team, reviewer, reviewee, request.content()));
+        Review saved = reviewRepository.save(ReviewConverter.toReview(team, reviewer, reviewee, request));
         List<TeamMember> activeMembers =
                 teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE);
         awardPointIfReviewerJustCompleted(team, reviewer, activeMembers);
