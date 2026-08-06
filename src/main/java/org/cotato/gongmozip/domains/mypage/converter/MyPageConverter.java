@@ -1,7 +1,8 @@
 package org.cotato.gongmozip.domains.mypage.converter;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
@@ -9,6 +10,8 @@ import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.entity.ContestScrap;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.mypage.dto.response.MyPageResponse.*;
+import org.cotato.gongmozip.domains.review.entity.Review;
+import org.cotato.gongmozip.domains.review.enums.ReviewKeyword;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
 import org.springframework.data.domain.Page;
@@ -126,9 +129,31 @@ public class MyPageConverter {
         }
     }
 
-    // TODO: 협업 후기/리뷰 도메인 구현 후 리뷰 통계 연동 및 매핑 로직 추가 필요
-    public static ReviewStatisticsResponse toReviewStatisticsResponse() {
-        return new ReviewStatisticsResponse(0, Collections.emptyList());
+    public static ReviewStatisticsResponse toReviewStatisticsResponse(List<Review> reviews) {
+        int totalReviewCount = reviews.size();
+
+        Map<String, Integer> keywordCounts = new HashMap<>();
+        for (ReviewKeyword keyword : ReviewKeyword.values()) {
+            keywordCounts.put(keyword.name(), 0);
+        }
+
+        for (Review review : reviews) {
+            if (review.getKeywords() != null) {
+                for (String kwStr : review.getKeywords()) {
+                    keywordCounts.put(kwStr, keywordCounts.getOrDefault(kwStr, 0) + 1);
+                }
+            }
+        }
+
+        List<ReviewKeywordItem> keywordItems = keywordCounts.entrySet().stream()
+                .filter(entry -> entry.getValue() > 0)
+                .map(entry -> new ReviewKeywordItem(entry.getKey(), entry.getValue()))
+                .sorted(Comparator.comparing(ReviewKeywordItem::count)
+                        .reversed()
+                        .thenComparing(ReviewKeywordItem::keyword))
+                .toList();
+
+        return new ReviewStatisticsResponse(totalReviewCount, keywordItems);
     }
 
     public static ScrappedContestsResponse toScrappedContestsResponse(Page<ContestScrap> scrapPage) {

@@ -49,6 +49,9 @@ class MyPageServiceTest {
     @Mock
     private org.cotato.gongmozip.domains.team.repository.TeamMemberRepository teamMemberRepository;
 
+    @Mock
+    private org.cotato.gongmozip.domains.review.repository.ReviewRepository reviewRepository;
+
     @InjectMocks
     private MyPageService myPageService;
 
@@ -74,6 +77,7 @@ class MyPageServiceTest {
         given(teamMemberRepository.countOngoingProjects(any(), any(), any())).willReturn(0);
         given(teamMemberRepository.findCompletedProjects(any(), any(), any(), any()))
                 .willReturn(new PageImpl<>(List.of()));
+        given(reviewRepository.countByReviewee_Member_MemberId(any())).willReturn(0L);
 
         // when
         MyPageMainResponse response = myPageService.getMyPageMain(1L);
@@ -281,6 +285,7 @@ class MyPageServiceTest {
     void getReviewStatistics_success() {
         // given
         given(memberRepository.existsById(1L)).willReturn(true);
+        given(reviewRepository.findByReviewee_Member_MemberId(1L)).willReturn(List.of());
 
         // when
         ReviewStatisticsResponse response = myPageService.getReviewStatistics(1L);
@@ -289,6 +294,44 @@ class MyPageServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.totalReviewCount()).isEqualTo(0);
         assertThat(response.keywords()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("받은 팀원 후기 조회 - 후기 키워드 빈도수 통계가 정렬되어 정상 반환된다.")
+    void getReviewStatistics_nonEmpty_success() {
+        // given
+        given(memberRepository.existsById(1L)).willReturn(true);
+
+        org.cotato.gongmozip.domains.review.entity.Review review1 =
+                org.cotato.gongmozip.domains.review.entity.Review.builder()
+                        .keywords(List.of("GOOD_COMMUNICATOR", "TRUSTWORTHY"))
+                        .build();
+        org.cotato.gongmozip.domains.review.entity.Review review2 =
+                org.cotato.gongmozip.domains.review.entity.Review.builder()
+                        .keywords(List.of("TRUSTWORTHY", "CREATIVE"))
+                        .build();
+        org.cotato.gongmozip.domains.review.entity.Review review3 =
+                org.cotato.gongmozip.domains.review.entity.Review.builder()
+                        .keywords(List.of("TRUSTWORTHY"))
+                        .build();
+
+        given(reviewRepository.findByReviewee_Member_MemberId(1L)).willReturn(List.of(review1, review2, review3));
+
+        // when
+        ReviewStatisticsResponse response = myPageService.getReviewStatistics(1L);
+
+        // then
+        assertThat(response).isNotNull();
+        assertThat(response.totalReviewCount()).isEqualTo(3);
+        assertThat(response.keywords()).hasSize(3);
+        // TRUSTWORTHY (3 times)
+        assertThat(response.keywords().get(0).keyword()).isEqualTo("TRUSTWORTHY");
+        assertThat(response.keywords().get(0).count()).isEqualTo(3);
+        // CREATIVE, GOOD_COMMUNICATOR (1 time each) -> sorted alphabetically (C before G)
+        assertThat(response.keywords().get(1).keyword()).isEqualTo("CREATIVE");
+        assertThat(response.keywords().get(1).count()).isEqualTo(1);
+        assertThat(response.keywords().get(2).keyword()).isEqualTo("GOOD_COMMUNICATOR");
+        assertThat(response.keywords().get(2).count()).isEqualTo(1);
     }
 
     @Test

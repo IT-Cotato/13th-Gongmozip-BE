@@ -14,6 +14,8 @@ import org.cotato.gongmozip.domains.mypage.converter.MyPageConverter;
 import org.cotato.gongmozip.domains.mypage.dto.response.MyPageResponse.*;
 import org.cotato.gongmozip.domains.mypage.exception.MyPageException;
 import org.cotato.gongmozip.domains.mypage.exception.codes.MyPageErrorCode;
+import org.cotato.gongmozip.domains.review.entity.Review;
+import org.cotato.gongmozip.domains.review.repository.ReviewRepository;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
 import org.cotato.gongmozip.domains.team.enums.TeamStatus;
 import org.springframework.data.domain.Page;
@@ -32,6 +34,7 @@ public class MyPageService {
     private final ContestScrapRepository contestScrapRepository;
     private final CharacterService characterService;
     private final org.cotato.gongmozip.domains.team.repository.TeamMemberRepository teamMemberRepository;
+    private final ReviewRepository reviewRepository;
 
     public MyPageMainResponse getMyPageMain(Long memberId) {
         Member member = getMember(memberId);
@@ -46,7 +49,7 @@ public class MyPageService {
                         List.of(TeamStatus.SUBMITTED, TeamStatus.COMPLETED),
                         PageRequest.of(0, 1))
                 .getTotalElements();
-        int reviewCount = 0;
+        int reviewCount = (int) reviewRepository.countByReviewee_Member_MemberId(memberId);
         CurrentCharacterResponse character =
                 characterService.findCurrentCharacter(member).orElse(null);
 
@@ -118,7 +121,8 @@ public class MyPageService {
     public ReviewStatisticsResponse getReviewStatistics(Long memberId) {
         validateMemberExists(memberId);
 
-        return MyPageConverter.toReviewStatisticsResponse();
+        List<Review> reviews = reviewRepository.findByReviewee_Member_MemberId(memberId);
+        return MyPageConverter.toReviewStatisticsResponse(reviews);
     }
 
     public ScrappedContestsResponse getScrappedContests(Long memberId, Integer page, Integer size) {
