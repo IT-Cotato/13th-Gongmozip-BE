@@ -23,4 +23,22 @@ public class InquiryResponse {
             LocalDateTime createdAt,
             String answerContent,
             LocalDateTime answeredAt) {}
+
+    // 관리자 문의 목록의 개별 항목
+    public record AdminInquirySummaryResponse(
+            Long inquiryId,
+            InquiryStatus status,
+            String title,
+            String contentPreview,
+            String email,
+            LocalDateTime createdAt) {}
+
+    // 관리자 문의 목록 (페이징 메타 포함)
+    public record AdminInquiryListResponse(
+            List<AdminInquirySummaryResponse> inquiries,
+            int page,
+            int size,
+            long totalElements,
+            int totalPages,
+            boolean hasNext) {}
 }
