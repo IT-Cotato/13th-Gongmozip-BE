@@ -118,6 +118,7 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
             WHERE tm.member.memberId = :memberId
               AND tm.status = :status
               AND t.status IN :completedStatuses
+              AND tm.isCompletedProjectDeleted = false
             """)
     List<TeamMember> findCompletedProjectsAll(
             @Param("memberId") Long memberId,

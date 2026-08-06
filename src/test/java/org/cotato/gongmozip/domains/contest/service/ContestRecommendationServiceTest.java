@@ -230,4 +230,60 @@ class ContestRecommendationServiceTest {
         assertThat(response.reason()).contains("리드러너");
         assertThat(response.reason()).contains("이전 완주 프로젝트인 '완주한 AI 해커톤' 등의 경험을 바탕으로");
     }
+
+    @DisplayName("추천된 공모전의 추천 사유 조회 시 삭제(숨김)된 완주 프로젝트는 추천 사유 생성 시 포함되지 않는다.")
+    @Test
+    void 추천된_공모전의_추천_사유_조회시_삭제된_완주_경험은_문구에_제외된다() {
+        // given
+        Long memberId = 1L;
+        Long contestId = 2L;
+        Member member = Member.builder().memberId(memberId).build();
+        Contest contest = Contest.builder()
+                .contestId(contestId)
+                .category(InterestCategory.IT_AI_TECH)
+                .status(ContestStatus.OPEN)
+                .applyStartAt(LocalDateTime.now())
+                .applyEndAt(LocalDateTime.now().plusDays(7))
+                .build();
+
+        Profile profile = Profile.builder()
+                .profileId(10L)
+                .member(member)
+                .interestCategories(List.of(InterestCategory.IT_AI_TECH))
+                .build();
+
+        SurveySubmission submission = SurveySubmission.builder()
+                .member(member)
+                .status(SubmissionStatus.SUBMITTED)
+                .characterType(CharacterType.LEAD_RUNNER)
+                .build();
+
+        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
+        given(contestRepository.findById(contestId)).willReturn(Optional.of(contest));
+        given(profileRepository.findAllByMemberOrderByUpdatedAtDesc(member))
+                .willReturn(Collections.singletonList(profile));
+
+        given(contestRepository.findAllWithFilterAndDeadlineAsc(
+                        any(),
+                        any(),
+                        any(),
+                        any(LocalDateTime.class),
+                        any(org.springframework.data.domain.Pageable.class)))
+                .willReturn(new PageImpl<>(Collections.singletonList(contest)));
+        given(aiClient.recommendContests(eq(InterestCategory.IT_AI_TECH), any(), any()))
+                .willReturn(Collections.singletonList(contestId));
+        given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.of(submission));
+        // Repository에서 삭제(숨김) 플래그 필터로 인해 조회되지 않는 것으로 모킹 (빈 리스트 반환)
+        given(teamMemberRepository.findCompletedProjectsAll(eq(memberId), any(), any()))
+                .willReturn(List.of());
+
+        // when
+        RecommendationReasonResponse response =
+                contestRecommendationService.getRecommendationReason(contestId, memberId);
+
+        // then
+        assertThat(response.reason()).contains("IT/AI/기술");
+        assertThat(response.reason()).contains("리드러너");
+        assertThat(response.reason()).doesNotContain("이전 완주 프로젝트인");
+    }
 }

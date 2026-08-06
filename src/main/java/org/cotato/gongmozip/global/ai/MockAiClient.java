@@ -9,6 +9,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.cotato.gongmozip.domains.contest.entity.Contest;
+import org.cotato.gongmozip.domains.contest.repository.ContestRepository;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
@@ -29,6 +31,7 @@ public class MockAiClient implements AiClient {
             "너는 대학생 공모전 팀 프로젝트를 돕는 챗봇이야. 팀원의 질문에 2~4문장으로, 바로 실행할 수 있는 " + "조언 위주로 한국어 반말 없이 정중하게 답해줘. 질문: ";
 
     private final GeminiClient geminiClient;
+    private final ContestRepository contestRepository;
 
     @Override
     public String generateSummary(String projectName, String role, String description) {
@@ -164,9 +167,6 @@ public class MockAiClient implements AiClient {
         return new Random(teamId * 31 + teamMemberId).nextLong();
     }
 
-    // 카테고리 내 마감이 가장 많이 남은 순서대로 최대 3개를 추천한다. 호출부
-    // (ChatbotOrchestrationService)가 이미 마감 내림차순으로 정렬해서 넘겨주므로, 여기서는
-    // 그 순서를 그대로 유지한 채 상위 N개만 자른다(더 이상 셔플하지 않음).
     @Override
     public List<Long> recommendContests(
             InterestCategory category, List<Long> openContestIds, List<String> completedContestTitles) {
@@ -174,7 +174,43 @@ public class MockAiClient implements AiClient {
                 "Rule-based contest recommendation (deadline desc) for category: {} with completed contests: {}",
                 category,
                 completedContestTitles);
-        return openContestIds.stream().limit(MAX_CONTEST_RECOMMENDATIONS).toList();
+
+        if (completedContestTitles == null || completedContestTitles.isEmpty() || openContestIds.isEmpty()) {
+            return openContestIds.stream().limit(MAX_CONTEST_RECOMMENDATIONS).toList();
+        }
+
+        // 완주 프로젝트 단어 토큰 수집
+        Set<String> completedTokens = completedContestTitles.stream()
+                .flatMap(title -> java.util.Arrays.stream(title.split("\\s+")))
+                .map(String::toLowerCase)
+                .filter(word -> word.length() > 1)
+                .collect(Collectors.toSet());
+
+        List<Contest> openContests = contestRepository.findAllById(openContestIds);
+
+        Map<Long, Integer> originalOrder = new java.util.HashMap<>();
+        for (int i = 0; i < openContestIds.size(); i++) {
+            originalOrder.put(openContestIds.get(i), i);
+        }
+
+        return openContests.stream()
+                .sorted(Comparator.comparingInt((Contest contest) -> {
+                            if (contest.getTitle() == null) return 0;
+                            String titleLower = contest.getTitle().toLowerCase();
+                            int matchCount = 0;
+                            for (String token : completedTokens) {
+                                if (titleLower.contains(token)) {
+                                    matchCount++;
+                                }
+                            }
+                            return matchCount;
+                        })
+                        .reversed()
+                        .thenComparing(
+                                contest -> originalOrder.getOrDefault(contest.getContestId(), Integer.MAX_VALUE)))
+                .limit(MAX_CONTEST_RECOMMENDATIONS)
+                .map(Contest::getContestId)
+                .toList();
     }
 
     @Override
