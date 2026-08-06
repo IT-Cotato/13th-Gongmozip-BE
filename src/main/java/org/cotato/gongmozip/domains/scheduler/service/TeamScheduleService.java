@@ -71,28 +71,41 @@ public class TeamScheduleService {
     /**
      * 공모전 후보/투표 마감까지 {@value #CONTEST_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE}분 이내로
      * 남았는데 아직 리마인더를 안 보낸 CONTEST_SELECTING 팀 id 목록을 조회한다. 마감이 이미
-     * 지난 팀도 포함될 수 있지만(스케줄러 주기 사이 지연), 어차피 같은 5분 주기의
-     * {@link #findDueContestVotingDeadlineTeamIds}가 곧 확정 처리하므로 무해하다.
+     * 지난 팀은 리마인더 카드가 "지금 투표하면 반영된다"는 잘못된 인상을 줄 수 있어(마감 확정
+     * 스케줄러가 아직 안 돌았을 뿐) 여기서 걸러낸다 — 최종 방어선은 {@code submitVote}의
+     * 마감 시각 검증이지만, 애초에 마감 지난 팀에게 리마인더를 보내지 않는 편이 낫다.
      */
     public List<Long> findDueContestVoteReminderTeamIds() {
-        LocalDateTime reminderThreshold =
-                LocalDateTime.now().plusMinutes(CONTEST_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime reminderThreshold = now.plusMinutes(CONTEST_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE);
         return teamRepository
                 .findByStatusAndContestCandidateDeadlineAtLessThanEqualAndContestVoteReminderNotifiedAtIsNull(
                         TeamStatus.CONTEST_SELECTING, reminderThreshold)
                 .stream()
+                .filter(team -> team.getContestCandidateDeadlineAt() != null
+                        && team.getContestCandidateDeadlineAt().isAfter(now))
                 .map(Team::getTeamId)
                 .toList();
     }
 
-    /** 한 팀에게 공모전 투표 마감 리마인더 카드를 발행한다(1회만, 팀 단위 트랜잭션). */
+    /**
+     * 한 팀에게 공모전 투표 마감 리마인더 카드를 발행한다(1회만, 팀 단위 트랜잭션). 대상 id
+     * 조회와 실제 발송 사이에 시간이 흐를 수 있으므로, 발송 직전에 마감 시각이 여전히 유효한
+     * 리마인더 구간(now ~ now+10분) 안인지 다시 검증한다.
+     */
     @Transactional
     public void sendContestVoteReminderForTeam(Long teamId) {
         Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
-        if (team.getStatus() != TeamStatus.CONTEST_SELECTING || team.getContestVoteReminderNotifiedAt() != null) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime deadline = team.getContestCandidateDeadlineAt();
+        if (team.getStatus() != TeamStatus.CONTEST_SELECTING
+                || team.getContestVoteReminderNotifiedAt() != null
+                || deadline == null
+                || !deadline.isAfter(now)
+                || deadline.isAfter(now.plusMinutes(CONTEST_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE))) {
             return;
         }
-        team.markContestVoteReminderNotified(LocalDateTime.now());
+        team.markContestVoteReminderNotified(now);
         chatService.postChatbotCardMessage(
                 team, MessageType.CONTEST_VOTE_REMINDER_CARD, CONTEST_VOTE_REMINDER_MESSAGE, null);
     }
@@ -158,14 +171,21 @@ public class TeamScheduleService {
                 .toList();
     }
 
-    /** 한 팀에게 제출 여부 확인 재알림 카드를 발행하고 다음 재알림 시각을 다시 미룬다(팀 단위 트랜잭션). */
+    /**
+     * 한 팀에게 제출 여부 확인 재알림 카드를 발행하고 다음 재알림 시각을 다시 미룬다(팀 단위
+     * 트랜잭션). 대상 id 조회 이후 팀장이 "미완료"로 다시 응답해 재알림 시각이 미래로 갱신됐을
+     * 수 있으므로, 발송 직전에 재알림 시각이 아직 지났는지 다시 검증한다.
+     */
     @Transactional
     public void sendSubmissionCheckReminderForTeam(Long teamId) {
         Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
-        if (team.getStatus() != TeamStatus.IN_PROGRESS || team.getSubmissionCheckReminderAt() == null) {
+        LocalDateTime now = LocalDateTime.now();
+        if (team.getStatus() != TeamStatus.IN_PROGRESS
+                || team.getSubmissionCheckReminderAt() == null
+                || team.getSubmissionCheckReminderAt().isAfter(now)) {
             return;
         }
-        team.scheduleSubmissionCheckReminder(LocalDateTime.now().plusHours(SUBMISSION_CHECK_REMINDER_HOURS));
+        team.scheduleSubmissionCheckReminder(now.plusHours(SUBMISSION_CHECK_REMINDER_HOURS));
         chatService.postChatbotCardMessage(
                 team, MessageType.SUBMISSION_CHECK_CARD, SUBMISSION_CHECK_REMINDER_MESSAGE, null);
     }

@@ -113,6 +113,15 @@ Figma 목업에 "제출 여부 미진행시" 화면이 관련 화면으로 명�
   (`leaderSelectionDeadlineAt`과 동일한 이유, 데이터 정리 문제일 뿐 기능 영향 없음).
 - 테스트: `TeamProgressServiceTest`, `TeamScheduleServiceTest`, `TeamSchedulerJobsTest`.
 
+> ⚠️ **race/인덱스 보완 (2026-08-06, CodeRabbit 리뷰 반영)**: 두 가지를 추가로 고쳤다.
+> 1. `sendSubmissionCheckReminderForTeam`이 재알림 시각 존재 여부만 보고 발송했다 — 대상 id
+>    조회 이후 팀장이 "미완료"로 다시 응답해 재알림 시각이 미래로 갱신됐어도 이를 무시하고
+>    즉시 중복 카드를 발행할 수 있었다. 발송 직전에 재알림 시각이 실제로 지났는지(`isAfter(now)`
+>    가 아닌지) 다시 검증하도록 수정.
+> 2. `findDueSubmissionCheckReminderTeamIds()`가 5분마다 `status`/`submission_check_reminder_at`
+>    으로 스캔하는데 `teams`에 해당 인덱스가 없었다 — V30에 복합 인덱스
+>    (`idx_teams_status_submission_check_reminder_at`)를 추가했다.
+
 ## 미정 / 추후 확인 필요
 
 - ~~`Team.status = SUBMITTED` 이후 "팀원 리뷰 단계로 이동"~~ → Phase 9에서 연결 완료.

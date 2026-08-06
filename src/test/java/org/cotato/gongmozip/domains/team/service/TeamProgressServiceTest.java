@@ -153,13 +153,14 @@ class TeamProgressServiceTest {
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(leader));
 
         // when
+        LocalDateTime before = LocalDateTime.now();
         teamProgressService.submitCompletion(1L, 10L, false);
+        LocalDateTime after = LocalDateTime.now();
 
         // then
         assertThat(team.getStatus()).isEqualTo(TeamStatus.IN_PROGRESS);
         assertThat(team.isSubmitted()).isFalse();
-        assertThat(team.getSubmissionCheckReminderAt())
-                .isAfter(LocalDateTime.now().plusHours(1));
+        assertThat(team.getSubmissionCheckReminderAt()).isBetween(before.plusHours(2), after.plusHours(2));
         verify(collaborationPointService, never()).awardPoint(any(), any(), any());
         verify(chatService, times(1)).postSystemMessage(eq(team), anyString());
     }

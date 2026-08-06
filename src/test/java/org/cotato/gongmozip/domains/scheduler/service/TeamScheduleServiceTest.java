@@ -98,8 +98,11 @@ class TeamScheduleServiceTest {
     @Test
     void 공모전_투표_마감_10분_이내로_남은_팀_id_목록을_조회한다() {
         // given
-        Team team1 =
-                Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
+        Team team1 = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.CONTEST_SELECTING)
+                .contestCandidateDeadlineAt(java.time.LocalDateTime.now().plusMinutes(5))
+                .build();
         given(
                         teamRepository
                                 .findByStatusAndContestCandidateDeadlineAtLessThanEqualAndContestVoteReminderNotifiedAtIsNull(
@@ -113,12 +116,56 @@ class TeamScheduleServiceTest {
         assertThat(dueTeamIds).containsExactly(1L);
     }
 
+    @DisplayName("마감이 이미 지난 팀은 리마인더 조회 대상에서 제외된다.")
+    @Test
+    void 마감이_이미_지난_팀은_리마인더_조회_대상에서_제외된다() {
+        // given
+        Team expired = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.CONTEST_SELECTING)
+                .contestCandidateDeadlineAt(java.time.LocalDateTime.now().minusMinutes(1))
+                .build();
+        given(
+                        teamRepository
+                                .findByStatusAndContestCandidateDeadlineAtLessThanEqualAndContestVoteReminderNotifiedAtIsNull(
+                                        eq(TeamStatus.CONTEST_SELECTING), any()))
+                .willReturn(List.of(expired));
+
+        // when
+        List<Long> dueTeamIds = teamScheduleService.findDueContestVoteReminderTeamIds();
+
+        // then
+        assertThat(dueTeamIds).isEmpty();
+    }
+
+    @DisplayName("마감이 이미 지난 팀에는 리마인더 카드를 발행하지 않는다.")
+    @Test
+    void 마감이_이미_지난_팀에는_리마인더_카드를_발행하지_않는다() {
+        // given
+        Team team = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.CONTEST_SELECTING)
+                .contestCandidateDeadlineAt(java.time.LocalDateTime.now().minusMinutes(1))
+                .build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        teamScheduleService.sendContestVoteReminderForTeam(1L);
+
+        // then
+        assertThat(team.getContestVoteReminderNotifiedAt()).isNull();
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
+
     @DisplayName("공모전 투표 마감이 임박한 팀에게 리마인더 카드를 발행하고 알림 처리한다.")
     @Test
     void 공모전_투표_마감이_임박한_팀에게_리마인더_카드를_발행하고_알림_처리한다() {
         // given
-        Team team =
-                Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
+        Team team = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.CONTEST_SELECTING)
+                .contestCandidateDeadlineAt(java.time.LocalDateTime.now().plusMinutes(5))
+                .build();
         given(teamRepository.findById(1L)).willReturn(Optional.of(team));
 
         // when
@@ -253,6 +300,21 @@ class TeamScheduleServiceTest {
                 .isAfter(java.time.LocalDateTime.now().plusHours(1));
         verify(chatService)
                 .postChatbotCardMessage(eq(team), eq(MessageType.SUBMISSION_CHECK_CARD), anyString(), eq(null));
+    }
+
+    @DisplayName("재알림 시각이 아직 미래로 재예약돼 있으면(예: 방금 미완료 응답) 카드를 발행하지 않는다.")
+    @Test
+    void 재알림_시각이_아직_미래이면_카드를_발행하지_않는다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.IN_PROGRESS).build();
+        team.scheduleSubmissionCheckReminder(java.time.LocalDateTime.now().plusHours(2));
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        teamScheduleService.sendSubmissionCheckReminderForTeam(1L);
+
+        // then
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
     }
 
     @DisplayName("이미 진행 완료로 응답해 SUBMITTED가 된 팀은 재알림하지 않는다.")
