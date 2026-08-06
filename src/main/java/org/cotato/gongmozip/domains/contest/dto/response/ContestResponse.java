@@ -77,4 +77,17 @@ public final class ContestResponse {
             Long contestCandidateId, ContestSummaryResponse contest, Long addedByTeamMemberId) {}
 
     public record ContestCandidateListResponse(List<ContestCandidateItemResponse> candidates) {}
+
+    // 현재 라운드의 투표 진행 상황과 후보별 득표수. 전원이 투표를 마치기 전에도 조회할 수 있어
+    // "N명 참여중" 실시간 카운터와 후보별 득표 막대그래프를 그리는 데 쓴다(투표 자체를 확정하지
+    // 않음 — 확정 여부는 팀 채팅에 CONTEST_RESULT_CARD가 오는지로 판단).
+    public record ContestVoteStatusResponse(
+            int round,
+            int requiredVoterCount,
+            long participatedVoterCount,
+            boolean myVoted,
+            List<ContestVoteTallyItemResponse> results) {}
+
+    public record ContestVoteTallyItemResponse(
+            Long contestCandidateId, ContestSummaryResponse contest, long voteCount) {}
 }

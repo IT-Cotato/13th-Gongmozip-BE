@@ -94,6 +94,58 @@ class TeamScheduleServiceTest {
         verify(contestVotingService, never()).resolveDeadlineIfDue(any());
     }
 
+    @DisplayName("공모전 투표 마감 10분 이내로 남았고 아직 리마인더를 안 보낸 팀 id 목록을 조회한다.")
+    @Test
+    void 공모전_투표_마감_10분_이내로_남은_팀_id_목록을_조회한다() {
+        // given
+        Team team1 =
+                Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
+        given(
+                        teamRepository
+                                .findByStatusAndContestCandidateDeadlineAtLessThanEqualAndContestVoteReminderNotifiedAtIsNull(
+                                        eq(TeamStatus.CONTEST_SELECTING), any()))
+                .willReturn(List.of(team1));
+
+        // when
+        List<Long> dueTeamIds = teamScheduleService.findDueContestVoteReminderTeamIds();
+
+        // then
+        assertThat(dueTeamIds).containsExactly(1L);
+    }
+
+    @DisplayName("공모전 투표 마감이 임박한 팀에게 리마인더 카드를 발행하고 알림 처리한다.")
+    @Test
+    void 공모전_투표_마감이_임박한_팀에게_리마인더_카드를_발행하고_알림_처리한다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        teamScheduleService.sendContestVoteReminderForTeam(1L);
+
+        // then
+        assertThat(team.getContestVoteReminderNotifiedAt()).isNotNull();
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.CONTEST_VOTE_REMINDER_CARD), anyString(), eq(null));
+    }
+
+    @DisplayName("이미 공모전 투표 리마인더를 보낸 팀은 다시 발행하지 않는다.")
+    @Test
+    void 이미_공모전_투표_리마인더를_보낸_팀은_다시_발행하지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
+        team.markContestVoteReminderNotified(java.time.LocalDateTime.now());
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        teamScheduleService.sendContestVoteReminderForTeam(1L);
+
+        // then
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
+
     @DisplayName("중간점검 시각이 지난 팀에게 진행률 체크 카드를 발행하고 알림 처리한다.")
     @Test
     void 중간점검_시각이_지난_팀에게_진행률_체크_카드를_발행하고_알림_처리한다() {
@@ -149,6 +201,8 @@ class TeamScheduleServiceTest {
 
         // then
         assertThat(team.getSubmissionCheckNotifiedAt()).isNotNull();
+        assertThat(team.getSubmissionCheckReminderAt())
+                .isAfter(java.time.LocalDateTime.now().plusHours(1));
         verify(chatService)
                 .postChatbotCardMessage(eq(team), eq(MessageType.SUBMISSION_CHECK_CARD), anyString(), eq(null));
     }
@@ -163,6 +217,53 @@ class TeamScheduleServiceTest {
 
         // when
         teamScheduleService.sendSubmissionCheckForTeam(1L);
+
+        // then
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
+
+    @DisplayName("제출 여부 재알림 시각이 지난 팀 id 목록을 조회한다.")
+    @Test
+    void 제출_여부_재알림_시각이_지난_팀_id_목록을_조회한다() {
+        // given
+        Team team1 = Team.builder().teamId(1L).status(TeamStatus.IN_PROGRESS).build();
+        given(teamRepository.findByStatusAndSubmissionCheckReminderAtLessThanEqual(eq(TeamStatus.IN_PROGRESS), any()))
+                .willReturn(List.of(team1));
+
+        // when
+        List<Long> dueTeamIds = teamScheduleService.findDueSubmissionCheckReminderTeamIds();
+
+        // then
+        assertThat(dueTeamIds).containsExactly(1L);
+    }
+
+    @DisplayName("진행 완료 응답이 없는 팀에게 재알림 카드를 발행하고 다음 재알림 시각을 다시 미룬다.")
+    @Test
+    void 진행_완료_응답이_없는_팀에게_재알림_카드를_발행하고_다음_재알림_시각을_다시_미룬다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.IN_PROGRESS).build();
+        team.scheduleSubmissionCheckReminder(java.time.LocalDateTime.now().minusMinutes(1));
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        teamScheduleService.sendSubmissionCheckReminderForTeam(1L);
+
+        // then
+        assertThat(team.getSubmissionCheckReminderAt())
+                .isAfter(java.time.LocalDateTime.now().plusHours(1));
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.SUBMISSION_CHECK_CARD), anyString(), eq(null));
+    }
+
+    @DisplayName("이미 진행 완료로 응답해 SUBMITTED가 된 팀은 재알림하지 않는다.")
+    @Test
+    void 이미_진행_완료로_응답해_SUBMITTED가_된_팀은_재알림하지_않는다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.SUBMITTED).build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        teamScheduleService.sendSubmissionCheckReminderForTeam(1L);
 
         // then
         verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());

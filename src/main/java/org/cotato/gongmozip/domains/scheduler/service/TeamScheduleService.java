@@ -36,6 +36,12 @@ public class TeamScheduleService {
     private static final String SUBMISSION_CHECK_MESSAGE = "공모전 마감일 하루 전입니다. 공모전 제출을 완료했다면 '진행 완료'를, 완료하지 못했다면 '미완료'를 "
             + "선택해주세요. 해당 버튼은 팀장님만 선택할 수 있습니다. 팀장님이 '진행 완료'를 선택하면 본 공모전 "
             + "프로젝트가 종료되며, 팀원 리뷰 단계로 이동합니다.";
+    private static final String SUBMISSION_CHECK_REMINDER_MESSAGE = "프로젝트가 진행완료되었으면, 진행완료 버튼을 눌러주세요.";
+    // "진행 완료"로 응답하지 않으면 이 간격으로 계속 재알림한다(docs/decisions/07-scheduler.md).
+    private static final int SUBMISSION_CHECK_REMINDER_HOURS = 2;
+    private static final String CONTEST_VOTE_REMINDER_MESSAGE = "공모전 투표 완료하셨나요? 투표마감까지 10분 남았어요!";
+    // 공모전 후보/투표 마감 몇 분 전에 리마인더를 보낼지 (docs/decisions/04-contest-voting.md).
+    private static final int CONTEST_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE = 10;
     // 인사 유도 시작(=팀 생성) 후 이 시간 안에 전원이 인사를 마치지 않으면 강제로 다음 단계로 넘긴다
     // (기능명세서 5.1.3.1 E1).
     private static final int GREETING_TIMEOUT_HOURS = 2;
@@ -60,6 +66,35 @@ public class TeamScheduleService {
     @Transactional
     public void resolveContestVotingDeadlineForTeam(Long teamId) {
         contestVotingService.resolveDeadlineIfDue(teamId);
+    }
+
+    /**
+     * 공모전 후보/투표 마감까지 {@value #CONTEST_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE}분 이내로
+     * 남았는데 아직 리마인더를 안 보낸 CONTEST_SELECTING 팀 id 목록을 조회한다. 마감이 이미
+     * 지난 팀도 포함될 수 있지만(스케줄러 주기 사이 지연), 어차피 같은 5분 주기의
+     * {@link #findDueContestVotingDeadlineTeamIds}가 곧 확정 처리하므로 무해하다.
+     */
+    public List<Long> findDueContestVoteReminderTeamIds() {
+        LocalDateTime reminderThreshold =
+                LocalDateTime.now().plusMinutes(CONTEST_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE);
+        return teamRepository
+                .findByStatusAndContestCandidateDeadlineAtLessThanEqualAndContestVoteReminderNotifiedAtIsNull(
+                        TeamStatus.CONTEST_SELECTING, reminderThreshold)
+                .stream()
+                .map(Team::getTeamId)
+                .toList();
+    }
+
+    /** 한 팀에게 공모전 투표 마감 리마인더 카드를 발행한다(1회만, 팀 단위 트랜잭션). */
+    @Transactional
+    public void sendContestVoteReminderForTeam(Long teamId) {
+        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        if (team.getStatus() != TeamStatus.CONTEST_SELECTING || team.getContestVoteReminderNotifiedAt() != null) {
+            return;
+        }
+        team.markContestVoteReminderNotified(LocalDateTime.now());
+        chatService.postChatbotCardMessage(
+                team, MessageType.CONTEST_VOTE_REMINDER_CARD, CONTEST_VOTE_REMINDER_MESSAGE, null);
     }
 
     /** 중간점검 시각이 지났는데 아직 알림을 안 보낸 IN_PROGRESS 팀 id 목록을 조회한다. */
@@ -93,15 +128,46 @@ public class TeamScheduleService {
                 .toList();
     }
 
-    /** 한 팀에게 제출 여부 확인 카드를 발행한다(1회만, 팀 단위 트랜잭션). */
+    /**
+     * 한 팀에게 제출 여부 확인 카드를 최초 발행한다(1회만, 팀 단위 트랜잭션). "진행 완료"로
+     * 응답하지 않으면 {@link #findDueSubmissionCheckReminderTeamIds}가 이어서 재알림한다.
+     */
     @Transactional
     public void sendSubmissionCheckForTeam(Long teamId) {
         Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
         if (team.getStatus() != TeamStatus.IN_PROGRESS || team.getSubmissionCheckNotifiedAt() != null) {
             return;
         }
-        team.markSubmissionCheckNotified(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        team.markSubmissionCheckNotified(now);
+        team.scheduleSubmissionCheckReminder(now.plusHours(SUBMISSION_CHECK_REMINDER_HOURS));
         chatService.postChatbotCardMessage(team, MessageType.SUBMISSION_CHECK_CARD, SUBMISSION_CHECK_MESSAGE, null);
+    }
+
+    /**
+     * "진행 완료"로 아직 응답하지 않아 재알림 시각이 지난 IN_PROGRESS 팀 id 목록을 조회한다
+     * (Figma "제출 여부 미진행시"). 최초 발송, 팀장의 "미완료" 응답, 이 재알림 발송 자체가 모두
+     * {@code submissionCheckReminderAt}을 now+2시간으로 계속 미루므로, "진행 완료"로 팀 상태가
+     * SUBMITTED로 바뀌기 전까지 2시간 간격으로 반복된다.
+     */
+    public List<Long> findDueSubmissionCheckReminderTeamIds() {
+        return teamRepository
+                .findByStatusAndSubmissionCheckReminderAtLessThanEqual(TeamStatus.IN_PROGRESS, LocalDateTime.now())
+                .stream()
+                .map(Team::getTeamId)
+                .toList();
+    }
+
+    /** 한 팀에게 제출 여부 확인 재알림 카드를 발행하고 다음 재알림 시각을 다시 미룬다(팀 단위 트랜잭션). */
+    @Transactional
+    public void sendSubmissionCheckReminderForTeam(Long teamId) {
+        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        if (team.getStatus() != TeamStatus.IN_PROGRESS || team.getSubmissionCheckReminderAt() == null) {
+            return;
+        }
+        team.scheduleSubmissionCheckReminder(LocalDateTime.now().plusHours(SUBMISSION_CHECK_REMINDER_HOURS));
+        chatService.postChatbotCardMessage(
+                team, MessageType.SUBMISSION_CHECK_CARD, SUBMISSION_CHECK_REMINDER_MESSAGE, null);
     }
 
     /** 인사 유도 시작(팀 생성) 후 타임아웃이 지났는데도 여전히 GREETING인 팀 id 목록을 조회한다. */

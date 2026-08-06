@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.ContestCandidateItemResponse;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.ContestCandidateListResponse;
+import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.ContestVoteTallyItemResponse;
 import org.cotato.gongmozip.domains.contest.entity.ContestCandidate;
 
 public final class ContestVotingConverter {
@@ -24,5 +25,13 @@ public final class ContestVotingConverter {
                 .map(candidate -> toContestCandidateItemResponse(candidate, now))
                 .toList();
         return new ContestCandidateListResponse(items);
+    }
+
+    public static ContestVoteTallyItemResponse toContestVoteTallyItemResponse(
+            ContestCandidate contestCandidate, long voteCount, LocalDateTime now) {
+        return new ContestVoteTallyItemResponse(
+                contestCandidate.getContestCandidateId(),
+                ContestConverter.toContestSummaryResponse(contestCandidate.getContest(), now),
+                voteCount);
     }
 }

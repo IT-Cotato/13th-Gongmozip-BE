@@ -39,6 +39,22 @@ class TeamSchedulerJobsTest {
         verify(teamScheduleService).resolveContestVotingDeadlineForTeam(3L);
     }
 
+    @DisplayName("한 팀의 공모전 투표 리마인더 발행이 실패해도 나머지 팀은 계속 처리된다.")
+    @Test
+    void 한_팀의_공모전_투표_리마인더_발행이_실패해도_나머지_팀은_계속_처리된다() {
+        // given
+        given(teamScheduleService.findDueContestVoteReminderTeamIds()).willReturn(List.of(1L, 2L, 3L));
+        willThrow(new RuntimeException("boom")).given(teamScheduleService).sendContestVoteReminderForTeam(2L);
+
+        // when
+        teamSchedulerJobs.sendContestVoteReminders();
+
+        // then
+        verify(teamScheduleService).sendContestVoteReminderForTeam(1L);
+        verify(teamScheduleService).sendContestVoteReminderForTeam(2L);
+        verify(teamScheduleService).sendContestVoteReminderForTeam(3L);
+    }
+
     @DisplayName("한 팀의 중간점검 알림 발행이 실패해도 나머지 팀은 계속 처리된다.")
     @Test
     void 한_팀의_중간점검_알림_발행이_실패해도_나머지_팀은_계속_처리된다() {
@@ -67,6 +83,21 @@ class TeamSchedulerJobsTest {
         // then
         verify(teamScheduleService).sendSubmissionCheckForTeam(1L);
         verify(teamScheduleService).sendSubmissionCheckForTeam(2L);
+    }
+
+    @DisplayName("한 팀의 제출확인 재알림 발행이 실패해도 나머지 팀은 계속 처리된다.")
+    @Test
+    void 한_팀의_제출확인_재알림_발행이_실패해도_나머지_팀은_계속_처리된다() {
+        // given
+        given(teamScheduleService.findDueSubmissionCheckReminderTeamIds()).willReturn(List.of(1L, 2L));
+        willThrow(new RuntimeException("boom")).given(teamScheduleService).sendSubmissionCheckReminderForTeam(1L);
+
+        // when
+        teamSchedulerJobs.sendSubmissionCheckReminders();
+
+        // then
+        verify(teamScheduleService).sendSubmissionCheckReminderForTeam(1L);
+        verify(teamScheduleService).sendSubmissionCheckReminderForTeam(2L);
     }
 
     @DisplayName("한 팀의 인사 유도 강제 전이가 실패해도 나머지 팀은 계속 처리된다.")

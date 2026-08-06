@@ -87,6 +87,18 @@ public class Team extends BaseEntity {
     @Column(name = "submission_check_notified_at")
     private LocalDateTime submissionCheckNotifiedAt;
 
+    // 제출 여부 확인에 아직 "진행 완료"로 응답하지 않았을 때 다음 재알림을 보낼 시각(Figma
+    // "제출 여부 미진행시"). 최초 발송, 팀장의 "미완료" 응답, 재알림 발송 시점마다 now+2시간으로
+    // 계속 미뤄지며, "진행 완료"로 상태가 SUBMITTED로 바뀌면 더 이상 조회 대상이 아니게 되어
+    // 자연히 멈춘다(명시적으로 null로 지우지 않음 — leaderSelectionDeadlineAt과 동일한 이유).
+    @Column(name = "submission_check_reminder_at")
+    private LocalDateTime submissionCheckReminderAt;
+
+    // 공모전 투표 마감 10분 전 리마인더가 이미 발행되었는지 추적하는 멱등성 플래그(스케줄러
+    // 중복 발행 방지, docs/decisions/04-contest-voting.md).
+    @Column(name = "contest_vote_reminder_notified_at")
+    private LocalDateTime contestVoteReminderNotifiedAt;
+
     @Column(name = "submitted", nullable = false)
     private boolean submitted;
 
@@ -126,6 +138,10 @@ public class Team extends BaseEntity {
         this.progressCheckNotifiedAt = notifiedAt;
     }
 
+    public void markContestVoteReminderNotified(LocalDateTime notifiedAt) {
+        this.contestVoteReminderNotifiedAt = notifiedAt;
+    }
+
     public void recordProgress(int progressPercent, LocalDateTime respondedAt) {
         this.progressPercent = progressPercent;
         this.progressCheckRespondedAt = respondedAt;
@@ -133,6 +149,10 @@ public class Team extends BaseEntity {
 
     public void markSubmissionCheckNotified(LocalDateTime notifiedAt) {
         this.submissionCheckNotifiedAt = notifiedAt;
+    }
+
+    public void scheduleSubmissionCheckReminder(LocalDateTime reminderAt) {
+        this.submissionCheckReminderAt = reminderAt;
     }
 
     public void markSubmitted() {
