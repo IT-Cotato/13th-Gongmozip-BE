@@ -37,13 +37,8 @@ public class MyPageService {
         Member member = getMember(memberId);
 
         int scrapCount = contestScrapRepository.countByMember(member);
-        int ongoingProjectCount = (int) teamMemberRepository
-                .findOngoingProjects(
-                        memberId,
-                        TeamMemberStatus.ACTIVE,
-                        List.of(TeamStatus.SUBMITTED, TeamStatus.COMPLETED),
-                        PageRequest.of(0, 1))
-                .getTotalElements();
+        int ongoingProjectCount = teamMemberRepository.countOngoingProjects(
+                memberId, TeamMemberStatus.ACTIVE, List.of(TeamStatus.SUBMITTED, TeamStatus.COMPLETED));
         int completedProjectCount = (int) teamMemberRepository
                 .findCompletedProjects(
                         memberId,

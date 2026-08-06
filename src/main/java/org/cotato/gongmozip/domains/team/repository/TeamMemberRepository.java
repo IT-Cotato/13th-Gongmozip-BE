@@ -71,6 +71,19 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
             Pageable pageable);
 
     @Query(
+            """
+            SELECT COUNT(tm) FROM TeamMember tm
+            JOIN tm.team t
+            WHERE tm.member.memberId = :memberId
+              AND tm.status = :status
+              AND t.status NOT IN :completedStatuses
+            """)
+    int countOngoingProjects(
+            @Param("memberId") Long memberId,
+            @Param("status") TeamMemberStatus status,
+            @Param("completedStatuses") List<TeamStatus> completedStatuses);
+
+    @Query(
             value =
                     """
             SELECT tm FROM TeamMember tm

@@ -71,8 +71,7 @@ class MyPageServiceTest {
         // given
         given(memberRepository.findById(1L)).willReturn(Optional.of(testMember));
         given(contestScrapRepository.countByMember(testMember)).willReturn(3);
-        given(teamMemberRepository.findOngoingProjects(any(), any(), any(), any()))
-                .willReturn(new PageImpl<>(List.of()));
+        given(teamMemberRepository.countOngoingProjects(any(), any(), any())).willReturn(0);
         given(teamMemberRepository.findCompletedProjects(any(), any(), any(), any()))
                 .willReturn(new PageImpl<>(List.of()));
 
