@@ -72,7 +72,7 @@ public class MyPageService {
                         memberId,
                         TeamMemberStatus.ACTIVE,
                         List.of(TeamStatus.SUBMITTED, TeamStatus.COMPLETED),
-                        PageRequest.of(page, size));
+                        PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "team.completedAt", "team.updatedAt")));
 
         return MyPageConverter.toCompletedProjectsResponse(teamMemberPage);
     }

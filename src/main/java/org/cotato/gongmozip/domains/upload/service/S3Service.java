@@ -9,6 +9,8 @@ import org.cotato.gongmozip.domains.upload.exception.UploadException;
 import org.cotato.gongmozip.domains.upload.exception.codes.UploadErrorCode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
@@ -26,6 +28,7 @@ public class S3Service {
             "webp", "image/webp");
 
     private final S3Presigner s3Presigner;
+    private final S3Client s3Client;
 
     @Value("${cloud.aws.s3.bucket}")
     private String bucketName;
@@ -119,5 +122,26 @@ public class S3Service {
     private String generateUniqueFileName(String fileName) {
         String extension = getFileExtension(fileName).toLowerCase();
         return UUID.randomUUID() + "." + extension;
+    }
+
+    public void deleteFile(String imageUrl) {
+        if (imageUrl == null || imageUrl.isBlank()) {
+            return;
+        }
+
+        String domainPattern = cloudFrontDomain.endsWith("/") ? cloudFrontDomain : cloudFrontDomain + "/";
+
+        if (imageUrl.startsWith(domainPattern)) {
+            String objectKey = imageUrl.substring(domainPattern.length());
+            try {
+                DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(objectKey)
+                        .build();
+                s3Client.deleteObject(deleteObjectRequest);
+            } catch (Exception e) {
+                // Log and ignore to prevent blocking user profile updates if S3 deletion fails
+            }
+        }
     }
 }

@@ -61,7 +61,8 @@ public class MyPageConverter {
                     String medal = calculateMedal(team);
                     String award = null;
 
-                    return new CompletedProjectItem(contestId, contestTitle, completedAtStr, medal, award);
+                    return new CompletedProjectItem(
+                            team.getTeamId(), contestId, contestTitle, completedAtStr, medal, award);
                 })
                 .toList();
 

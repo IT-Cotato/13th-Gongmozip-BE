@@ -150,6 +150,12 @@ public class MemberService {
         Member member = memberRepository
                 .findById(memberId)
                 .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
+
+        String oldImageUrl = member.getProfileImageUrl();
+        if (oldImageUrl != null && !oldImageUrl.equals(request.profileImageUrl())) {
+            s3Service.deleteFile(oldImageUrl);
+        }
+
         member.updateProfileImage(request.profileImageUrl());
     }
 }
