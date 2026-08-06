@@ -86,11 +86,19 @@ Figma 목업에는 마감 임박 시 "공모전 투표 완료하셨나요? 투�
   `sendContestVoteReminderForTeam(teamId)`가 `MessageType.CONTEST_VOTE_REMINDER_CARD`(메타데이터
   없음)로 안내 카드를 발행한다.
 - `TeamSchedulerJobs.sendContestVoteReminders()` — 마감 확정 스케줄러와 동일하게 5분 간격.
-- 마감이 이미 지난 팀도 조회 대상에 잠깐 걸릴 수 있지만(스케줄러 주기 사이 지연), 같은 5분
-  주기의 마감 확정 잡이 곧 처리하므로 무해하다고 판단해 별도 하한 조건은 추가하지 않았다.
 - 프론트는 리마인더 카드의 버튼 라벨("투표하기"/"결과 보기")을 서버가 정해주지 않는다 — 아래
   `GET .../contest-candidates/votes`의 `myVoted`로 직접 판단해야 한다.
 - 테스트: `TeamScheduleServiceTest`, `TeamSchedulerJobsTest`.
+
+> ⚠️ **마감 이후 리마인더/투표 차단 (2026-08-06, CodeRabbit 리뷰 반영)**: 처음엔 "마감이 지난
+> 팀도 리마인더 조회에 잠깐 걸릴 수 있지만 같은 5분 주기의 마감 확정 잡이 곧 처리하니
+> 무해하다"고 판단해 하한 조건을 안 뒀다. 그런데 리마인더 카드의 버튼은 사용자를 실제 투표
+> 흐름(`submitVote`)으로 보내고, `submitVote` 자체는 마감 시각을 검증하지 않았다 — 마감 확정
+> 잡이 늦게 돌면 마감 후 투표가 그대로 집계에 반영될 수 있는 진짜 race였다. 두 군데를 고쳤다:
+> `findDueContestVoteReminderTeamIds`/`sendContestVoteReminderForTeam`에
+> `contestCandidateDeadlineAt > now` 하한을 추가했고(발송 직전에도 재검증),
+> `ContestVotingService.submitVote`가 마감 시각이 지나면 `CONTEST_VOTE_DEADLINE_PASSED`로
+> 거부하도록 방어선을 하나 더 뒀다.
 
 ## 투표 진행 상황 조회 API (2026-08-06, Figma 5.1.3.3 커버리지 점검 중 발견)
 
@@ -113,6 +121,15 @@ Figma의 "공모전 투표" 바텀시트("N명 참여중..")와 "투표 결과" 
 - 라운드/후보 자격 판정 로직(`currentRound`, `eligibleCandidates`)을 `submitVote`와 그대로
   공유해 투표 처리와 조회 결과가 항상 같은 라운드 기준으로 일치한다.
 - 테스트: `ContestVotingServiceTest`(득표 집계·참여 인원·`myVoted` 검증).
+
+> ⚠️ **확정된 팀 조회 버그 정정 (2026-08-06, CodeRabbit 리뷰 반영)**: `currentRound`는 "직전
+> 라운드가 꽉 찼으면 다음 라운드로 넘어간다"는 전제로 동작하는데, 팀이 이미 공모전을 확정해
+> `CONTEST_SELECTING`을 벗어난 뒤에도 이 로직을 그대로 썼다. 그 결과 확정 직후
+> `getVoteStatus`를 호출하면 승자를 결정지은 마지막 라운드가 아니라 그다음(투표가 하나도 없는)
+> 라운드를 조회해 모든 후보의 득표수가 0으로 보이는 버그가 있었다. 팀 상태가
+> `CONTEST_SELECTING`일 때만 `currentRound`로 다음 라운드를 예측하고, 그 외(확정됨)에는
+> 실제 표가 쌓인 마지막 라운드(`lastVotedRound`, `findMaxRoundByTeamId`)를 그대로 조회하도록
+> 수정했다. 단독 1위 확정과 동률 재투표 끝 확정 두 케이스 모두 회귀 테스트를 추가했다.
 
 ## 미정 / 추후 확인 필요
 
