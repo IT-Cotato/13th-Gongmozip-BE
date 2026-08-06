@@ -148,6 +148,37 @@ class MyPageServiceTest {
     }
 
     @Test
+    @DisplayName("완료 프로젝트 조회 - 비어있지 않은 완료 프로젝트 목록 조회 시 DTO에 teamId 및 메달 정보가 정상 반영된다.")
+    void getCompletedProjects_nonEmpty_success() {
+        // given
+        given(memberRepository.existsById(1L)).willReturn(true);
+
+        org.cotato.gongmozip.domains.team.entity.Team team = org.cotato.gongmozip.domains.team.entity.Team.builder()
+                .teamId(10L)
+                .status(org.cotato.gongmozip.domains.team.enums.TeamStatus.SUBMITTED)
+                .contestDecidedAt(LocalDateTime.of(2026, 8, 1, 12, 0))
+                .completedAt(LocalDateTime.of(2026, 8, 5, 12, 0))
+                .build();
+        org.cotato.gongmozip.domains.team.entity.TeamMember teamMember =
+                org.cotato.gongmozip.domains.team.entity.TeamMember.builder()
+                        .team(team)
+                        .build();
+
+        given(teamMemberRepository.findCompletedProjects(
+                        eq(1L), eq(org.cotato.gongmozip.domains.team.enums.TeamMemberStatus.ACTIVE), any(), any()))
+                .willReturn(new PageImpl<>(List.of(teamMember)));
+
+        // when
+        CompletedProjectsResponse response = myPageService.getCompletedProjects(1L, 0, 10);
+
+        // then
+        assertThat(response).isNotNull();
+        assertThat(response.projects()).hasSize(1);
+        assertThat(response.projects().get(0).teamId()).isEqualTo(10L);
+        assertThat(response.projects().get(0).medal()).isEqualTo("스프린트 완주 메달");
+    }
+
+    @Test
     @DisplayName("받은 팀원 후기 조회 - 빈 후기 통계가 성공적으로 반환된다.")
     void getReviewStatistics_success() {
         // given

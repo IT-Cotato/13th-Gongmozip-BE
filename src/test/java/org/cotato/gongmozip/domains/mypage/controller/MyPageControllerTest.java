@@ -98,7 +98,9 @@ class MyPageControllerTest {
                 .build();
         CustomUserDetails userDetails = new CustomUserDetails(userMember);
 
-        CompletedProjectsResponse response = new CompletedProjectsResponse(List.of(), 0, 10, 0L, 0);
+        CompletedProjectItem projectItem =
+                new CompletedProjectItem(10L, 15L, "2026 AI 해커톤", "2026-08-06", "스프린트 완주 메달", null);
+        CompletedProjectsResponse response = new CompletedProjectsResponse(List.of(projectItem), 0, 10, 1L, 1);
         given(myPageService.getCompletedProjects(1L, 0, 10)).willReturn(response);
 
         // when & then
@@ -107,8 +109,12 @@ class MyPageControllerTest {
                         .param("page", "0")
                         .param("size", "10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.projects").isEmpty())
-                .andExpect(jsonPath("$.data.totalElements").value(0));
+                .andExpect(jsonPath("$.data.projects[0].teamId").value(10L))
+                .andExpect(jsonPath("$.data.projects[0].contestId").value(15L))
+                .andExpect(jsonPath("$.data.projects[0].contestTitle").value("2026 AI 해커톤"))
+                .andExpect(jsonPath("$.data.projects[0].completedAt").value("2026-08-06"))
+                .andExpect(jsonPath("$.data.projects[0].medal").value("스프린트 완주 메달"))
+                .andExpect(jsonPath("$.data.totalElements").value(1));
     }
 
     @Test

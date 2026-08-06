@@ -28,6 +28,9 @@ class S3ServiceTest {
     @Mock
     private S3Presigner s3Presigner;
 
+    @Mock
+    private software.amazon.awssdk.services.s3.S3Client s3Client;
+
     @InjectMocks
     private S3Service s3Service;
 
@@ -85,5 +88,19 @@ class S3ServiceTest {
         assertThatThrownBy(() -> s3Service.getPresignedUrlForUpload(fileName, contentType))
                 .isInstanceOf(UploadException.class)
                 .hasFieldOrPropertyWithValue("errorCode", UploadErrorCode.INVALID_FILE_TYPE);
+    }
+
+    @DisplayName("올바른 CloudFront URL을 삭제 요청하면 S3Client의 deleteObject가 정상 실행된다.")
+    @Test
+    void S3_파일_삭제_성공() {
+        // given
+        String imageUrl = "https://test.cloudfront.net/members/profiles/photo.png";
+
+        // when
+        s3Service.deleteFile(imageUrl);
+
+        // then
+        org.mockito.Mockito.verify(s3Client, org.mockito.Mockito.times(1))
+                .deleteObject(any(software.amazon.awssdk.services.s3.model.DeleteObjectRequest.class));
     }
 }
