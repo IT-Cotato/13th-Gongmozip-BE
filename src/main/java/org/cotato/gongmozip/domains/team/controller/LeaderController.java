@@ -60,4 +60,16 @@ public class LeaderController {
         leaderElectionService.acceptAiRecommendation(teamId, userDetails.getMemberId());
         return BaseResponseFormatter.success(TeamSuccessCode.AI_RECOMMENDATION_ACCEPTED);
     }
+
+    @Operation(
+            summary = "팀장 투표 동률 시 재투표 요청",
+            description =
+                    "동률이었던 후보들을 대상으로 재투표가 시작됐음을 팀 채팅방에 안내 카드로 알립니다. " + "실제 투표는 이 API가 아니라 팀장 투표 API를 다시 호출해 진행합니다.")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = TeamErrorCode.class)
+    @PostMapping("/leader-votes/revote")
+    public ResponseEntity<BaseResponse<Void>> requestRevote(
+            @PathVariable("teamId") Long teamId, @AuthenticationPrincipal CustomUserDetails userDetails) {
+        leaderElectionService.requestRevote(teamId, userDetails.getMemberId());
+        return BaseResponseFormatter.success(TeamSuccessCode.LEADER_REVOTE_REQUESTED);
+    }
 }

@@ -349,13 +349,8 @@ public class LeaderElectionService {
         Team team = requireTeamInLeaderSelecting(teamId);
         requireActiveMember(teamId, memberId);
 
-        Message latestVoteCard = messageRepository
-                .findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(teamId, MessageType.LEADER_VOTE_CARD)
-                .orElseThrow(() -> new TeamException(TeamErrorCode.NO_PENDING_AI_RECOMMENDATION));
+        Message latestVoteCard = latestPendingTiebreakCard(teamId);
         Long recommendedTeamMemberId = extractAiRecommendedTeamMemberId(latestVoteCard.getMetadata());
-        if (recommendedTeamMemberId == null) {
-            throw new TeamException(TeamErrorCode.NO_PENDING_AI_RECOMMENDATION);
-        }
 
         TeamMember recommended = teamMemberRepository
                 .findById(recommendedTeamMemberId)
@@ -364,6 +359,39 @@ public class LeaderElectionService {
                 .orElseThrow(() -> new TeamException(TeamErrorCode.INVALID_LEADER_CANDIDATE));
 
         assignLeader(team, recommended, "AI 추천을 수락해 " + recommended.getProfile().getNickname() + "님이 팀장으로 확정되었습니다.");
+    }
+
+    /**
+     * 팀장 투표 동률 시 "재투표하기"를 누른 팀원이 팀 전체에 재투표 시작을 알린다. 실제 투표
+     * 대상(라운드, 후보 자격)은 {@link #castVote}가 저장된 표 개수로 자동 계산하므로 여기서는
+     * 아무 상태도 바꾸지 않고, 다른 팀원들이 투표 UI를 다시 열 수 있도록 안내 카드만 재발행한다.
+     */
+    @Transactional
+    public void requestRevote(Long teamId, Long memberId) {
+        Team team = requireTeamInLeaderSelecting(teamId);
+        requireActiveMember(teamId, memberId);
+
+        Message latestVoteCard = latestPendingTiebreakCard(teamId);
+        List<Long> candidateIds = extractCandidateTeamMemberIds(latestVoteCard.getMetadata());
+
+        chatService.postChatbotCardMessage(
+                team,
+                MessageType.LEADER_VOTE_CARD,
+                "팀원들의 의견에 따라 재투표를 진행합니다. 팀장을 다시 선출해 주세요.",
+                toCandidateMetadata(candidateIds));
+    }
+
+    // 동률 카드(재투표하기/추천 수락하기 두 액션이 공유하는 상태)가 아직 남아있는지 확인한다.
+    // 가장 최근 LEADER_VOTE_CARD에 aiRecommendedTeamMemberId가 없으면 동률이 아니라 최초
+    // 투표 카드(후보 등록 직후)이므로, 두 액션 모두 대상이 없는 것으로 취급한다.
+    private Message latestPendingTiebreakCard(Long teamId) {
+        Message latestVoteCard = messageRepository
+                .findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(teamId, MessageType.LEADER_VOTE_CARD)
+                .orElseThrow(() -> new TeamException(TeamErrorCode.NO_PENDING_AI_RECOMMENDATION));
+        if (extractAiRecommendedTeamMemberId(latestVoteCard.getMetadata()) == null) {
+            throw new TeamException(TeamErrorCode.NO_PENDING_AI_RECOMMENDATION);
+        }
+        return latestVoteCard;
     }
 
     private void assignLeader(Team team, TeamMember leader, String announcement) {
@@ -430,6 +458,19 @@ public class LeaderElectionService {
             return objectMapper.writeValueAsString(metadata);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("팀장 후보 메타데이터 직렬화에 실패했습니다.", e);
+        }
+    }
+
+    private List<Long> extractCandidateTeamMemberIds(String metadataJson) {
+        try {
+            Map<String, Object> parsed = objectMapper.readValue(metadataJson, new TypeReference<>() {});
+            Object value = parsed.get("candidateTeamMemberIds");
+            if (!(value instanceof List<?> rawList)) {
+                throw new IllegalStateException("팀장 후보 메타데이터에 candidateTeamMemberIds가 없습니다.");
+            }
+            return rawList.stream().map(id -> Long.valueOf(id.toString())).toList();
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("팀장 후보 메타데이터 역직렬화에 실패했습니다.", e);
         }
     }
 
