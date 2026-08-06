@@ -158,4 +158,23 @@ class MyPageControllerTest {
                 .andExpect(jsonPath("$.data.contests[0].title").value("2026 AI 해커톤"))
                 .andExpect(jsonPath("$.data.contests[0].isScrapped").value(true));
     }
+
+    @Test
+    @DisplayName("로그인한 사용자는 완료 프로젝트 기록을 삭제(숨김)할 수 있다.")
+    void deleteCompletedProject_success() throws Exception {
+        // given
+        Member userMember = Member.builder()
+                .memberId(1L)
+                .email("user@gongmozip.com")
+                .role(MemberRole.USER)
+                .build();
+        CustomUserDetails userDetails = new CustomUserDetails(userMember);
+
+        // when & then
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                                "/api/mypage/projects/completed/10")
+                        .with(user(userDetails)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("MYPAGE_200_6"));
+    }
 }
