@@ -1,0 +1,6 @@
+ALTER TABLE member ADD COLUMN profile_image_url VARCHAR(2048) DEFAULT NULL;
+
+ALTER TABLE team_members ADD COLUMN is_completed_project_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE teams ADD COLUMN contest_decided_at DATETIME DEFAULT NULL;
+ALTER TABLE teams ADD COLUMN completed_at DATETIME DEFAULT NULL;

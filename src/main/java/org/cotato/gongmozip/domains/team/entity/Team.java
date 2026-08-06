@@ -102,6 +102,12 @@ public class Team extends BaseEntity {
     @Column(name = "submitted", nullable = false)
     private boolean submitted;
 
+    @Column(name = "contest_decided_at")
+    private LocalDateTime contestDecidedAt;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
     // GREETING 상태 전이 동시 실행 방지용 낙관적 잠금(이슈 #62). 스케줄러(forceAdvanceGreetingIfDue)와
     // 팀원 메시지 트리거(recordGreetingAndAdvance)가 동시에 같은 팀을 LEADER_SELECTING으로 전이시키려
     // 하면 나중에 커밋하는 쪽이 OptimisticLockingFailureException을 받아 재시도/스킵할 수 있다.
@@ -119,6 +125,7 @@ public class Team extends BaseEntity {
 
     public void assignContest(Contest contest) {
         this.contest = contest;
+        this.contestDecidedAt = LocalDateTime.now();
     }
 
     public void scheduleCheckpoints(LocalDateTime progressCheckAt, LocalDateTime submissionCheckAt) {
@@ -158,5 +165,6 @@ public class Team extends BaseEntity {
     public void markSubmitted() {
         this.submitted = true;
         this.status = TeamStatus.SUBMITTED;
+        this.completedAt = LocalDateTime.now();
     }
 }

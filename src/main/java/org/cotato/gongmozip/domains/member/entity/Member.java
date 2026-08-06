@@ -84,6 +84,9 @@ public class Member extends BaseEntity {
     @Column(name = "marketing_consent_sms", nullable = false)
     private boolean marketingConsentSms = false;
 
+    @Column(name = "profile_image_url")
+    private String profileImageUrl;
+
     public void registerRequiredInfo(Gender gender, LocalDate birthDate) {
         this.gender = gender;
         this.birthDate = birthDate;
@@ -98,6 +101,10 @@ public class Member extends BaseEntity {
     public void updateMarketingConsents(boolean marketingConsentEmail, boolean marketingConsentSms) {
         this.marketingConsentEmail = marketingConsentEmail;
         this.marketingConsentSms = marketingConsentSms;
+    }
+
+    public void updateProfileImage(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
     }
 
     public void changePassword(String encodedPassword) {
