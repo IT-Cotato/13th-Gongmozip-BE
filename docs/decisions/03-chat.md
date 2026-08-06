@@ -95,12 +95,14 @@
   아키텍처 결정에 따름). STOMP 쪽 예외는 `ChatWebSocketController`의 `@MessageExceptionHandler`가
   `/user/queue/errors`로 클라이언트에 내려준다.
 - **수동 테스트 페이지**: `resources/static/chat-test.html` — JWT 토큰 + teamId 입력 후 STOMP
-  연결/전송/수신을 브라우저에서 직접 확인 가능 (`@stomp/stompjs` CDN 사용). 상단 "빠른 준비"
-  버튼이 `POST /api/test/auth/quick-login`(이메일 인증 없이 회원+기본 프로필 생성 후
-  accessToken 발급) → `POST /api/test/teams`(1인 팀 생성)를 순서대로 호출해 토큰/teamId를
-  자동으로 채워준다. `AuthTestController`(`domains/auth/controller`)도 `TeamTestController`와
-  동일하게 `@Profile("local")` 임시 엔드포인트(명시적으로 켜야만 활성화되는 fail-safe 방식 —
-  이유는 [api.md](../api.md) 참고) — 매칭/실가입 플로우 연동 후 삭제 예정.
+  연결/전송/수신을 브라우저에서 직접 확인 가능 (`@stomp/stompjs` CDN 사용). 토큰은
+  `/api/auth/login` 응답을, teamId는 실제 매칭으로 생성된 팀을 그대로 써야 한다.
+  **(2026-08-06 삭제)** 원래 있던 "빠른 준비" 버튼(`POST /api/test/teams` 호출)은
+  `TeamTestController`와 함께 제거했다 — 매칭 도메인 연동이 끝나 컨트롤러 자체가 불필요해졌고,
+  버튼이 보내던 요청도 이미 `TeamMemberInput`에 추가된 필드(leaderPreference 등)를 빠뜨려
+  어차피 실패하던 상태였다. `AuthTestController`(`domains/auth/controller`)의 quick-login은
+  그대로 남아있다 — `@Profile("local")` 임시 엔드포인트(명시적으로 켜야만 활성화되는 fail-safe
+  방식 — 이유는 [api.md](../api.md) 참고), 매칭/실가입 플로우 연동 후 삭제 예정.
 - 테스트: `ChatServiceTest`(브로드캐스트 검증 포함), `TeamServiceTest`(나가기/챗봇 토글 케이스)
 
 ## 미정 / 추후 확인 필요
