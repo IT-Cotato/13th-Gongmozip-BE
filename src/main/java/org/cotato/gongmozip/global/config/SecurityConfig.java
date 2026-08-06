@@ -76,6 +76,8 @@ public class SecurityConfig {
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/admin/uploads/presigned-url")
                         .hasRole("ADMIN")
+                        .requestMatchers("/api/admin/inquiries/**") // 문의하기 답변 관련 API
+                        .hasRole("ADMIN")
                         .anyRequest()
                         .authenticated())
                 // 소셜 로그인
