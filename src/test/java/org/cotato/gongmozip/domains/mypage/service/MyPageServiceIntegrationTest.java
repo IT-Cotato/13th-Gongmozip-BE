@@ -108,4 +108,89 @@ class MyPageServiceIntegrationTest {
         CompletedProjectsResponse responseAfter = myPageService.getCompletedProjects(member.getMemberId(), 0, 10);
         assertThat(responseAfter.projects()).isEmpty();
     }
+
+    @Test
+    @DisplayName("진행 중 프로젝트 조회 시 진행 중 상태의 팀만 반환하고 완료 상태의 팀은 제외한다.")
+    void getOngoingProjectsReturnsOngoingOnly() {
+        // given
+        Member member = Member.builder()
+                .email("ongoing-integration@gongmozip.com")
+                .status(MemberStatus.ACTIVE)
+                .role(MemberRole.USER)
+                .collaborationPoint(100)
+                .build();
+        memberRepository.save(member);
+
+        Profile profile = Profile.builder()
+                .member(member)
+                .nickname("ongoing-integration-nick")
+                .schoolName("school")
+                .grade(3)
+                .major("major")
+                .gpa(4.0)
+                .gpaScale(4.5)
+                .interestCategories(List.of(InterestCategory.IT_AI_TECH))
+                .isPublic(true)
+                .build();
+        profileRepository.save(profile);
+
+        // 진행 중인 팀 생성
+        Team ongoingTeam = Team.builder()
+                .status(TeamStatus.IN_PROGRESS)
+                .preferredCategory(InterestCategory.IT_AI_TECH)
+                .leaderSelectionMode(LeaderSelectionMode.OPEN_NOMINATION)
+                .build();
+        teamRepository.save(ongoingTeam);
+
+        TeamMember ongoingMember = TeamMember.builder()
+                .team(ongoingTeam)
+                .member(member)
+                .profile(profile)
+                .leaderPreference(LeaderPreference.WANTS)
+                .extroversionType(ExtroversionType.E)
+                .extroversionScore(new BigDecimal("4.0"))
+                .isPreLeaderCandidate(false)
+                .role(TeamRole.MEMBER)
+                .status(TeamMemberStatus.ACTIVE)
+                .joinedAt(LocalDateTime.now().minusDays(5))
+                .build();
+        teamMemberRepository.save(ongoingMember);
+
+        // 완료된 팀 생성
+        Team completedTeam = Team.builder()
+                .status(TeamStatus.COMPLETED)
+                .preferredCategory(InterestCategory.IT_AI_TECH)
+                .leaderSelectionMode(LeaderSelectionMode.OPEN_NOMINATION)
+                .completedAt(LocalDateTime.now())
+                .build();
+        teamRepository.save(completedTeam);
+
+        TeamMember completedMember = TeamMember.builder()
+                .team(completedTeam)
+                .member(member)
+                .profile(profile)
+                .leaderPreference(LeaderPreference.WANTS)
+                .extroversionType(ExtroversionType.E)
+                .extroversionScore(new BigDecimal("4.0"))
+                .isPreLeaderCandidate(false)
+                .role(TeamRole.MEMBER)
+                .status(TeamMemberStatus.ACTIVE)
+                .joinedAt(LocalDateTime.now().minusDays(10))
+                .build();
+        teamMemberRepository.save(completedMember);
+
+        // when
+        org.cotato.gongmozip.domains.mypage.dto.response.MyPageResponse.OngoingProjectsResponse ongoingResponse =
+                myPageService.getOngoingProjects(member.getMemberId(), 0, 10);
+        org.cotato.gongmozip.domains.mypage.dto.response.MyPageResponse.MyPageMainResponse mainResponse =
+                myPageService.getMyPageMain(member.getMemberId());
+
+        // then: 진행 중 프로젝트 목록에 ongoingTeam만 반환되어야 함
+        assertThat(ongoingResponse.projects()).hasSize(1);
+        assertThat(ongoingResponse.projects().get(0).teamId()).isEqualTo(ongoingTeam.getTeamId());
+
+        // then: 마이페이지 메인의 카운트 정보가 정확해야 함
+        assertThat(mainResponse.ongoingProjectCount()).isEqualTo(1);
+        assertThat(mainResponse.completedProjectCount()).isEqualTo(1);
+    }
 }

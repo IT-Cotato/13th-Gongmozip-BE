@@ -71,6 +71,7 @@ class MyPageServiceTest {
         // given
         given(memberRepository.findById(1L)).willReturn(Optional.of(testMember));
         given(contestScrapRepository.countByMember(testMember)).willReturn(3);
+        given(teamMemberRepository.countOngoingProjects(any(), any(), any())).willReturn(0);
         given(teamMemberRepository.findCompletedProjects(any(), any(), any(), any()))
                 .willReturn(new PageImpl<>(List.of()));
 
@@ -105,6 +106,13 @@ class MyPageServiceTest {
     void getOngoingProjects_success() {
         // given
         given(memberRepository.existsById(1L)).willReturn(true);
+        org.springframework.data.domain.PageRequest pageRequest = org.springframework.data.domain.PageRequest.of(
+                0,
+                10,
+                org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Direction.DESC, "team.createdAt", "team.teamId"));
+        given(teamMemberRepository.findOngoingProjects(any(), any(), any(), eq(pageRequest)))
+                .willReturn(new PageImpl<>(List.of(), pageRequest, 0L));
 
         // when
         OngoingProjectsResponse response = myPageService.getOngoingProjects(1L, 0, 10);
@@ -116,6 +124,69 @@ class MyPageServiceTest {
         assertThat(response.size()).isEqualTo(10);
         assertThat(response.totalElements()).isEqualTo(0L);
         assertThat(response.totalPages()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("진행 중 프로젝트 조회 - 비어있지 않은 진행 중 프로젝트 목록 조회 시 DTO가 정상 반환된다.")
+    void getOngoingProjects_nonEmpty_success() {
+        // given
+        given(memberRepository.existsById(1L)).willReturn(true);
+
+        org.cotato.gongmozip.domains.contest.entity.Contest contest =
+                org.cotato.gongmozip.domains.contest.entity.Contest.builder()
+                        .contestId(15L)
+                        .title("2026 AI 해커톤")
+                        .thumbnailUrl("http://image.com/thumbnail.png")
+                        .applyEndAt(LocalDateTime.of(2026, 8, 30, 23, 59))
+                        .build();
+
+        org.cotato.gongmozip.domains.team.entity.Team team = org.cotato.gongmozip.domains.team.entity.Team.builder()
+                .teamId(10L)
+                .status(org.cotato.gongmozip.domains.team.enums.TeamStatus.IN_PROGRESS)
+                .contest(contest)
+                .contestDecidedAt(LocalDateTime.of(2026, 8, 1, 12, 0))
+                .build();
+        org.cotato.gongmozip.domains.team.entity.TeamMember teamMember =
+                org.cotato.gongmozip.domains.team.entity.TeamMember.builder()
+                        .team(team)
+                        .build();
+
+        org.springframework.data.domain.PageRequest pageRequest = org.springframework.data.domain.PageRequest.of(
+                0,
+                10,
+                org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Direction.DESC, "team.createdAt", "team.teamId"));
+
+        given(teamMemberRepository.findOngoingProjects(
+                        eq(1L),
+                        eq(org.cotato.gongmozip.domains.team.enums.TeamMemberStatus.ACTIVE),
+                        any(),
+                        eq(pageRequest)))
+                .willReturn(new PageImpl<>(List.of(teamMember), pageRequest, 1L));
+
+        given(teamMemberRepository.findByTeamIdInAndStatus(
+                        eq(List.of(10L)), eq(org.cotato.gongmozip.domains.team.enums.TeamMemberStatus.ACTIVE)))
+                .willReturn(List.of(
+                        org.cotato.gongmozip.domains.team.entity.TeamMember.builder()
+                                .team(team)
+                                .build(),
+                        org.cotato.gongmozip.domains.team.entity.TeamMember.builder()
+                                .team(team)
+                                .build()));
+
+        // when
+        OngoingProjectsResponse response = myPageService.getOngoingProjects(1L, 0, 10);
+
+        // then
+        assertThat(response).isNotNull();
+        assertThat(response.projects()).hasSize(1);
+        assertThat(response.projects().get(0).teamId()).isEqualTo(10L);
+        assertThat(response.projects().get(0).contestId()).isEqualTo(15L);
+        assertThat(response.projects().get(0).contestTitle()).isEqualTo("2026 AI 해커톤");
+        assertThat(response.projects().get(0).contestImageUrl()).isEqualTo("http://image.com/thumbnail.png");
+        assertThat(response.projects().get(0).startedAt()).isEqualTo("2026-08-01");
+        assertThat(response.projects().get(0).deadline()).isEqualTo("2026-08-30");
+        assertThat(response.projects().get(0).memberCount()).isEqualTo(2);
     }
 
     @Test

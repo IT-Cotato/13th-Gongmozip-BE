@@ -53,6 +53,44 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
             LEFT JOIN FETCH t.contest
             WHERE tm.member.memberId = :memberId
               AND tm.status = :status
+              AND t.status NOT IN :completedStatuses
+            ORDER BY t.createdAt DESC, t.teamId DESC
+            """,
+            countQuery =
+                    """
+            SELECT COUNT(tm) FROM TeamMember tm
+            JOIN tm.team t
+            WHERE tm.member.memberId = :memberId
+              AND tm.status = :status
+              AND t.status NOT IN :completedStatuses
+            """)
+    Page<TeamMember> findOngoingProjects(
+            @Param("memberId") Long memberId,
+            @Param("status") TeamMemberStatus status,
+            @Param("completedStatuses") List<TeamStatus> completedStatuses,
+            Pageable pageable);
+
+    @Query(
+            """
+            SELECT COUNT(tm) FROM TeamMember tm
+            JOIN tm.team t
+            WHERE tm.member.memberId = :memberId
+              AND tm.status = :status
+              AND t.status NOT IN :completedStatuses
+            """)
+    int countOngoingProjects(
+            @Param("memberId") Long memberId,
+            @Param("status") TeamMemberStatus status,
+            @Param("completedStatuses") List<TeamStatus> completedStatuses);
+
+    @Query(
+            value =
+                    """
+            SELECT tm FROM TeamMember tm
+            JOIN FETCH tm.team t
+            LEFT JOIN FETCH t.contest
+            WHERE tm.member.memberId = :memberId
+              AND tm.status = :status
               AND t.status IN :teamStatuses
               AND tm.isCompletedProjectDeleted = false
             ORDER BY t.completedAt DESC, t.updatedAt DESC, t.teamId DESC
