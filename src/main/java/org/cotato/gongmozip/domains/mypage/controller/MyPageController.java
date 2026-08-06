@@ -77,4 +77,14 @@ public class MyPageController {
         ScrappedContestsResponse response = myPageService.getScrappedContests(userDetails.getMemberId(), page, size);
         return BaseResponseFormatter.success(MyPageSuccessCode.SCRAPPED_CONTESTS_RETRIEVED, response);
     }
+
+    @Operation(summary = "완료 프로젝트 기록 삭제(숨김)")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = MyPageErrorCode.class)
+    @org.springframework.web.bind.annotation.DeleteMapping("/projects/completed/{teamId}")
+    public ResponseEntity<BaseResponse<Void>> deleteCompletedProject(
+            @org.springframework.web.bind.annotation.PathVariable(name = "teamId") Long teamId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        myPageService.deleteCompletedProject(userDetails.getMemberId(), teamId);
+        return BaseResponseFormatter.success(MyPageSuccessCode.COMPLETED_PROJECT_DELETED);
+    }
 }
