@@ -22,7 +22,12 @@ public interface AiClient {
             Long teamId, List<LeaderCandidateSnapshot> activeMembers, List<Long> tiedCandidateTeamMemberIds);
 
     /** 팀 카테고리 기준으로 추천할 공모전 (최대 3개). */
-    List<Long> recommendContests(InterestCategory category, List<Long> openContestIds);
+    default List<Long> recommendContests(InterestCategory category, List<Long> openContestIds) {
+        return recommendContests(category, openContestIds, java.util.Collections.emptyList());
+    }
+
+    List<Long> recommendContests(
+            InterestCategory category, List<Long> openContestIds, List<String> completedContestTitles);
 
     /** 채팅방에서 "@챗봇"으로 말을 걸었을 때 자유 질의에 답한다. */
     String answerTeamQuestion(String question);

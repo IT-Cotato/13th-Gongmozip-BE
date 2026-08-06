@@ -168,8 +168,12 @@ public class MockAiClient implements AiClient {
     // (ChatbotOrchestrationService)가 이미 마감 내림차순으로 정렬해서 넘겨주므로, 여기서는
     // 그 순서를 그대로 유지한 채 상위 N개만 자른다(더 이상 셔플하지 않음).
     @Override
-    public List<Long> recommendContests(InterestCategory category, List<Long> openContestIds) {
-        log.info("Rule-based contest recommendation (deadline desc) for category: {}", category);
+    public List<Long> recommendContests(
+            InterestCategory category, List<Long> openContestIds, List<String> completedContestTitles) {
+        log.info(
+                "Rule-based contest recommendation (deadline desc) for category: {} with completed contests: {}",
+                category,
+                completedContestTitles);
         return openContestIds.stream().limit(MAX_CONTEST_RECOMMENDATIONS).toList();
     }
 

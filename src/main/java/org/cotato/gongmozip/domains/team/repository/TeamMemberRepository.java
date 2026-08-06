@@ -109,4 +109,18 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
             @Param("status") TeamMemberStatus status,
             @Param("teamStatuses") List<TeamStatus> teamStatuses,
             Pageable pageable);
+
+    @Query(
+            """
+            SELECT tm FROM TeamMember tm
+            JOIN FETCH tm.team t
+            LEFT JOIN FETCH t.contest
+            WHERE tm.member.memberId = :memberId
+              AND tm.status = :status
+              AND t.status IN :completedStatuses
+            """)
+    List<TeamMember> findCompletedProjectsAll(
+            @Param("memberId") Long memberId,
+            @Param("status") TeamMemberStatus status,
+            @Param("completedStatuses") List<TeamStatus> completedStatuses);
 }
