@@ -21,6 +21,10 @@ import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.repository.ProfileRepository;
 import org.cotato.gongmozip.domains.survey.enums.CharacterType;
 import org.cotato.gongmozip.domains.survey.repository.SurveySubmissionRepository;
+import org.cotato.gongmozip.domains.team.entity.TeamMember;
+import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
+import org.cotato.gongmozip.domains.team.enums.TeamStatus;
+import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
 import org.cotato.gongmozip.global.ai.AiClient;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -36,6 +40,7 @@ public class ContestRecommendationService {
     private final ProfileRepository profileRepository;
     private final ContestRepository contestRepository;
     private final SurveySubmissionRepository surveySubmissionRepository;
+    private final TeamMemberRepository teamMemberRepository;
     private final AiClient aiClient;
 
     public List<ContestSummaryResponse> getHomeRecommendations(Long memberId) {
@@ -86,10 +91,24 @@ public class ContestRecommendationService {
                 .map(this::getKoreanCharacterName)
                 .orElse("알 수 없는 러너");
 
+        List<TeamMember> completedMemberships = teamMemberRepository.findCompletedProjectsAll(
+                member.getMemberId(), TeamMemberStatus.ACTIVE, List.of(TeamStatus.SUBMITTED, TeamStatus.COMPLETED));
+
+        List<String> completedTitles = completedMemberships.stream()
+                .map(tm -> tm.getTeam().getContest())
+                .filter(java.util.Objects::nonNull)
+                .map(Contest::getTitle)
+                .toList();
+
+        String completedPart = "";
+        if (!completedTitles.isEmpty()) {
+            completedPart = String.format("이전 완주 프로젝트인 '%s' 등의 경험을 바탕으로 ", completedTitles.get(0));
+        }
+
         String reason = String.format(
-                "이 공모전은 귀하의 선호 분야인 '%s' 카테고리에 속해 있으며, " + "대학생 팀 매칭 설문을 통해 분석된 귀하의 협업 캐릭터 '%s'의 성향과 목표에 "
+                "이 공모전은 귀하의 선호 분야인 '%s' 카테고리에 속해 있으며, %s대학생 팀 매칭 설문을 통해 분석된 귀하의 협업 캐릭터 '%s'의 성향과 목표에 "
                         + "매우 부합하여 AI에 의해 강력하게 추천되었습니다. 팀을 빌딩하여 프로젝트의 완성도를 높여보세요!",
-                getKoreanCategoryName(category), characterName);
+                getKoreanCategoryName(category), completedPart, characterName);
 
         return new RecommendationReasonResponse(reason);
     }
@@ -111,7 +130,19 @@ public class ContestRecommendationService {
                 .getContent();
 
         List<Long> contestIds = openContests.stream().map(Contest::getContestId).toList();
-        List<Long> recommendedIds = aiClient.recommendContests(category, contestIds);
+
+        List<TeamMember> completedMemberships = teamMemberRepository.findCompletedProjectsAll(
+                profile.getMember().getMemberId(),
+                TeamMemberStatus.ACTIVE,
+                List.of(TeamStatus.SUBMITTED, TeamStatus.COMPLETED));
+
+        List<String> completedContestTitles = completedMemberships.stream()
+                .map(tm -> tm.getTeam().getContest())
+                .filter(java.util.Objects::nonNull)
+                .map(Contest::getTitle)
+                .toList();
+
+        List<Long> recommendedIds = aiClient.recommendContests(category, contestIds, completedContestTitles);
 
         List<Contest> recommendedContests = openContests.stream()
                 .filter(c -> recommendedIds.contains(c.getContestId()))

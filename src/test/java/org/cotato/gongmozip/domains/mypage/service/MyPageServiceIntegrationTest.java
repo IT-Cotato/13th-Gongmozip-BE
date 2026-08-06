@@ -14,6 +14,7 @@ import org.cotato.gongmozip.domains.mypage.dto.response.MyPageResponse.Completed
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.profile.repository.ProfileRepository;
+import org.cotato.gongmozip.domains.review.repository.ReviewRepository;
 import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
@@ -47,6 +48,9 @@ class MyPageServiceIntegrationTest {
 
     @Autowired
     private TeamMemberRepository teamMemberRepository;
+
+    @Autowired
+    private ReviewRepository reviewRepository;
 
     @Test
     @DisplayName("완료 프로젝트 기록 삭제 API 호출 후 완료 프로젝트 조회 시 삭제한 프로젝트가 결과 목록에서 배제된다.")
@@ -192,5 +196,167 @@ class MyPageServiceIntegrationTest {
         // then: 마이페이지 메인의 카운트 정보가 정확해야 함
         assertThat(mainResponse.ongoingProjectCount()).isEqualTo(1);
         assertThat(mainResponse.completedProjectCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("받은 팀원 후기 통계 조회 시 저장된 리뷰 데이터들의 키워드 빈도수가 정렬되어 조회되고 마이페이지 메인의 reviewCount에도 반영된다.")
+    void getReviewStatisticsAndVerifyCalculations() {
+        // given
+        Member reviewer = Member.builder()
+                .email("reviewer@gongmozip.com")
+                .status(MemberStatus.ACTIVE)
+                .role(MemberRole.USER)
+                .collaborationPoint(100)
+                .build();
+        memberRepository.save(reviewer);
+
+        Member reviewee = Member.builder()
+                .email("reviewee@gongmozip.com")
+                .status(MemberStatus.ACTIVE)
+                .role(MemberRole.USER)
+                .collaborationPoint(100)
+                .build();
+        memberRepository.save(reviewee);
+
+        Profile reviewerProfile = Profile.builder()
+                .member(reviewer)
+                .nickname("reviewer-nick")
+                .schoolName("school")
+                .grade(3)
+                .major("major")
+                .gpa(4.0)
+                .gpaScale(4.5)
+                .interestCategories(List.of(InterestCategory.IT_AI_TECH))
+                .isPublic(true)
+                .build();
+        profileRepository.save(reviewerProfile);
+
+        Profile revieweeProfile = Profile.builder()
+                .member(reviewee)
+                .nickname("reviewee-nick")
+                .schoolName("school")
+                .grade(3)
+                .major("major")
+                .gpa(4.0)
+                .gpaScale(4.5)
+                .interestCategories(List.of(InterestCategory.IT_AI_TECH))
+                .isPublic(true)
+                .build();
+        profileRepository.save(revieweeProfile);
+
+        Team team = Team.builder()
+                .status(TeamStatus.COMPLETED)
+                .preferredCategory(InterestCategory.IT_AI_TECH)
+                .leaderSelectionMode(LeaderSelectionMode.OPEN_NOMINATION)
+                .build();
+        teamRepository.save(team);
+
+        TeamMember reviewerTm = TeamMember.builder()
+                .team(team)
+                .member(reviewer)
+                .profile(reviewerProfile)
+                .leaderPreference(LeaderPreference.WANTS)
+                .extroversionType(ExtroversionType.E)
+                .extroversionScore(new BigDecimal("4.0"))
+                .isPreLeaderCandidate(false)
+                .role(TeamRole.MEMBER)
+                .status(TeamMemberStatus.ACTIVE)
+                .joinedAt(LocalDateTime.now().minusDays(10))
+                .build();
+        teamMemberRepository.save(reviewerTm);
+
+        TeamMember revieweeTm = TeamMember.builder()
+                .team(team)
+                .member(reviewee)
+                .profile(revieweeProfile)
+                .leaderPreference(LeaderPreference.WANTS)
+                .extroversionType(ExtroversionType.E)
+                .extroversionScore(new BigDecimal("4.0"))
+                .isPreLeaderCandidate(false)
+                .role(TeamRole.MEMBER)
+                .status(TeamMemberStatus.ACTIVE)
+                .joinedAt(LocalDateTime.now().minusDays(10))
+                .build();
+        teamMemberRepository.save(revieweeTm);
+
+        // 두 번째 후기 작성자 추가 (동일한 team_id + reviewee_team_member_id 에 대해 중복 리뷰 방지 제약조건 회피)
+        Member reviewer2 = Member.builder()
+                .email("reviewer2@gongmozip.com")
+                .status(MemberStatus.ACTIVE)
+                .role(MemberRole.USER)
+                .collaborationPoint(100)
+                .build();
+        memberRepository.save(reviewer2);
+
+        Profile reviewer2Profile = Profile.builder()
+                .member(reviewer2)
+                .nickname("reviewer2-nick")
+                .schoolName("school")
+                .grade(3)
+                .major("major")
+                .gpa(4.0)
+                .gpaScale(4.5)
+                .interestCategories(List.of(InterestCategory.IT_AI_TECH))
+                .isPublic(true)
+                .build();
+        profileRepository.save(reviewer2Profile);
+
+        TeamMember reviewer2Tm = TeamMember.builder()
+                .team(team)
+                .member(reviewer2)
+                .profile(reviewer2Profile)
+                .leaderPreference(LeaderPreference.WANTS)
+                .extroversionType(ExtroversionType.E)
+                .extroversionScore(new BigDecimal("4.0"))
+                .isPreLeaderCandidate(false)
+                .role(TeamRole.MEMBER)
+                .status(TeamMemberStatus.ACTIVE)
+                .joinedAt(LocalDateTime.now().minusDays(10))
+                .build();
+        teamMemberRepository.save(reviewer2Tm);
+
+        // 후기 저장
+        org.cotato.gongmozip.domains.review.entity.Review review1 =
+                org.cotato.gongmozip.domains.review.entity.Review.builder()
+                        .team(team)
+                        .reviewer(reviewerTm)
+                        .reviewee(revieweeTm)
+                        .communicationScore(org.cotato.gongmozip.domains.review.enums.ReviewAgreementLevel.AGREE)
+                        .participationScore(org.cotato.gongmozip.domains.review.enums.ReviewAgreementLevel.AGREE)
+                        .keywords(List.of("GOOD_COMMUNICATOR", "TRUSTWORTHY"))
+                        .build();
+        reviewRepository.save(review1);
+
+        org.cotato.gongmozip.domains.review.entity.Review review2 =
+                org.cotato.gongmozip.domains.review.entity.Review.builder()
+                        .team(team)
+                        .reviewer(reviewer2Tm)
+                        .reviewee(revieweeTm)
+                        .communicationScore(org.cotato.gongmozip.domains.review.enums.ReviewAgreementLevel.AGREE)
+                        .participationScore(org.cotato.gongmozip.domains.review.enums.ReviewAgreementLevel.AGREE)
+                        .keywords(List.of("TRUSTWORTHY", "CREATIVE"))
+                        .build();
+        reviewRepository.save(review2);
+
+        // when
+        org.cotato.gongmozip.domains.mypage.dto.response.MyPageResponse.ReviewStatisticsResponse statisticsResponse =
+                myPageService.getReviewStatistics(reviewee.getMemberId());
+        org.cotato.gongmozip.domains.mypage.dto.response.MyPageResponse.MyPageMainResponse mainResponse =
+                myPageService.getMyPageMain(reviewee.getMemberId());
+
+        // then
+        assertThat(statisticsResponse.totalReviewCount()).isEqualTo(2);
+        assertThat(statisticsResponse.keywords()).hasSize(3);
+        // TRUSTWORTHY = 2
+        assertThat(statisticsResponse.keywords().get(0).keyword()).isEqualTo("TRUSTWORTHY");
+        assertThat(statisticsResponse.keywords().get(0).count()).isEqualTo(2);
+        // CREATIVE = 1, GOOD_COMMUNICATOR = 1 (sorted alphabetically)
+        assertThat(statisticsResponse.keywords().get(1).keyword()).isEqualTo("CREATIVE");
+        assertThat(statisticsResponse.keywords().get(1).count()).isEqualTo(1);
+        assertThat(statisticsResponse.keywords().get(2).keyword()).isEqualTo("GOOD_COMMUNICATOR");
+        assertThat(statisticsResponse.keywords().get(2).count()).isEqualTo(1);
+
+        // 마이페이지 메인의 reviewCount 검증
+        assertThat(mainResponse.reviewCount()).isEqualTo(2);
     }
 }

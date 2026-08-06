@@ -17,4 +17,8 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
             Long teamId, Long reviewerTeamMemberId, TeamMemberStatus revieweeStatus);
 
     List<Review> findByTeam_TeamIdAndReviewer_TeamMemberId(Long teamId, Long reviewerTeamMemberId);
+
+    List<Review> findByReviewee_Member_MemberId(Long memberId);
+
+    long countByReviewee_Member_MemberId(Long memberId);
 }
