@@ -16,5 +16,6 @@ public final class MemberResponse {
             String snsType,
             Boolean snsLinked,
             Boolean marketingConsentEmail,
-            Boolean marketingConsentSms) {}
+            Boolean marketingConsentSms,
+            String profileImageUrl) {}
 }

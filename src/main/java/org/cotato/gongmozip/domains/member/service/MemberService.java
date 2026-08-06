@@ -37,6 +37,7 @@ public class MemberService {
     private final PasswordEncoder passwordEncoder;
     private final RedisUtil redisUtil;
     private final EmailVerificationService emailVerificationService;
+    private final org.cotato.gongmozip.domains.upload.service.S3Service s3Service;
 
     // 회원가입 인증 코드 전송 메서드
     public void sendVerificationCode(EmailVerifyRequest request) {
@@ -135,5 +136,20 @@ public class MemberService {
                 .findById(memberId)
                 .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
         member.updateMarketingConsents(request.marketingConsentEmail(), request.marketingConsentSms());
+    }
+
+    public org.cotato.gongmozip.domains.upload.dto.response.GetPresignedUrlResponse getProfileImagePresignedUrl(
+            org.cotato.gongmozip.domains.member.dto.request.MemberRequest.GetProfileImagePresignedUrlRequest request) {
+        return s3Service.getProfileImagePresignedUrl(request.fileName(), request.contentType());
+    }
+
+    @Transactional
+    public void updateProfileImage(
+            Long memberId,
+            org.cotato.gongmozip.domains.member.dto.request.MemberRequest.UpdateProfileImageRequest request) {
+        Member member = memberRepository
+                .findById(memberId)
+                .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
+        member.updateProfileImage(request.profileImageUrl());
     }
 }

@@ -100,4 +100,30 @@ public class MemberController {
         memberService.updateMarketingConsent(userDetails.getMemberId(), request);
         return BaseResponseFormatter.success(MemberSuccessCode.MARKETING_CONSENT_UPDATED);
     }
+
+    @Operation(summary = "프로필 사진 업로드용 Presigned URL 발급")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = MemberErrorCode.class)
+    @PostMapping("/me/profile-image/presigned-url")
+    public ResponseEntity<BaseResponse<org.cotato.gongmozip.domains.upload.dto.response.GetPresignedUrlResponse>>
+            getProfileImagePresignedUrl(
+                    @RequestBody @Valid
+                            org.cotato.gongmozip.domains.member.dto.request.MemberRequest
+                                            .GetProfileImagePresignedUrlRequest
+                                    request,
+                    @AuthenticationPrincipal CustomUserDetails userDetails) {
+        org.cotato.gongmozip.domains.upload.dto.response.GetPresignedUrlResponse response =
+                memberService.getProfileImagePresignedUrl(request);
+        return BaseResponseFormatter.success(MemberSuccessCode.PROFILE_IMAGE_PRESIGNED_URL_GENERATED, response);
+    }
+
+    @Operation(summary = "프로필 사진 업데이트")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = MemberErrorCode.class)
+    @PatchMapping("/me/profile-image")
+    public ResponseEntity<BaseResponse<Void>> updateProfileImage(
+            @RequestBody @Valid
+                    org.cotato.gongmozip.domains.member.dto.request.MemberRequest.UpdateProfileImageRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        memberService.updateProfileImage(userDetails.getMemberId(), request);
+        return BaseResponseFormatter.success(MemberSuccessCode.PROFILE_IMAGE_UPDATED);
+    }
 }

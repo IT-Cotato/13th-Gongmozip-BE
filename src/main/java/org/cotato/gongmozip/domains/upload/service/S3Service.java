@@ -65,6 +65,34 @@ public class S3Service {
         return new GetPresignedUrlResponse(uploadUrl, imageUrl, canonicalMimeType);
     }
 
+    public GetPresignedUrlResponse getProfileImagePresignedUrl(String fileName, String contentType) {
+        String canonicalMimeType = validateAndGetCanonicalMimeType(fileName, contentType);
+
+        String uniqueFileName = generateUniqueFileName(fileName);
+        String objectKey = "members/profiles/" + uniqueFileName;
+
+        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(objectKey)
+                .contentType(canonicalMimeType)
+                .build();
+
+        PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
+                .signatureDuration(Duration.ofMinutes(10)) // URL valid for 10 minutes
+                .putObjectRequest(putObjectRequest)
+                .build();
+
+        PresignedPutObjectRequest presignedPutObjectRequest = s3Presigner.presignPutObject(presignRequest);
+        String uploadUrl = presignedPutObjectRequest.url().toString();
+
+        String baseDomain = cloudFrontDomain.endsWith("/")
+                ? cloudFrontDomain.substring(0, cloudFrontDomain.length() - 1)
+                : cloudFrontDomain;
+        String imageUrl = baseDomain + "/" + objectKey;
+
+        return new GetPresignedUrlResponse(uploadUrl, imageUrl, canonicalMimeType);
+    }
+
     private String validateAndGetCanonicalMimeType(String fileName, String contentType) {
         String extension = getFileExtension(fileName).toLowerCase();
 
