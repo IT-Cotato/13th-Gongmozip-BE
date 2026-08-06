@@ -1,5 +1,6 @@
 package org.cotato.gongmozip.domains.mypage.converter;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
@@ -7,6 +8,8 @@ import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.entity.ContestScrap;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.mypage.dto.response.MyPageResponse.*;
+import org.cotato.gongmozip.domains.team.entity.Team;
+import org.cotato.gongmozip.domains.team.entity.TeamMember;
 import org.springframework.data.domain.Page;
 
 public class MyPageConverter {
@@ -44,9 +47,47 @@ public class MyPageConverter {
         return new OngoingProjectsResponse(Collections.emptyList(), page, size, 0L, 0);
     }
 
-    // TODO: 프로젝트 도메인 구현 후 완료된 프로젝트 연동 및 매핑 로직 추가 필요
-    public static CompletedProjectsResponse toCompletedProjectsResponse(int page, int size) {
-        return new CompletedProjectsResponse(Collections.emptyList(), page, size, 0L, 0);
+    public static CompletedProjectsResponse toCompletedProjectsResponse(Page<TeamMember> teamMemberPage) {
+        List<CompletedProjectItem> items = teamMemberPage.getContent().stream()
+                .map(tm -> {
+                    Team team = tm.getTeam();
+                    Contest contest = team.getContest();
+                    Long contestId = contest != null ? contest.getContestId() : null;
+                    String contestTitle = contest != null ? contest.getTitle() : "선택 안 함";
+                    String completedAtStr = team.getCompletedAt() != null
+                            ? team.getCompletedAt().toLocalDate().toString()
+                            : team.getUpdatedAt().toLocalDate().toString();
+
+                    String medal = calculateMedal(team);
+                    String award = null;
+
+                    return new CompletedProjectItem(
+                            team.getTeamId(), contestId, contestTitle, completedAtStr, medal, award);
+                })
+                .toList();
+
+        return new CompletedProjectsResponse(
+                items,
+                teamMemberPage.getNumber(),
+                teamMemberPage.getSize(),
+                teamMemberPage.getTotalElements(),
+                teamMemberPage.getTotalPages());
+    }
+
+    private static String calculateMedal(Team team) {
+        LocalDateTime start = team.getContestDecidedAt() != null ? team.getContestDecidedAt() : team.getCreatedAt();
+        LocalDateTime end = team.getCompletedAt() != null ? team.getCompletedAt() : team.getUpdatedAt();
+        if (start == null || end == null) {
+            return "스프린트 완주 메달";
+        }
+        long days = java.time.temporal.ChronoUnit.DAYS.between(start, end);
+        if (days <= 14) {
+            return "스프린트 완주 메달";
+        } else if (days <= 28) {
+            return "크루즈 완주 메달";
+        } else {
+            return "마라톤 완주 메달";
+        }
     }
 
     // TODO: 협업 후기/리뷰 도메인 구현 후 리뷰 통계 연동 및 매핑 로직 추가 필요

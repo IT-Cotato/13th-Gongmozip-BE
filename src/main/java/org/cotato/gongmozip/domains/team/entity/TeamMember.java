@@ -96,6 +96,10 @@ public class TeamMember extends BaseEntity {
     @Column(name = "status", nullable = false, length = 20)
     private TeamMemberStatus status = TeamMemberStatus.ACTIVE;
 
+    @Builder.Default
+    @Column(name = "is_completed_project_deleted", nullable = false)
+    private boolean isCompletedProjectDeleted = false;
+
     @Column(name = "greeted_at")
     private LocalDateTime greetedAt;
 
@@ -127,5 +131,9 @@ public class TeamMember extends BaseEntity {
 
     public void assignAsLeader() {
         this.role = TeamRole.LEADER;
+    }
+
+    public void deleteCompletedProjectRecord() {
+        this.isCompletedProjectDeleted = true;
     }
 }

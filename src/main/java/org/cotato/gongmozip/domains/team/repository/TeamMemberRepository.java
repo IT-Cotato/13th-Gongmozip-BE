@@ -4,6 +4,9 @@ import java.util.List;
 import java.util.Optional;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
+import org.cotato.gongmozip.domains.team.enums.TeamStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -41,4 +44,31 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
             @Param("memberId") Long memberId, @Param("status") TeamMemberStatus status);
 
     Optional<TeamMember> findByTeam_TeamIdAndMember_MemberId(Long teamId, Long memberId);
+
+    @Query(
+            value =
+                    """
+            SELECT tm FROM TeamMember tm
+            JOIN FETCH tm.team t
+            LEFT JOIN FETCH t.contest
+            WHERE tm.member.memberId = :memberId
+              AND tm.status = :status
+              AND t.status IN :teamStatuses
+              AND tm.isCompletedProjectDeleted = false
+            ORDER BY t.completedAt DESC, t.updatedAt DESC, t.teamId DESC
+            """,
+            countQuery =
+                    """
+            SELECT COUNT(tm) FROM TeamMember tm
+            JOIN tm.team t
+            WHERE tm.member.memberId = :memberId
+              AND tm.status = :status
+              AND t.status IN :teamStatuses
+              AND tm.isCompletedProjectDeleted = false
+            """)
+    Page<TeamMember> findCompletedProjects(
+            @Param("memberId") Long memberId,
+            @Param("status") TeamMemberStatus status,
+            @Param("teamStatuses") List<TeamStatus> teamStatuses,
+            Pageable pageable);
 }

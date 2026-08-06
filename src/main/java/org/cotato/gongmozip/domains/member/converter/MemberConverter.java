@@ -38,6 +38,7 @@ public class MemberConverter {
                 member.getSnsType(),
                 member.getSnsType() != null,
                 member.isMarketingConsentEmail(),
-                member.isMarketingConsentSms());
+                member.isMarketingConsentSms(),
+                member.getProfileImageUrl());
     }
 }

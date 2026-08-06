@@ -46,6 +46,9 @@ class MyPageServiceTest {
     @Mock
     private CharacterService characterService;
 
+    @Mock
+    private org.cotato.gongmozip.domains.team.repository.TeamMemberRepository teamMemberRepository;
+
     @InjectMocks
     private MyPageService myPageService;
 
@@ -68,6 +71,8 @@ class MyPageServiceTest {
         // given
         given(memberRepository.findById(1L)).willReturn(Optional.of(testMember));
         given(contestScrapRepository.countByMember(testMember)).willReturn(3);
+        given(teamMemberRepository.findCompletedProjects(any(), any(), any(), any()))
+                .willReturn(new PageImpl<>(List.of()));
 
         // when
         MyPageMainResponse response = myPageService.getMyPageMain(1L);
@@ -130,6 +135,8 @@ class MyPageServiceTest {
     void getCompletedProjects_success() {
         // given
         given(memberRepository.existsById(1L)).willReturn(true);
+        given(teamMemberRepository.findCompletedProjects(any(), any(), any(), any()))
+                .willReturn(new PageImpl<>(List.of()));
 
         // when
         CompletedProjectsResponse response = myPageService.getCompletedProjects(1L, 0, 10);
@@ -138,6 +145,64 @@ class MyPageServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.projects()).isEmpty();
         assertThat(response.totalElements()).isEqualTo(0L);
+    }
+
+    @Test
+    @DisplayName("완료 프로젝트 조회 - 비어있지 않은 완료 프로젝트 목록 조회 시 DTO에 teamId 및 메달 정보가 정상 반영된다.")
+    void getCompletedProjects_nonEmpty_success() {
+        // given
+        given(memberRepository.existsById(1L)).willReturn(true);
+
+        org.cotato.gongmozip.domains.contest.entity.Contest contest =
+                org.cotato.gongmozip.domains.contest.entity.Contest.builder()
+                        .contestId(15L)
+                        .title("2026 AI 해커톤")
+                        .build();
+
+        org.cotato.gongmozip.domains.team.entity.Team team = org.cotato.gongmozip.domains.team.entity.Team.builder()
+                .teamId(10L)
+                .status(org.cotato.gongmozip.domains.team.enums.TeamStatus.SUBMITTED)
+                .contest(contest)
+                .contestDecidedAt(LocalDateTime.of(2026, 8, 1, 12, 0))
+                .completedAt(LocalDateTime.of(2026, 8, 5, 12, 0))
+                .build();
+        org.cotato.gongmozip.domains.team.entity.TeamMember teamMember =
+                org.cotato.gongmozip.domains.team.entity.TeamMember.builder()
+                        .team(team)
+                        .build();
+
+        org.springframework.data.domain.PageRequest pageRequest = org.springframework.data.domain.PageRequest.of(
+                0,
+                10,
+                org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Direction.DESC,
+                        "team.completedAt",
+                        "team.updatedAt",
+                        "team.teamId"));
+
+        given(teamMemberRepository.findCompletedProjects(
+                        eq(1L),
+                        eq(org.cotato.gongmozip.domains.team.enums.TeamMemberStatus.ACTIVE),
+                        any(),
+                        eq(pageRequest)))
+                .willReturn(new PageImpl<>(List.of(teamMember), pageRequest, 1L));
+
+        // when
+        CompletedProjectsResponse response = myPageService.getCompletedProjects(1L, 0, 10);
+
+        // then
+        assertThat(response).isNotNull();
+        assertThat(response.projects()).hasSize(1);
+        assertThat(response.projects().get(0).teamId()).isEqualTo(10L);
+        assertThat(response.projects().get(0).contestId()).isEqualTo(15L);
+        assertThat(response.projects().get(0).contestTitle()).isEqualTo("2026 AI 해커톤");
+        assertThat(response.projects().get(0).completedAt()).isEqualTo("2026-08-05");
+        assertThat(response.projects().get(0).medal()).isEqualTo("스프린트 완주 메달");
+        assertThat(response.projects().get(0).award()).isNull();
+        assertThat(response.page()).isEqualTo(0);
+        assertThat(response.size()).isEqualTo(10);
+        assertThat(response.totalElements()).isEqualTo(1L);
+        assertThat(response.totalPages()).isEqualTo(1);
     }
 
     @Test
@@ -194,5 +259,50 @@ class MyPageServiceTest {
         assertThat(response.contests().get(0).deadline()).isEqualTo("2026-08-10");
         assertThat(response.contests().get(0).isScrapped()).isTrue();
         assertThat(response.totalElements()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("완료 프로젝트 삭제 - 완료된 프로젝트에 대해 정상적으로 소프트 딜리트 플래그를 변경한다.")
+    void deleteCompletedProject_success() {
+        // given
+        given(memberRepository.existsById(1L)).willReturn(true);
+        org.cotato.gongmozip.domains.team.entity.Team team = org.cotato.gongmozip.domains.team.entity.Team.builder()
+                .status(org.cotato.gongmozip.domains.team.enums.TeamStatus.SUBMITTED)
+                .build();
+        org.cotato.gongmozip.domains.team.entity.TeamMember teamMember =
+                org.cotato.gongmozip.domains.team.entity.TeamMember.builder()
+                        .team(team)
+                        .isCompletedProjectDeleted(false)
+                        .build();
+
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(10L, 1L)).willReturn(Optional.of(teamMember));
+
+        // when
+        myPageService.deleteCompletedProject(1L, 10L);
+
+        // then
+        assertThat(teamMember.isCompletedProjectDeleted()).isTrue();
+    }
+
+    @Test
+    @DisplayName("완료 프로젝트 삭제 - 진행 중인 프로젝트를 삭제하려 할 경우 예외가 발생한다.")
+    void deleteCompletedProject_fail_notCompleted() {
+        // given
+        given(memberRepository.existsById(1L)).willReturn(true);
+        org.cotato.gongmozip.domains.team.entity.Team team = org.cotato.gongmozip.domains.team.entity.Team.builder()
+                .status(org.cotato.gongmozip.domains.team.enums.TeamStatus.IN_PROGRESS)
+                .build();
+        org.cotato.gongmozip.domains.team.entity.TeamMember teamMember =
+                org.cotato.gongmozip.domains.team.entity.TeamMember.builder()
+                        .team(team)
+                        .isCompletedProjectDeleted(false)
+                        .build();
+
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(10L, 1L)).willReturn(Optional.of(teamMember));
+
+        // when & then
+        assertThatThrownBy(() -> myPageService.deleteCompletedProject(1L, 10L))
+                .isInstanceOf(MyPageException.class)
+                .hasMessage(MyPageErrorCode.PROJECT_NOT_COMPLETED.getMessage());
     }
 }

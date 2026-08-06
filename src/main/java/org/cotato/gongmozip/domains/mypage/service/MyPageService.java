@@ -1,5 +1,6 @@
 package org.cotato.gongmozip.domains.mypage.service;
 
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
 import org.cotato.gongmozip.domains.character.service.CharacterService;
@@ -11,6 +12,8 @@ import org.cotato.gongmozip.domains.mypage.converter.MyPageConverter;
 import org.cotato.gongmozip.domains.mypage.dto.response.MyPageResponse.*;
 import org.cotato.gongmozip.domains.mypage.exception.MyPageException;
 import org.cotato.gongmozip.domains.mypage.exception.codes.MyPageErrorCode;
+import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
+import org.cotato.gongmozip.domains.team.enums.TeamStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -26,13 +29,20 @@ public class MyPageService {
     private final MemberRepository memberRepository;
     private final ContestScrapRepository contestScrapRepository;
     private final CharacterService characterService;
+    private final org.cotato.gongmozip.domains.team.repository.TeamMemberRepository teamMemberRepository;
 
     public MyPageMainResponse getMyPageMain(Long memberId) {
         Member member = getMember(memberId);
 
         int scrapCount = contestScrapRepository.countByMember(member);
         int ongoingProjectCount = 0;
-        int completedProjectCount = 0;
+        int completedProjectCount = (int) teamMemberRepository
+                .findCompletedProjects(
+                        memberId,
+                        TeamMemberStatus.ACTIVE,
+                        List.of(TeamStatus.SUBMITTED, TeamStatus.COMPLETED),
+                        PageRequest.of(0, 1))
+                .getTotalElements();
         int reviewCount = 0;
         CurrentCharacterResponse character =
                 characterService.findCurrentCharacter(member).orElse(null);
@@ -57,7 +67,33 @@ public class MyPageService {
         validateMemberExists(memberId);
         validatePagingParameters(page, size);
 
-        return MyPageConverter.toCompletedProjectsResponse(page, size);
+        Page<org.cotato.gongmozip.domains.team.entity.TeamMember> teamMemberPage =
+                teamMemberRepository.findCompletedProjects(
+                        memberId,
+                        TeamMemberStatus.ACTIVE,
+                        List.of(TeamStatus.SUBMITTED, TeamStatus.COMPLETED),
+                        PageRequest.of(
+                                page,
+                                size,
+                                Sort.by(Sort.Direction.DESC, "team.completedAt", "team.updatedAt", "team.teamId")));
+
+        return MyPageConverter.toCompletedProjectsResponse(teamMemberPage);
+    }
+
+    @Transactional
+    public void deleteCompletedProject(Long memberId, Long teamId) {
+        validateMemberExists(memberId);
+
+        org.cotato.gongmozip.domains.team.entity.TeamMember teamMember = teamMemberRepository
+                .findByTeam_TeamIdAndMember_MemberId(teamId, memberId)
+                .orElseThrow(() -> new MyPageException(MyPageErrorCode.PROJECT_RECORD_NOT_FOUND));
+
+        org.cotato.gongmozip.domains.team.entity.Team team = teamMember.getTeam();
+        if (team.getStatus() != TeamStatus.SUBMITTED && team.getStatus() != TeamStatus.COMPLETED) {
+            throw new MyPageException(MyPageErrorCode.PROJECT_NOT_COMPLETED);
+        }
+
+        teamMember.deleteCompletedProjectRecord();
     }
 
     public ReviewStatisticsResponse getReviewStatistics(Long memberId) {

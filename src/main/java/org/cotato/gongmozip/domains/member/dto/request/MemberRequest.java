@@ -19,4 +19,10 @@ public final class MemberRequest {
     public record UpdateMarketingConsentRequest(
             @NotNull(message = "이메일 마케팅 수신동의 여부는 필수 입력 항목입니다.") Boolean marketingConsentEmail,
             @NotNull(message = "SMS 마케팅 수신동의 여부는 필수 입력 항목입니다.") Boolean marketingConsentSms) {}
+
+    public record GetProfileImagePresignedUrlRequest(
+            @NotBlank(message = "파일명은 필수 입력 항목입니다.") String fileName,
+            @NotBlank(message = "컨텐츠 타입은 필수 입력 항목입니다.") String contentType) {}
+
+    public record UpdateProfileImageRequest(String profileImageUrl) {}
 }

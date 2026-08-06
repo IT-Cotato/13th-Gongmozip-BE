@@ -52,7 +52,16 @@ class MemberControllerTest {
     void getMyInfoReturnsMemberDetails() throws Exception {
         Member member = member();
         MemberMeResponse response = new MemberMeResponse(
-                1L, "test@gongmozip.com", "홍길동", Gender.MALE, LocalDate.of(2000, 1, 1), "GOOGLE", true, true, false);
+                1L,
+                "test@gongmozip.com",
+                "홍길동",
+                Gender.MALE,
+                LocalDate.of(2000, 1, 1),
+                "GOOGLE",
+                true,
+                true,
+                false,
+                "http://profile-image.com/myphoto.png");
         given(memberService.getMemberMe(1L)).willReturn(response);
 
         mockMvc.perform(get("/api/members/me").with(user(new CustomUserDetails(member))))
@@ -60,7 +69,8 @@ class MemberControllerTest {
                 .andExpect(jsonPath("$.code").value("MEMBER_200_4"))
                 .andExpect(jsonPath("$.data.email").value("test@gongmozip.com"))
                 .andExpect(jsonPath("$.data.name").value("홍길동"))
-                .andExpect(jsonPath("$.data.snsLinked").value(true));
+                .andExpect(jsonPath("$.data.snsLinked").value(true))
+                .andExpect(jsonPath("$.data.profileImageUrl").value("http://profile-image.com/myphoto.png"));
     }
 
     @Test
@@ -89,5 +99,45 @@ class MemberControllerTest {
                         .with(user(new CustomUserDetails(member))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("MEMBER_200_6"));
+    }
+
+    @Test
+    @DisplayName("로그인한 회원은 프로필 사진 업로드용 Presigned URL을 발급받을 수 있다")
+    void getProfileImagePresignedUrlSuccess() throws Exception {
+        Member member = member();
+        org.cotato.gongmozip.domains.member.dto.request.MemberRequest.GetProfileImagePresignedUrlRequest request =
+                new org.cotato.gongmozip.domains.member.dto.request.MemberRequest.GetProfileImagePresignedUrlRequest(
+                        "my_photo.png", "image/png");
+        org.cotato.gongmozip.domains.upload.dto.response.GetPresignedUrlResponse response =
+                new org.cotato.gongmozip.domains.upload.dto.response.GetPresignedUrlResponse(
+                        "http://presigned-url", "http://image-url", "image/png");
+        given(memberService.getProfileImagePresignedUrl(request)).willReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                                "/api/members/me/profile-image/presigned-url")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .with(user(new CustomUserDetails(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("MEMBER_200_7"))
+                .andExpect(jsonPath("$.data.uploadUrl").value("http://presigned-url"))
+                .andExpect(jsonPath("$.data.imageUrl").value("http://image-url"));
+    }
+
+    @Test
+    @DisplayName("로그인한 회원은 프로필 사진을 업데이트할 수 있다")
+    void updateProfileImageSuccess() throws Exception {
+        Member member = member();
+        org.cotato.gongmozip.domains.member.dto.request.MemberRequest.UpdateProfileImageRequest request =
+                new org.cotato.gongmozip.domains.member.dto.request.MemberRequest.UpdateProfileImageRequest(
+                        "http://image-url");
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                                "/api/members/me/profile-image")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .with(user(new CustomUserDetails(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("MEMBER_200_8"));
     }
 }

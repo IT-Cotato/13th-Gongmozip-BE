@@ -36,7 +36,7 @@ public class MyPageResponse {
             List<CompletedProjectItem> projects, Integer page, Integer size, long totalElements, Integer totalPages) {}
 
     public record CompletedProjectItem(
-            Long contestId, String contestTitle, String completedAt, String medal, String award) {}
+            Long teamId, Long contestId, String contestTitle, String completedAt, String medal, String award) {}
 
     // 4. 받은 팀원 후기 response
     public record ReviewStatisticsResponse(Integer totalReviewCount, List<ReviewKeywordItem> keywords) {}
