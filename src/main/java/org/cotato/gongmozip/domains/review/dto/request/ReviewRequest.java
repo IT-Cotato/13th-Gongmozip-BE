@@ -14,5 +14,6 @@ public final class ReviewRequest {
             @NotNull(message = "리뷰 대상 팀원은 필수 입력 항목입니다.") Long revieweeTeamMemberId,
             @NotNull(message = "소통이 원활했는지 응답은 필수 입력 항목입니다.") ReviewAgreementLevel communicationScore,
             @NotNull(message = "프로젝트에 적극적으로 참여했는지 응답은 필수 입력 항목입니다.") ReviewAgreementLevel participationScore,
-            @NotEmpty(message = "팀원을 표현하는 키워드를 최소 1개 선택해야 합니다.") List<ReviewKeyword> keywords) {}
+            @NotEmpty(message = "팀원을 표현하는 키워드를 최소 1개 선택해야 합니다.")
+                    List<@NotNull(message = "키워드 목록에 빈 값을 포함할 수 없습니다.") ReviewKeyword> keywords) {}
 }

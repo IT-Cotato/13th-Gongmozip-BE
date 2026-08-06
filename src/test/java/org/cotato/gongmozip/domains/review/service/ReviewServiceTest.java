@@ -172,11 +172,20 @@ class ReviewServiceTest {
                 .willReturn(1L);
 
         // when
-        ReviewResultResponse response = reviewService.writeReview(1L, 10L, defaultRequest(20L));
+        // 두 점수를 서로 다른 값으로 보내 필드가 뒤섞이지 않고 각자 올바르게 매핑되는지 검증한다.
+        ReviewResultResponse response = reviewService.writeReview(
+                1L,
+                10L,
+                new WriteReviewRequest(
+                        20L,
+                        ReviewAgreementLevel.AGREE,
+                        ReviewAgreementLevel.DISAGREE,
+                        List.of(ReviewKeyword.TRUSTWORTHY)));
 
         // then
         assertThat(response.revieweeTeamMemberId()).isEqualTo(20L);
         assertThat(response.communicationScore()).isEqualTo(ReviewAgreementLevel.AGREE);
+        assertThat(response.participationScore()).isEqualTo(ReviewAgreementLevel.DISAGREE);
         assertThat(response.keywords()).containsExactly(ReviewKeyword.TRUSTWORTHY);
         verify(collaborationPointService, never()).awardPoint(any(), any(), any());
         verify(chatbotOrchestrationService, never()).completeReview(any());
