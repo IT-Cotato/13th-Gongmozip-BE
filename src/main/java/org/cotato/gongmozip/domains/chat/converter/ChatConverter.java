@@ -1,11 +1,14 @@
 package org.cotato.gongmozip.domains.chat.converter;
 
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.MemberAvatarResponse;
 import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageItemResponse;
 import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageListResponse;
+import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageUnreadUpdate;
+import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageUnreadUpdateResponse;
 import org.cotato.gongmozip.domains.chat.entity.Message;
 import org.cotato.gongmozip.domains.chat.enums.MessageSenderType;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
@@ -49,7 +52,8 @@ public final class ChatConverter {
                 .build();
     }
 
-    public static MessageItemResponse toMessageItemResponse(Message message, MemberAvatarResponse senderAvatar) {
+    public static MessageItemResponse toMessageItemResponse(
+            Message message, MemberAvatarResponse senderAvatar, long unreadCount) {
         TeamMember sender = message.getSenderTeamMember();
         return new MessageItemResponse(
                 message.getMessageId(),
@@ -60,12 +64,15 @@ public final class ChatConverter {
                 message.getContent(),
                 message.getMetadata(),
                 message.getCreatedAt(),
-                senderAvatar);
+                senderAvatar,
+                unreadCount);
     }
 
     // 리포지토리는 최신순(DESC)으로 조회하므로 화면 표시 순서(오래된 순)로 뒤집는다.
     public static MessageListResponse toMessageListResponse(
-            List<Message> latestFirstMessages, Map<Long, MemberAvatarResponse> avatarsByMemberId) {
+            List<Message> latestFirstMessages,
+            Map<Long, MemberAvatarResponse> avatarsByMemberId,
+            List<TeamMember> activeMembers) {
         List<MessageItemResponse> chronological = latestFirstMessages.stream()
                 .sorted(Comparator.comparing(Message::getCreatedAt))
                 .map(message -> {
@@ -73,9 +80,41 @@ public final class ChatConverter {
                     MemberAvatarResponse avatar = sender != null
                             ? avatarsByMemberId.get(sender.getMember().getMemberId())
                             : null;
-                    return toMessageItemResponse(message, avatar);
+                    return toMessageItemResponse(message, avatar, countUnreadMembers(message, activeMembers));
                 })
                 .toList();
         return new MessageListResponse(chronological);
+    }
+
+    /**
+     * 메시지 하나를 아직 안 읽은 활성 팀원 수. 보낸 사람 본인은 항상 제외하고(자기 메시지를
+     * "안읽음"으로 세지 않음), 나머지 활성 팀원 중 lastReadAt(없으면 joinedAt)이 메시지
+     * createdAt보다 이전인 사람만 센다 — 채팅방 목록 unreadCount와 동일한 기준.
+     */
+    public static long countUnreadMembers(Message message, List<TeamMember> activeMembers) {
+        TeamMember sender = message.getSenderTeamMember();
+        // teamMemberId는 영속화 전까지 null이라(테스트에서는 끝까지 null) 대신 항상 채워지는
+        // Member.memberId로 비교한다 — 한 팀에 같은 회원의 ACTIVE TeamMember는 최대 1개라
+        // (uq_team_members_team_member) 식별자로 써도 안전하다.
+        Long senderMemberId = sender != null ? sender.getMember().getMemberId() : null;
+        LocalDateTime createdAt = message.getCreatedAt();
+        return activeMembers.stream()
+                .filter(member -> senderMemberId == null
+                        || !member.getMember().getMemberId().equals(senderMemberId))
+                .filter(member -> {
+                    LocalDateTime unreadSince =
+                            member.getLastReadAt() != null ? member.getLastReadAt() : member.getJoinedAt();
+                    return unreadSince.isBefore(createdAt);
+                })
+                .count();
+    }
+
+    public static MessageUnreadUpdateResponse toMessageUnreadUpdateResponse(
+            List<Message> messages, List<TeamMember> activeMembers) {
+        List<MessageUnreadUpdate> updates = messages.stream()
+                .map(message ->
+                        new MessageUnreadUpdate(message.getMessageId(), countUnreadMembers(message, activeMembers)))
+                .toList();
+        return new MessageUnreadUpdateResponse(updates);
     }
 }

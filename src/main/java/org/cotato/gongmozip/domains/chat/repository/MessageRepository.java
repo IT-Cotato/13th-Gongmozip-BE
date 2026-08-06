@@ -32,6 +32,18 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     long countByTeam_TeamIdAndCreatedAtAfter(Long teamId, LocalDateTime after);
 
+    // 팀원이 읽음 처리를 할 때, 그 시점까지 안읽음 상태였던(=이번에 새로 읽음 처리된) 메시지만
+    // 골라 실시간 안읽음 수 갱신 브로드캐스트 대상으로 삼는다.
+    @Query(
+            """
+            SELECT m FROM Message m
+            LEFT JOIN FETCH m.senderTeamMember
+            WHERE m.team.teamId = :teamId AND m.createdAt > :after
+            ORDER BY m.createdAt ASC, m.messageId ASC
+            """)
+    List<Message> findByTeam_TeamIdAndCreatedAtAfterOrderByCreatedAtAsc(
+            @Param("teamId") Long teamId, @Param("after") LocalDateTime after);
+
     // 채팅방 목록 조회에서 팀마다 따로 "마지막 메시지"를 조회하면 N+1이 되므로, 한 번에 묶어서 가져온다.
     // created_at으로 매칭하면 같은 팀에서 시각이 완전히 같은 메시지가 여러 개일 때 어느 게 돌아올지
     // 결정적이지 않아서, IDENTITY 컬럼이라 항상 삽입 순서와 일치하는 message_id의 MAX로 묶는다
