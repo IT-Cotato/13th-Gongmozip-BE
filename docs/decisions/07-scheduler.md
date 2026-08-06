@@ -90,6 +90,29 @@
   테스트: `TeamOptimisticLockingIntegrationTest`(실제 두 트랜잭션으로 버전 충돌 재현),
   `TeamSchedulerJobsTest`(낙관적 잠금 충돌 시에도 나머지 팀 처리가 계속됨을 검증).
 
+## 제출 여부 확인 재알림 (2026-08-06, Figma "제출 여부 미진행시" 커버리지 점검 중 발견)
+
+Figma 목업에 "제출 여부 미진행시" 화면이 관련 화면으로 명시돼 있었는데도, 기존 구현은
+`submissionCheckNotifiedAt`을 "최초 1회 발송" 멱등성 플래그로만 썼다 — 팀장이 "미완료"를
+누르거나 아예 응답하지 않아도 다시 알려주는 로직이 전혀 없어서, 최초 카드를 놓치면 팀이
+영원히 `IN_PROGRESS`에 머물 수 있었다.
+
+- `Team.submissionCheckReminderAt`(마이그레이션 V30) — "다음 재알림을 언제 보낼지"를 담는
+  컬럼. 최초 발송(`sendSubmissionCheckForTeam`), 팀장의 "미완료" 응답
+  (`TeamProgressService.submitCompletion`), 재알림 발송 자체(`sendSubmissionCheckReminderForTeam`)
+  세 지점 모두 이 값을 `now + 2시간`으로 계속 미룬다 — GREETING/팀장 선출 타임아웃과 동일한
+  2시간 간격.
+- `TeamScheduleService.findDueSubmissionCheckReminderTeamIds()` /
+  `sendSubmissionCheckReminderForTeam(teamId)` — `IN_PROGRESS`이고 재알림 시각이 지난 팀에게
+  더 짧은 문구("프로젝트가 진행완료되었으면, 진행완료 버튼을 눌러주세요.")로 같은
+  `MessageType.SUBMISSION_CHECK_CARD`를 재발행한다. 최초 카드와 버튼 동작(미완료/진행 완료,
+  `PATCH /api/teams/{teamId}/submission`)이 동일해 새 `MessageType`을 만들 필요는 없었다.
+  `TeamSchedulerJobs.sendSubmissionCheckReminders()`가 5분 간격으로 확인.
+- "진행 완료"로 상태가 `SUBMITTED`가 되면 스케줄러 조회 자체가 `status = IN_PROGRESS` 조건으로
+  걸러지므로 자연히 멈춘다 — `submissionCheckReminderAt`을 명시적으로 `null`로 지우지 않는다
+  (`leaderSelectionDeadlineAt`과 동일한 이유, 데이터 정리 문제일 뿐 기능 영향 없음).
+- 테스트: `TeamProgressServiceTest`, `TeamScheduleServiceTest`, `TeamSchedulerJobsTest`.
+
 ## 미정 / 추후 확인 필요
 
 - ~~`Team.status = SUBMITTED` 이후 "팀원 리뷰 단계로 이동"~~ → Phase 9에서 연결 완료.

@@ -73,6 +73,47 @@ unique를 건다.
   확인하던 `tally`가 다시 호출되지 않는 버그가 있었다. `TeamService.leaveTeam`이 나가는
   시점 호출한다. 자세한 내용/설계 근거는 [01-team.md](./01-team.md) 참고.
 
+## 투표 마감 리마인더 (2026-08-06, Figma 5.1.3.3 커버리지 점검 중 발견)
+
+Figma 목업에는 마감 임박 시 "공모전 투표 완료하셨나요? 투표마감까지 10분 남았어요!" 리마인더
+카드가 있는데, 기존 스케줄러(`resolveContestVotingDeadlines`)는 마감 **순간**에 확정 처리만
+할 뿐 마감 전에 미리 알리는 잡이 없었다.
+
+- `Team.contestVoteReminderNotifiedAt`(마이그레이션 V29) — 중간점검/제출확인 알림과 동일한
+  "1회만 발행" 멱등성 플래그 패턴.
+- `TeamScheduleService.findDueContestVoteReminderTeamIds()` — `contestCandidateDeadlineAt`이
+  10분 이내로 남았고 아직 리마인더를 안 보낸 `CONTEST_SELECTING` 팀을 조회.
+  `sendContestVoteReminderForTeam(teamId)`가 `MessageType.CONTEST_VOTE_REMINDER_CARD`(메타데이터
+  없음)로 안내 카드를 발행한다.
+- `TeamSchedulerJobs.sendContestVoteReminders()` — 마감 확정 스케줄러와 동일하게 5분 간격.
+- 마감이 이미 지난 팀도 조회 대상에 잠깐 걸릴 수 있지만(스케줄러 주기 사이 지연), 같은 5분
+  주기의 마감 확정 잡이 곧 처리하므로 무해하다고 판단해 별도 하한 조건은 추가하지 않았다.
+- 프론트는 리마인더 카드의 버튼 라벨("투표하기"/"결과 보기")을 서버가 정해주지 않는다 — 아래
+  `GET .../contest-candidates/votes`의 `myVoted`로 직접 판단해야 한다.
+- 테스트: `TeamScheduleServiceTest`, `TeamSchedulerJobsTest`.
+
+## 투표 진행 상황 조회 API (2026-08-06, Figma 5.1.3.3 커버리지 점검 중 발견)
+
+Figma의 "공모전 투표" 바텀시트("N명 참여중..")와 "투표 결과" 상세 화면(후보별 득표 막대그래프)은
+전원이 투표를 마치기 **전에도** 현재까지의 참여 인원과 후보별 득표수를 보여주는데, 기존에는 이
+데이터를 조회할 API가 전혀 없었다 — 개표 결과(승자 확정 또는 동률 재투표 카드)는 전원이 투표를
+마쳐야만 채팅 메시지로 왔고, 그마저도 득표수 자체는 담기지 않았다(승자의 `contestId` 또는
+동률 후보 `contestCandidateIds`만 메타데이터에 실림).
+
+- `GET /api/teams/{teamId}/contest-candidates/votes` (`ContestVotingService.getVoteStatus`)
+  신규 추가. 팀 상태 제한 없이(투표 종료 후에도) 호출 가능 — `getCandidates`와 동일한
+  개방성.
+- 응답(`ContestVoteStatusResponse`): 현재 라운드(`round`), 라운드 완료에 필요한 인원
+  (`requiredVoterCount`, 활성 팀원 수), 지금까지 투표한 서로 다른 인원 수
+  (`participatedVoterCount`), 요청자 본인이 이번 라운드에 투표했는지(`myVoted`), 현재 라운드
+  후보별 득표수 내림차순 목록(`results`, 각 항목은 `ContestVoteTallyItemResponse` —
+  `contestCandidateId`/`contest` 요약/`voteCount`).
+- 개표(승자 확정, 동률 재투표 전환) 자체는 이 API가 하지 않는다 — 기존과 동일하게 `submitVote`가
+  전원 투표 완료를 감지해 처리하고, 결과는 채팅 카드로 온다. 이 API는 순수 조회용.
+- 라운드/후보 자격 판정 로직(`currentRound`, `eligibleCandidates`)을 `submitVote`와 그대로
+  공유해 투표 처리와 조회 결과가 항상 같은 라운드 기준으로 일치한다.
+- 테스트: `ContestVotingServiceTest`(득표 집계·참여 인원·`myVoted` 검증).
+
 ## 미정 / 추후 확인 필요
 
 - ~~CONTEST_SELECTING/CONTEST_VOTING 상태 분리 및 후보 마감 처리~~ → Phase 7에서 해결.
