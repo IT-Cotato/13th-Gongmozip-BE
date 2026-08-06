@@ -3,6 +3,7 @@ package org.cotato.gongmozip.domains.scheduler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.cotato.gongmozip.domains.scheduler.service.TeamScheduleService;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -58,6 +59,11 @@ public class TeamSchedulerJobs {
         for (Long teamId : teamScheduleService.findDueGreetingTimeoutTeamIds()) {
             try {
                 teamScheduleService.forceAdvanceGreetingForTeam(teamId);
+            } catch (ObjectOptimisticLockingFailureException e) {
+                // 팀원이 마지막 인사를 같은 시점에 보내 recordGreetingAndAdvance가 먼저 전이시킨
+                // 정상적인 동시성 충돌(Team.version, 이슈 #62)이라 에러가 아니라 경고로만 남기고
+                // 해당 팀은 건너뛴다 — 다음 주기에 재조회하면 이미 GREETING이 아니라 대상에서 빠진다.
+                log.warn("인사 유도 강제 전이가 동시 처리로 건너뛰어짐 - teamId: {}", teamId);
             } catch (Exception e) {
                 log.error("인사 유도 강제 전이 실패 - teamId: {}", teamId, e);
             }
