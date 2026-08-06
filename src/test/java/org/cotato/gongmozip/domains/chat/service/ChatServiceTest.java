@@ -9,6 +9,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -18,6 +19,7 @@ import org.cotato.gongmozip.domains.character.service.CharacterService;
 import org.cotato.gongmozip.domains.chat.dto.request.ChatRequest.SendMessageRequest;
 import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageItemResponse;
 import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageListResponse;
+import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageUnreadUpdateResponse;
 import org.cotato.gongmozip.domains.chat.entity.Message;
 import org.cotato.gongmozip.domains.chat.enums.MessageSenderType;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
@@ -35,6 +37,7 @@ import org.cotato.gongmozip.domains.team.repository.TeamRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -68,6 +71,7 @@ class ChatServiceTest {
         // given
         Team team = Team.builder().teamId(100L).build();
         TeamMember sender = teamMemberOf(team, 1L, "김철수");
+        TeamMember other = teamMemberOf(team, 2L, "이해은");
         SendMessageRequest request = new SendMessageRequest("안녕하세요.");
         MemberAvatarResponse avatar =
                 new MemberAvatarResponse(1L, CharacterType.LEAD_RUNNER, CharacterPalette.DEFAULT, null, null);
@@ -75,7 +79,13 @@ class ChatServiceTest {
         given(teamRepository.findById(100L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
                 .willReturn(Optional.of(sender));
-        given(messageRepository.save(any(Message.class))).willAnswer(inv -> inv.getArgument(0));
+        given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(sender, other));
+        given(messageRepository.save(any(Message.class))).willAnswer(inv -> {
+            Message message = inv.getArgument(0);
+            ReflectionTestUtils.setField(message, "createdAt", LocalDateTime.now());
+            return message;
+        });
         given(characterService.findAvatarsByMembers(List.of(sender.getMember())))
                 .willReturn(Map.of(1L, avatar));
 
@@ -86,6 +96,7 @@ class ChatServiceTest {
         assertThat(response.content()).isEqualTo("안녕하세요.");
         assertThat(response.senderType()).isEqualTo("MEMBER");
         assertThat(response.senderAvatar()).isEqualTo(avatar);
+        assertThat(response.unreadCount()).isEqualTo(1); // 보낸 사람 본인 제외, 나머지 1명(other)만 안읽음
         verify(messagingTemplate).convertAndSend(eq("/topic/teams/100"), any(MessageItemResponse.class));
     }
 
@@ -147,6 +158,8 @@ class ChatServiceTest {
         given(teamRepository.findById(100L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
                 .willReturn(Optional.of(me));
+        given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(me, other));
         given(messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(any(Long.class), any()))
                 .willReturn(List.of(chatbotMessage, memberMessage));
         given(characterService.findAvatarsByMembers(List.of(other.getMember()))).willReturn(Map.of(2L, otherAvatar));
@@ -158,11 +171,17 @@ class ChatServiceTest {
         assertThat(response.messages())
                 .filteredOn(m -> "MEMBER".equals(m.senderType()))
                 .singleElement()
-                .satisfies(m -> assertThat(m.senderAvatar()).isEqualTo(otherAvatar));
+                .satisfies(m -> {
+                    assertThat(m.senderAvatar()).isEqualTo(otherAvatar);
+                    assertThat(m.unreadCount()).isEqualTo(1); // 보낸 other 제외, me만 안읽음
+                });
         assertThat(response.messages())
                 .filteredOn(m -> "CHATBOT".equals(m.senderType()))
                 .singleElement()
-                .satisfies(m -> assertThat(m.senderAvatar()).isNull());
+                .satisfies(m -> {
+                    assertThat(m.senderAvatar()).isNull();
+                    assertThat(m.unreadCount()).isEqualTo(2); // 발신자 없음, me/other 모두 안읽음
+                });
     }
 
     @DisplayName("챗봇이 꺼져있으면 챗봇 메시지를 남기지 않는다.")
@@ -212,6 +231,63 @@ class ChatServiceTest {
         assertThat(me.getLastReadAt()).isNotNull();
     }
 
+    @DisplayName("읽음 처리를 하면 새로 읽은 메시지들의 안읽음 수 갱신이 실시간으로 브로드캐스트된다.")
+    @Test
+    void 읽음_처리를_하면_새로_읽은_메시지들의_안읽음_수_갱신이_실시간으로_브로드캐스트된다() {
+        // given
+        Team team = Team.builder().teamId(100L).build();
+        TeamMember reader = teamMemberOf(team, 1L, "김철수");
+        TeamMember other = teamMemberOf(team, 2L, "이해은");
+        Message message = Message.builder()
+                .team(team)
+                .senderType(MessageSenderType.MEMBER)
+                .senderTeamMember(other)
+                .messageType(MessageType.TEXT)
+                .content("안녕하세요.")
+                .build();
+        ReflectionTestUtils.setField(message, "messageId", 10L);
+        ReflectionTestUtils.setField(message, "createdAt", LocalDateTime.now().minusMinutes(10));
+
+        given(teamRepository.findById(100L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
+                .willReturn(Optional.of(reader));
+        given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(reader, other));
+        given(messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(eq(100L), any()))
+                .willReturn(List.of(message));
+
+        // when
+        chatService.markAsRead(100L, 1L);
+
+        // then
+        ArgumentCaptor<MessageUnreadUpdateResponse> captor = ArgumentCaptor.forClass(MessageUnreadUpdateResponse.class);
+        verify(messagingTemplate).convertAndSend(eq("/topic/teams/100/read-updates"), captor.capture());
+        assertThat(captor.getValue().updates()).singleElement().satisfies(update -> {
+            assertThat(update.messageId()).isEqualTo(10L);
+            assertThat(update.unreadCount()).isEqualTo(0); // 보낸 other 제외, reader는 방금 읽었으니 0명
+        });
+    }
+
+    @DisplayName("새로 읽은 메시지가 없으면 안읽음 수 갱신을 브로드캐스트하지 않는다.")
+    @Test
+    void 새로_읽은_메시지가_없으면_안읽음_수_갱신을_브로드캐스트하지_않는다() {
+        // given
+        Team team = Team.builder().teamId(100L).build();
+        TeamMember me = teamMemberOf(team, 1L, "김철수");
+        given(teamRepository.findById(100L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
+                .willReturn(Optional.of(me));
+        given(messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(eq(100L), any()))
+                .willReturn(List.of());
+
+        // when
+        chatService.markAsRead(100L, 1L);
+
+        // then
+        verify(messagingTemplate, never())
+                .convertAndSend(eq("/topic/teams/100/read-updates"), any(MessageUnreadUpdateResponse.class));
+    }
+
     private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {
         Member member = Member.builder().memberId(memberId).build();
         Profile profile = Profile.builder().nickname(nickname).build();
@@ -220,6 +296,7 @@ class ChatServiceTest {
                 .member(member)
                 .profile(profile)
                 .status(TeamMemberStatus.ACTIVE)
+                .joinedAt(LocalDateTime.now().minusDays(1))
                 .build();
     }
 }

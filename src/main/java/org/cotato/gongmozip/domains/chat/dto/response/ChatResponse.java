@@ -17,7 +17,13 @@ public final class ChatResponse {
             String content,
             String metadata,
             LocalDateTime createdAt,
-            MemberAvatarResponse senderAvatar) {}
+            MemberAvatarResponse senderAvatar,
+            long unreadCount) {}
 
     public record MessageListResponse(List<MessageItemResponse> messages) {}
+
+    /** 팀원이 읽음 처리를 해서 기존 메시지들의 안읽음 수가 줄었을 때 실시간으로 내려주는 갱신 이벤트. */
+    public record MessageUnreadUpdateResponse(List<MessageUnreadUpdate> updates) {}
+
+    public record MessageUnreadUpdate(Long messageId, long unreadCount) {}
 }

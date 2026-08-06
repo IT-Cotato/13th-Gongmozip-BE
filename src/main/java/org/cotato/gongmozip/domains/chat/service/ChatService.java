@@ -11,6 +11,7 @@ import org.cotato.gongmozip.domains.chat.converter.ChatConverter;
 import org.cotato.gongmozip.domains.chat.dto.request.ChatRequest.SendMessageRequest;
 import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageItemResponse;
 import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageListResponse;
+import org.cotato.gongmozip.domains.chat.dto.response.ChatResponse.MessageUnreadUpdateResponse;
 import org.cotato.gongmozip.domains.chat.entity.Message;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
@@ -38,6 +39,7 @@ public class ChatService {
 
     private static final int DEFAULT_MESSAGE_PAGE_SIZE = 50;
     private static final String TEAM_TOPIC_PREFIX = "/topic/teams/";
+    private static final String TEAM_READ_UPDATES_TOPIC_SUFFIX = "/read-updates";
 
     private final MessageRepository messageRepository;
     private final TeamRepository teamRepository;
@@ -67,15 +69,41 @@ public class ChatService {
                 .distinct()
                 .toList();
         Map<Long, MemberAvatarResponse> avatarsByMemberId = characterService.findAvatarsByMembers(senders);
+        List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
 
-        return ChatConverter.toMessageListResponse(latestFirst, avatarsByMemberId);
+        return ChatConverter.toMessageListResponse(latestFirst, avatarsByMemberId, activeMembers);
     }
 
+    /**
+     * 읽음 처리 시점까지 안읽음 상태였던(=이번에 새로 읽음 처리된) 메시지들의 안읽음 수를
+     * 다시 계산해 실시간으로 갱신 브로드캐스트한다. 안읽음 수 자체는 실시간 반영이 필요 없다고
+     * 봤던 기존 결정(docs/decisions/03-chat.md)과 달리, 메시지별 안읽음 수는 화면에 이미 떠있는
+     * 숫자를 살아있는 값으로 유지해야 해서 이번엔 브로드캐스트를 붙인다.
+     *
+     * <p>영향받는 메시지는 {@code getMessages}와 동일하게 최신 {@value #DEFAULT_MESSAGE_PAGE_SIZE}건
+     * 안에서만 찾는다 — 화면에 그 이상 과거 메시지는 애초에 렌더링되지 않으므로, 무제한으로 조회해
+     * 갱신을 보내는 건 낭비다(팀원이 아주 오래 안 읽었을 때 메시지 수만큼 로드/브로드캐스트가
+     * 커지는 문제도 함께 막는다).
+     */
     @Transactional
     public void markAsRead(Long teamId, Long memberId) {
         teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
         TeamMember member = requireActiveMember(teamId, memberId);
+        LocalDateTime unreadSince = member.getLastReadAt() != null ? member.getLastReadAt() : member.getJoinedAt();
+
         member.markRead(LocalDateTime.now());
+
+        List<Message> latestFirst = messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(
+                teamId, PageRequest.of(0, DEFAULT_MESSAGE_PAGE_SIZE));
+        List<Message> newlyRead = latestFirst.stream()
+                .filter(message -> message.getCreatedAt().isAfter(unreadSince))
+                .toList();
+        if (newlyRead.isEmpty()) {
+            return;
+        }
+        List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
+        MessageUnreadUpdateResponse update = ChatConverter.toMessageUnreadUpdateResponse(newlyRead, activeMembers);
+        messagingTemplate.convertAndSend(TEAM_TOPIC_PREFIX + teamId + TEAM_READ_UPDATES_TOPIC_SUFFIX, update);
     }
 
     /** 채팅방 나가기/챗봇 on-off 등 다른 도메인 서비스가 시스템 안내 메시지를 남길 때 사용한다. */
@@ -118,8 +146,10 @@ public class ChatService {
                         .findAvatarsByMembers(List.of(sender.getMember()))
                         .get(sender.getMember().getMemberId())
                 : null;
+        List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
+        long unreadCount = ChatConverter.countUnreadMembers(saved, activeMembers);
 
-        MessageItemResponse response = ChatConverter.toMessageItemResponse(saved, avatar);
+        MessageItemResponse response = ChatConverter.toMessageItemResponse(saved, avatar, unreadCount);
         messagingTemplate.convertAndSend(TEAM_TOPIC_PREFIX + teamId, response);
         return response;
     }
