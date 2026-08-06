@@ -23,6 +23,7 @@
 | submissionCheckAt | LocalDateTime, nullable | contest 확정 시 계산. [07-scheduler.md](./07-scheduler.md) |
 | submitted | boolean | 팀장의 "진행 완료" 여부 |
 | leaderSelectionDeadlineAt | LocalDateTime, nullable | 팀장 여부 투표/팀장 투표 마감 시각. `GET /api/teams/{teamId}/members`(`TeamMembersResponse.leaderSelectionDeadlineAt`)로 노출 (2026-08-05). [02-leader-election.md](./02-leader-election.md) 참고 |
+| version | Long | `@Version` 낙관적 잠금(마이그레이션 V28, 2026-08-06). `GREETING` 상태 전이 동시 실행 방지용 — [07-scheduler.md](./07-scheduler.md) 참고 |
 
 ### TeamStatus (상태머신)
 

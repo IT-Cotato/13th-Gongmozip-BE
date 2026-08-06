@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 @ExtendWith(MockitoExtension.class)
 class TeamSchedulerJobsTest {
@@ -74,6 +75,23 @@ class TeamSchedulerJobsTest {
         // given
         given(teamScheduleService.findDueGreetingTimeoutTeamIds()).willReturn(List.of(1L, 2L));
         willThrow(new RuntimeException("boom")).given(teamScheduleService).forceAdvanceGreetingForTeam(1L);
+
+        // when
+        teamSchedulerJobs.forceAdvanceGreetings();
+
+        // then
+        verify(teamScheduleService).forceAdvanceGreetingForTeam(1L);
+        verify(teamScheduleService).forceAdvanceGreetingForTeam(2L);
+    }
+
+    @DisplayName("인사 유도 강제 전이 중 동시성 충돌(낙관적 잠금)이 나도 에러 없이 다음 팀으로 넘어간다.")
+    @Test
+    void 인사_유도_강제_전이_중_동시성_충돌이_나도_다음_팀으로_넘어간다() {
+        // given
+        given(teamScheduleService.findDueGreetingTimeoutTeamIds()).willReturn(List.of(1L, 2L));
+        willThrow(new ObjectOptimisticLockingFailureException(Object.class, 1L))
+                .given(teamScheduleService)
+                .forceAdvanceGreetingForTeam(1L);
 
         // when
         teamSchedulerJobs.forceAdvanceGreetings();
