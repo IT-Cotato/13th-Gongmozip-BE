@@ -5,7 +5,12 @@
 -- legacy_content로 이름만 바꿔 보존한다. 애플리케이션 코드(Review 엔티티)는 이 컬럼을 더 이상
 -- 참조하지 않으며, 필요 시 수동 조회/백업 용도로만 남겨둔다.
 ALTER TABLE reviews RENAME COLUMN content TO legacy_content;
-ALTER TABLE reviews ALTER COLUMN legacy_content DROP NOT NULL;
+ALTER TABLE reviews MODIFY COLUMN legacy_content TEXT NULL;
 ALTER TABLE reviews ADD COLUMN communication_score VARCHAR(20) NOT NULL DEFAULT 'NEUTRAL';
 ALTER TABLE reviews ADD COLUMN participation_score VARCHAR(20) NOT NULL DEFAULT 'NEUTRAL';
-ALTER TABLE reviews ADD COLUMN keywords TEXT NOT NULL DEFAULT '[]';
+
+-- MySQL은 TEXT 컬럼에 리터럴 DEFAULT를 허용하지 않으므로
+-- NULL로 추가 → 기존 행 채움 → NOT NULL 전환 순서로 처리한다.
+ALTER TABLE reviews ADD COLUMN keywords TEXT NULL;
+UPDATE reviews SET keywords = '[]';
+ALTER TABLE reviews MODIFY COLUMN keywords TEXT NOT NULL;
