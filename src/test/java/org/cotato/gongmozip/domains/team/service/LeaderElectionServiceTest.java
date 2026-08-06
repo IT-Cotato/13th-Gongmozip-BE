@@ -444,7 +444,7 @@ class LeaderElectionServiceTest {
     void LEADER_SELECTING_상태가_아니면_AI_추천_수락에_실패한다() {
         // given
         Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
 
         // when & then
         assertThatThrownBy(() -> leaderElectionService.acceptAiRecommendation(1L, 10L))
@@ -459,7 +459,7 @@ class LeaderElectionServiceTest {
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
         TeamMember member = teamMemberOf(team, 10L, "김철수");
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(member));
         given(messageRepository.findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(
                         1L, MessageType.LEADER_VOTE_CARD))
@@ -484,7 +484,7 @@ class LeaderElectionServiceTest {
                 .metadata("{\"candidateTeamMemberIds\":[10,20],\"aiRecommendedTeamMemberId\":10}")
                 .build();
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(accepter));
         given(messageRepository.findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(
                         1L, MessageType.LEADER_VOTE_CARD))
@@ -521,7 +521,7 @@ class LeaderElectionServiceTest {
                 .metadata("{\"candidateTeamMemberIds\":[10,20],\"aiRecommendedTeamMemberId\":10}")
                 .build();
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(accepter));
         given(messageRepository.findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(
                         1L, MessageType.LEADER_VOTE_CARD))
@@ -545,7 +545,7 @@ class LeaderElectionServiceTest {
                 .messageType(MessageType.LEADER_VOTE_CARD)
                 .metadata("{\"candidateTeamMemberIds\":[10,20]}")
                 .build();
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(member));
         given(messageRepository.findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(
                         1L, MessageType.LEADER_VOTE_CARD))
@@ -568,7 +568,7 @@ class LeaderElectionServiceTest {
                 .messageType(MessageType.LEADER_VOTE_CARD)
                 .metadata("{\"candidateTeamMemberIds\":[10,20],\"aiRecommendedTeamMemberId\":10}")
                 .build();
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(requester));
         given(messageRepository.findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(
                         1L, MessageType.LEADER_VOTE_CARD))

@@ -346,7 +346,7 @@ public class LeaderElectionService {
      */
     @Transactional
     public void acceptAiRecommendation(Long teamId, Long memberId) {
-        Team team = requireTeamInLeaderSelecting(teamId);
+        Team team = requireTeamInLeaderSelectingWithLock(teamId);
         requireActiveMember(teamId, memberId);
 
         Message latestVoteCard = latestPendingTiebreakCard(teamId);
@@ -368,7 +368,7 @@ public class LeaderElectionService {
      */
     @Transactional
     public void requestRevote(Long teamId, Long memberId) {
-        Team team = requireTeamInLeaderSelecting(teamId);
+        Team team = requireTeamInLeaderSelectingWithLock(teamId);
         requireActiveMember(teamId, memberId);
 
         Message latestVoteCard = latestPendingTiebreakCard(teamId);
@@ -489,6 +489,22 @@ public class LeaderElectionService {
 
     private Team requireTeamInLeaderSelecting(Long teamId) {
         Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        if (team.getStatus() != TeamStatus.LEADER_SELECTING) {
+            throw new TeamException(TeamErrorCode.INVALID_TEAM_STATUS);
+        }
+        return team;
+    }
+
+    // requestRevote와 acceptAiRecommendation은 같은 동률 카드를 읽고 그중 하나만 팀장을
+    // 확정시킬 수 있다 — 잠금 없이 두 요청이 거의 동시에 들어오면, 재투표 요청이 카드를 읽은
+    // 뒤 AI 추천 수락이 먼저 커밋되어도 재투표 요청이 그 사실을 모른 채 "재투표 진행" 카드를
+    // LEADER_DECIDED 이후에 발행할 수 있다. 두 메서드만 팀 행 자체를 잠가 서로를 직렬화한다 —
+    // 뒤에 잠금을 얻는 트랜잭션은 앞선 트랜잭션이 커밋한 최신 상태(LEADER_DECIDED)를 보고
+    // INVALID_TEAM_STATUS로 안전하게 실패한다.
+    private Team requireTeamInLeaderSelectingWithLock(Long teamId) {
+        Team team = teamRepository
+                .findByIdWithLock(teamId)
+                .orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
         if (team.getStatus() != TeamStatus.LEADER_SELECTING) {
             throw new TeamException(TeamErrorCode.INVALID_TEAM_STATUS);
         }
