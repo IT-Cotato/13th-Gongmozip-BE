@@ -3,6 +3,7 @@ package org.cotato.gongmozip.domains.mypage.converter;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.entity.ContestScrap;
@@ -42,9 +43,44 @@ public class MyPageConverter {
                 scrapContestCount);
     }
 
-    // TODO: 프로젝트 도메인 구현 후 진행 중인 프로젝트 연동 및 매핑 로직 추가 필요
-    public static OngoingProjectsResponse toOngoingProjectsResponse(int page, int size) {
-        return new OngoingProjectsResponse(Collections.emptyList(), page, size, 0L, 0);
+    public static OngoingProjectsResponse toOngoingProjectsResponse(
+            Page<TeamMember> teamMemberPage, Map<Long, Long> memberCountMap) {
+        List<OngoingProjectItem> items = teamMemberPage.getContent().stream()
+                .map(tm -> {
+                    Team team = tm.getTeam();
+                    Contest contest = team.getContest();
+                    Long contestId = contest != null ? contest.getContestId() : null;
+                    String contestTitle = contest != null ? contest.getTitle() : "선택 안 함";
+                    String contestImageUrl = contest != null ? contest.getThumbnailUrl() : null;
+
+                    String startedAt = team.getContestDecidedAt() != null
+                            ? team.getContestDecidedAt().toLocalDate().toString()
+                            : team.getCreatedAt().toLocalDate().toString();
+
+                    String deadline = contest != null && contest.getApplyEndAt() != null
+                            ? contest.getApplyEndAt().toLocalDate().toString()
+                            : null;
+
+                    int memberCount =
+                            memberCountMap.getOrDefault(team.getTeamId(), 0L).intValue();
+
+                    return new OngoingProjectItem(
+                            team.getTeamId(),
+                            contestId,
+                            contestTitle,
+                            contestImageUrl,
+                            startedAt,
+                            deadline,
+                            memberCount);
+                })
+                .toList();
+
+        return new OngoingProjectsResponse(
+                items,
+                teamMemberPage.getNumber(),
+                teamMemberPage.getSize(),
+                teamMemberPage.getTotalElements(),
+                teamMemberPage.getTotalPages());
     }
 
     public static CompletedProjectsResponse toCompletedProjectsResponse(Page<TeamMember> teamMemberPage) {

@@ -1,6 +1,8 @@
 package org.cotato.gongmozip.domains.mypage.service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
 import org.cotato.gongmozip.domains.character.service.CharacterService;
@@ -35,7 +37,13 @@ public class MyPageService {
         Member member = getMember(memberId);
 
         int scrapCount = contestScrapRepository.countByMember(member);
-        int ongoingProjectCount = 0;
+        int ongoingProjectCount = (int) teamMemberRepository
+                .findOngoingProjects(
+                        memberId,
+                        TeamMemberStatus.ACTIVE,
+                        List.of(TeamStatus.SUBMITTED, TeamStatus.COMPLETED),
+                        PageRequest.of(0, 1))
+                .getTotalElements();
         int completedProjectCount = (int) teamMemberRepository
                 .findCompletedProjects(
                         memberId,
@@ -60,7 +68,23 @@ public class MyPageService {
         validateMemberExists(memberId);
         validatePagingParameters(page, size);
 
-        return MyPageConverter.toOngoingProjectsResponse(page, size);
+        Page<org.cotato.gongmozip.domains.team.entity.TeamMember> teamMemberPage =
+                teamMemberRepository.findOngoingProjects(
+                        memberId,
+                        TeamMemberStatus.ACTIVE,
+                        List.of(TeamStatus.SUBMITTED, TeamStatus.COMPLETED),
+                        PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "team.createdAt", "team.teamId")));
+
+        List<Long> teamIds = teamMemberPage.getContent().stream()
+                .map(tm -> tm.getTeam().getTeamId())
+                .toList();
+
+        Map<Long, Long> memberCountMap = teamIds.isEmpty()
+                ? Map.of()
+                : teamMemberRepository.findByTeamIdInAndStatus(teamIds, TeamMemberStatus.ACTIVE).stream()
+                        .collect(Collectors.groupingBy(tm -> tm.getTeam().getTeamId(), Collectors.counting()));
+
+        return MyPageConverter.toOngoingProjectsResponse(teamMemberPage, memberCountMap);
     }
 
     public CompletedProjectsResponse getCompletedProjects(Long memberId, Integer page, Integer size) {
