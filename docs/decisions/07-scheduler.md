@@ -76,6 +76,20 @@
   적용했다. 상세 로직(하위 단계 판정, 마감 시 처리 방식)은 [02-leader-election.md](./02-leader-election.md)
   참고.
 
+- **GREETING 상태 전이 동시성 보호 (2026-08-06, PR #61 CodeRabbit 리뷰에서 발견 → 이슈 #62로
+  분리 후 처리)**: `forceAdvanceGreetingIfDue`(스케줄러, 5분 간격)와 `recordGreetingAndAdvance`
+  (팀원 메시지 트리거)가 거의 동시에 같은 팀의 `TeamStatus.GREETING` 조건을 통과하면
+  `advanceAfterGreeting`이 두 번 실행돼 AI 추천 호출과 `LEADER_NOMINATION_CARD` 메시지가
+  중복 발행될 수 있었다. `Team`에 `@Version` 낙관적 잠금(마이그레이션 V28, `version` 컬럼)을
+  추가해 나중에 커밋을 시도하는 트랜잭션이 `ObjectOptimisticLockingFailureException`을
+  받도록 했다. `ChatbotOrchestrationService` 자체는 손대지 않음 — 트랜잭션 커밋 시점에 JPA가
+  자동으로 감지하므로 애플리케이션 코드에서 별도로 잠글 필요가 없다. `TeamSchedulerJobs.
+  forceAdvanceGreetings`만 이 예외를 별도로 잡아 `error`가 아닌 `warn`으로 로깅하고(정상적인
+  동시성 충돌이지 실제 장애가 아니므로) 해당 팀만 건너뛴 뒤 다음 팀 처리를 계속한다 — 스킵된
+  팀은 다음 스케줄러 주기에 재조회했을 때 이미 `GREETING`이 아니면 자연히 대상에서 빠진다.
+  테스트: `TeamOptimisticLockingIntegrationTest`(실제 두 트랜잭션으로 버전 충돌 재현),
+  `TeamSchedulerJobsTest`(낙관적 잠금 충돌 시에도 나머지 팀 처리가 계속됨을 검증).
+
 ## 미정 / 추후 확인 필요
 
 - ~~`Team.status = SUBMITTED` 이후 "팀원 리뷰 단계로 이동"~~ → Phase 9에서 연결 완료.
