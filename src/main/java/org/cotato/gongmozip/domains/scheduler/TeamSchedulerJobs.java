@@ -30,6 +30,18 @@ public class TeamSchedulerJobs {
         }
     }
 
+    // 공모전 투표 마감 10분 전 리마인더도 같은 5분 간격으로 확인한다.
+    @Scheduled(cron = "0 */5 * * * *")
+    public void sendContestVoteReminders() {
+        for (Long teamId : teamScheduleService.findDueContestVoteReminderTeamIds()) {
+            try {
+                teamScheduleService.sendContestVoteReminderForTeam(teamId);
+            } catch (Exception e) {
+                log.error("공모전 투표 리마인더 발행 실패 - teamId: {}", teamId, e);
+            }
+        }
+    }
+
     // 중간점검/제출확인은 날짜 단위 비교라 하루 한 번이면 충분하다.
     @Scheduled(cron = "0 0 9 * * *")
     public void sendProgressChecks() {
@@ -49,6 +61,18 @@ public class TeamSchedulerJobs {
                 teamScheduleService.sendSubmissionCheckForTeam(teamId);
             } catch (Exception e) {
                 log.error("제출확인 알림 발행 실패 - teamId: {}", teamId, e);
+            }
+        }
+    }
+
+    // "진행 완료"로 응답하지 않은 팀에게 2시간 간격으로 재알림하므로 5분 간격으로 마감을 확인한다.
+    @Scheduled(cron = "0 */5 * * * *")
+    public void sendSubmissionCheckReminders() {
+        for (Long teamId : teamScheduleService.findDueSubmissionCheckReminderTeamIds()) {
+            try {
+                teamScheduleService.sendSubmissionCheckReminderForTeam(teamId);
+            } catch (Exception e) {
+                log.error("제출확인 재알림 발행 실패 - teamId: {}", teamId, e);
             }
         }
     }

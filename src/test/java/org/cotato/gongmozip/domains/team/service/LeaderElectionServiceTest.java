@@ -444,7 +444,7 @@ class LeaderElectionServiceTest {
     void LEADER_SELECTING_상태가_아니면_AI_추천_수락에_실패한다() {
         // given
         Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
 
         // when & then
         assertThatThrownBy(() -> leaderElectionService.acceptAiRecommendation(1L, 10L))
@@ -459,7 +459,7 @@ class LeaderElectionServiceTest {
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
         TeamMember member = teamMemberOf(team, 10L, "김철수");
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(member));
         given(messageRepository.findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(
                         1L, MessageType.LEADER_VOTE_CARD))
@@ -484,7 +484,7 @@ class LeaderElectionServiceTest {
                 .metadata("{\"candidateTeamMemberIds\":[10,20],\"aiRecommendedTeamMemberId\":10}")
                 .build();
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(accepter));
         given(messageRepository.findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(
                         1L, MessageType.LEADER_VOTE_CARD))
@@ -521,7 +521,7 @@ class LeaderElectionServiceTest {
                 .metadata("{\"candidateTeamMemberIds\":[10,20],\"aiRecommendedTeamMemberId\":10}")
                 .build();
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(accepter));
         given(messageRepository.findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(
                         1L, MessageType.LEADER_VOTE_CARD))
@@ -532,6 +532,58 @@ class LeaderElectionServiceTest {
         assertThatThrownBy(() -> leaderElectionService.acceptAiRecommendation(1L, 20L))
                 .isInstanceOf(TeamException.class)
                 .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.INVALID_LEADER_CANDIDATE);
+    }
+
+    @DisplayName("동률 상태가 아니면 재투표 요청에 실패한다.")
+    @Test
+    void 동률_상태가_아니면_재투표_요청에_실패한다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember member = teamMemberOf(team, 10L, "김철수");
+        Message initialVoteCard = Message.builder()
+                .messageType(MessageType.LEADER_VOTE_CARD)
+                .metadata("{\"candidateTeamMemberIds\":[10,20]}")
+                .build();
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(member));
+        given(messageRepository.findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(
+                        1L, MessageType.LEADER_VOTE_CARD))
+                .willReturn(Optional.of(initialVoteCard));
+
+        // when & then
+        assertThatThrownBy(() -> leaderElectionService.requestRevote(1L, 10L))
+                .isInstanceOf(TeamException.class)
+                .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.NO_PENDING_AI_RECOMMENDATION);
+    }
+
+    @DisplayName("동률 상태에서 재투표를 요청하면 동률이었던 후보 목록으로 안내 카드가 다시 발행된다.")
+    @Test
+    void 동률_상태에서_재투표를_요청하면_안내_카드가_다시_발행된다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember requester = teamMemberOf(team, 20L, "이해은");
+        Message tieVoteCard = Message.builder()
+                .messageType(MessageType.LEADER_VOTE_CARD)
+                .metadata("{\"candidateTeamMemberIds\":[10,20],\"aiRecommendedTeamMemberId\":10}")
+                .build();
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(requester));
+        given(messageRepository.findFirstByTeam_TeamIdAndMessageTypeOrderByCreatedAtDesc(
+                        1L, MessageType.LEADER_VOTE_CARD))
+                .willReturn(Optional.of(tieVoteCard));
+
+        // when
+        leaderElectionService.requestRevote(1L, 20L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
+        ArgumentCaptor<String> metadataCaptor = ArgumentCaptor.forClass(String.class);
+        verify(chatService)
+                .postChatbotCardMessage(
+                        eq(team), eq(MessageType.LEADER_VOTE_CARD), anyString(), metadataCaptor.capture());
+        assertThat(metadataCaptor.getValue()).contains("10").contains("20").doesNotContain("aiRecommendedTeamMemberId");
     }
 
     @DisplayName("존재하지 않는 팀이면 예외가 발생한다.")

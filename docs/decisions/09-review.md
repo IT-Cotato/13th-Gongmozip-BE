@@ -14,7 +14,11 @@
 | team | FK |
 | reviewer | 작성자 `TeamMember` FK |
 | reviewee | 대상 `TeamMember` FK |
-| content | 자유 텍스트, 최대 1000자 |
+| communicationScore | 3점 척도(`ReviewAgreementLevel`) — 소통이 원활했는지 |
+| participationScore | 3점 척도(`ReviewAgreementLevel`) — 적극적으로 참여했는지 |
+| keywords | `ReviewKeyword` 다중 선택 목록(최소 1개) |
+
+> ~~content (자유 텍스트, 최대 1000자)~~ → 2026-08-06 폐기, 아래 "리뷰 콘텐츠 형식 확정" 참고.
 
 unique(team_id, reviewer_team_member_id, reviewee_team_member_id) — 같은 팀에서 같은 대상에게
 중복 작성 불가.
@@ -28,9 +32,10 @@ unique(team_id, reviewer_team_member_id, reviewee_team_member_id) — 같은 팀
   peer-to-peer 구조. "팀원 리뷰 팝업"과 "팀장 리뷰 팝업"이 화면상 별개로 존재하지만, 백엔드
   데이터 구조는 동일하다고 보고 하나의 `Review` 엔티티로 처리한다 — 팀장이냐 아니냐는
   `reviewee.role`로 프론트가 판단해 팝업 문구만 다르게 보여주면 된다.
-- **내용 형식**: 이번 구현은 자유 텍스트 한 줄만 받는다. 실제 와이어프레임에 별점/태그 선택
+- ~~**내용 형식**: 이번 구현은 자유 텍스트 한 줄만 받는다. 실제 와이어프레임에 별점/태그 선택
   같은 세부 UI가 있다면 그건 추후 필드 추가로 대응 — 현재는 스펙 확인 전이라 임의로 만들지
-  않았다 (사용자 확인: 완료 조건만 결정, 리뷰 콘텐츠 형식은 논의 안 됨).
+  않았다 (사용자 확인: 완료 조건만 결정, 리뷰 콘텐츠 형식은 논의 안 됨).~~ → 2026-08-06 폐기,
+  아래 "리뷰 콘텐츠 형식 확정" 참고.
 - **완료 조건 (사용자 결정, 2026-07-30)**: 활성 팀원 전원이 서로를 다 리뷰하면(=
   `n * (n-1)`개 리뷰가 모두 쌓이면) 그 즉시 `Team.status = COMPLETED`로 자동 전이. 시간 기반
   마감(Phase 7 스케줄러 패턴)은 채택하지 않음 — 아무도 리뷰를 안 쓰면 팀은 계속 `SUBMITTED`에
@@ -98,12 +103,58 @@ unique(team_id, reviewer_team_member_id, reviewee_team_member_id) — 같은 팀
   팀 상태로 제한하지 않는다(아직 SUBMITTED 전이라 대상이 없거나, 이미 COMPLETED로 넘어가
   과거 이력을 보는 경우에도 조회 자체는 막을 이유가 없어서).
 
+## 리뷰 콘텐츠 형식 확정 (2026-08-06, Figma 5.1.3.6.1~6.5 확인 후 자유 텍스트 폐기)
+
+위 "미정" 항목("실제 와이어프레임 확인 후 리뷰 콘텐츠 형식이 추가로 필요하면 컬럼을 더
+추가해야 함")으로 남겨뒀던 부분을 Figma 확인 후 확정했다. 실제 화면에는 자유 텍스트 입력창이
+전혀 없고, 3점 척도 응답 2개 + 다중 선택 키워드로만 구성돼 있어 `Review.content`(자유
+텍스트, 최대 1000자)를 완전히 폐기하고 구조화된 필드로 교체했다.
+
+- 마이그레이션 V31 — `reviews.content` 삭제, `communication_score`/`participation_score`
+  (`VARCHAR(20)`, 기본값 `'NEUTRAL'`), `keywords`(`TEXT`, 기본값 `'[]'`) 추가.
+- `ReviewAgreementLevel`(`domains/review/enums`) — "소통이 원활하게 이루어졌나요?" /
+  "프로젝트에 적극적으로 참여하였나요?" 두 질문에 공용으로 쓰는 3점 척도:
+  `DISAGREE`(아니다) / `NEUTRAL`(보통이다) / `AGREE`(그렇다).
+- `ReviewKeyword`(`domains/review/enums`) — 와이어프레임의 7개 고정 키워드 칩과 1:1 대응:
+  `LEADERSHIP`(리더십이 있는 팀원), `GOOD_COMMUNICATOR`(소통이 잘되는 팀원),
+  `CREATIVE`(아이디어가 좋은 팀원), `PROBLEM_SOLVER`(문제해결을 잘하는 팀원),
+  `TRUSTWORTHY`(믿음직한 팀원), `PROACTIVE`(적극적인 팀원), `CONSIDERATE`(배려심 있는 팀원).
+  화면에 상한 선택 개수가 명시돼 있지 않아 최소 1개만 강제한다(`@NotEmpty`).
+- `Review.keywords`는 별도 조인 테이블 없이 `MatchingReason.commonPoints`와 동일하게
+  `StringListConverter`(`domains/profile/entity`, 이미 여러 도메인이 재사용 중)로 JSON 문자열
+  컬럼에 저장한다 — 엔티티에는 `List<String>`(`ReviewKeyword.name()` 값)으로, API
+  요청/응답에는 `List<ReviewKeyword>`로 노출해 타입 안전성을 유지한다
+  (`ReviewConverter.toKeywords`).
+- `WriteReviewRequest`가 `content` 대신 `communicationScore`/`participationScore`/`keywords`
+  3개 필드를 받도록 교체 — 완료 판정·포인트 지급 로직(`awardPointIfReviewerJustCompleted`,
+  `completeReviewIfAllDone`)은 리뷰 존재 여부만으로 판정하므로 이번 변경과 무관하게 그대로
+  동작한다.
+- "나가기" 시 뜨는 "작성하신 내용은 임시저장됩니다" 안내에 대응하는 서버 쪽 초안 저장 기능은
+  만들지 않았다 — `Review`는 `POST .../reviews` 성공 시에만 생성되는 완결된 레코드이고 부분
+  저장 개념이 없다. 프론트가 로컬 상태로만 입력값을 들고 있다가 같은 세션에서 해당 팀원
+  탭으로 돌아오면 복원해주는 것으로 **가정**하고 구현했다 — 아직 프론트/기획 확인 전인
+  가정이므로, 기기/세션을 넘어선 서버 영속화가 실제로 필요하면 아래 "미정" 항목대로 별도
+  API를 추가해야 한다.
+- 테스트: `ReviewServiceTest` 기존 케이스를 새 요청 스키마로 갱신.
+
+> ⚠️ **기존 자유 텍스트 보존 (2026-08-06, CodeRabbit 리뷰 반영)**: 처음엔 `content`를
+> `DROP COLUMN`으로 바로 지웠는데, 이미 작성된 자유 텍스트 리뷰가 있었다면 새 필드 기본값
+> (`NEUTRAL`/`NEUTRAL`/`[]`)으로 덮여 마치 실제 구조화 응답인 것처럼 보일 위험이 있었다.
+> 새 형식으로 자동 환산할 방법이 없어(척도·키워드를 텍스트에서 역산 불가) `content`를
+> 드롭하는 대신 `legacy_content`로 이름만 바꿔 보존한다(V31) — `NOT NULL` 제약도 함께
+> 제거해 이후 저장되는 새 리뷰 행에는 채워지지 않는다. `Review` 엔티티는 이 컬럼을 더 이상
+> 매핑하지 않으며, 필요 시 수동 조회/백업 용도로만 남겨둔다.
+
 ## 미정 / 추후 확인 필요
 
-- 실제 와이어프레임 확인 후 리뷰 콘텐츠 형식(별점/태그 등)이 추가로 필요하면 `Review`에
-  컬럼을 더 추가해야 함.
+- ~~실제 와이어프레임 확인 후 리뷰 콘텐츠 형식(별점/태그 등)이 추가로 필요하면 `Review`에
+  컬럼을 더 추가해야 함.~~ → 2026-08-06 확정, 위 "리뷰 콘텐츠 형식 확정" 참고.
+- "임시저장" 안내가 실제로 서버 영속화를 의미하는지(기기/세션을 넘어선 초안 복원 등)는 아직
+  프론트/기획 확인 전 — 위 "리뷰 콘텐츠 형식 확정"의 해석(로컬 상태로만 처리)이 틀리면
+  별도 draft API가 필요할 수 있음.
 - 리뷰를 받은 내역을 마이페이지 등에서 보여줄지 여부 — 필요해지면 조회 API를 새로 추가.
 
 ## 관련 화면
 
-5.1.1.2.2 협업후기 작성, 팀원 리뷰 팝업, 팀장 리뷰 팝업
+5.1.1.2.2 협업후기 작성, 팀원 리뷰 팝업, 팀장 리뷰 팝업, 5.1.3.6.1~6.5 팀원리뷰, 팀원리뷰 완료,
+팀원리뷰 중단

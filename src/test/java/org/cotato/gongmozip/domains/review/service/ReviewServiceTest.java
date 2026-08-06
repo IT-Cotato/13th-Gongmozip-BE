@@ -23,6 +23,8 @@ import org.cotato.gongmozip.domains.review.dto.request.ReviewRequest.WriteReview
 import org.cotato.gongmozip.domains.review.dto.response.ReviewResponse.ReviewResultResponse;
 import org.cotato.gongmozip.domains.review.dto.response.ReviewResponse.ReviewTargetListResponse;
 import org.cotato.gongmozip.domains.review.entity.Review;
+import org.cotato.gongmozip.domains.review.enums.ReviewAgreementLevel;
+import org.cotato.gongmozip.domains.review.enums.ReviewKeyword;
 import org.cotato.gongmozip.domains.review.exception.ReviewException;
 import org.cotato.gongmozip.domains.review.exception.codes.ReviewErrorCode;
 import org.cotato.gongmozip.domains.review.repository.ReviewRepository;
@@ -74,7 +76,7 @@ class ReviewServiceTest {
         given(teamRepository.findById(1L)).willReturn(Optional.of(team));
 
         // when & then
-        assertThatThrownBy(() -> reviewService.writeReview(1L, 10L, new WriteReviewRequest(20L, "잘했어요")))
+        assertThatThrownBy(() -> reviewService.writeReview(1L, 10L, defaultRequest(20L)))
                 .isInstanceOf(TeamException.class)
                 .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.INVALID_TEAM_STATUS);
     }
@@ -88,7 +90,7 @@ class ReviewServiceTest {
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> reviewService.writeReview(1L, 10L, new WriteReviewRequest(20L, "잘했어요")))
+        assertThatThrownBy(() -> reviewService.writeReview(1L, 10L, defaultRequest(20L)))
                 .isInstanceOf(TeamException.class)
                 .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.NOT_TEAM_MEMBER);
     }
@@ -104,7 +106,7 @@ class ReviewServiceTest {
         given(teamMemberRepository.findById(999L)).willReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> reviewService.writeReview(1L, 10L, new WriteReviewRequest(999L, "잘했어요")))
+        assertThatThrownBy(() -> reviewService.writeReview(1L, 10L, defaultRequest(999L)))
                 .isInstanceOf(TeamException.class)
                 .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.NOT_TEAM_MEMBER);
     }
@@ -120,7 +122,7 @@ class ReviewServiceTest {
         given(teamMemberRepository.findById(10L)).willReturn(Optional.of(reviewer));
 
         // when & then
-        assertThatThrownBy(() -> reviewService.writeReview(1L, 10L, new WriteReviewRequest(10L, "저는 훌륭해요")))
+        assertThatThrownBy(() -> reviewService.writeReview(1L, 10L, defaultRequest(10L)))
                 .isInstanceOf(ReviewException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ReviewErrorCode.CANNOT_REVIEW_SELF);
     }
@@ -139,7 +141,7 @@ class ReviewServiceTest {
                 .willReturn(true);
 
         // when & then
-        assertThatThrownBy(() -> reviewService.writeReview(1L, 10L, new WriteReviewRequest(20L, "잘했어요")))
+        assertThatThrownBy(() -> reviewService.writeReview(1L, 10L, defaultRequest(20L)))
                 .isInstanceOf(ReviewException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ReviewErrorCode.ALREADY_REVIEWED);
     }
@@ -170,11 +172,21 @@ class ReviewServiceTest {
                 .willReturn(1L);
 
         // when
-        ReviewResultResponse response = reviewService.writeReview(1L, 10L, new WriteReviewRequest(20L, "잘했어요"));
+        // 두 점수를 서로 다른 값으로 보내 필드가 뒤섞이지 않고 각자 올바르게 매핑되는지 검증한다.
+        ReviewResultResponse response = reviewService.writeReview(
+                1L,
+                10L,
+                new WriteReviewRequest(
+                        20L,
+                        ReviewAgreementLevel.AGREE,
+                        ReviewAgreementLevel.DISAGREE,
+                        List.of(ReviewKeyword.TRUSTWORTHY)));
 
         // then
         assertThat(response.revieweeTeamMemberId()).isEqualTo(20L);
-        assertThat(response.content()).isEqualTo("잘했어요");
+        assertThat(response.communicationScore()).isEqualTo(ReviewAgreementLevel.AGREE);
+        assertThat(response.participationScore()).isEqualTo(ReviewAgreementLevel.DISAGREE);
+        assertThat(response.keywords()).containsExactly(ReviewKeyword.TRUSTWORTHY);
         verify(collaborationPointService, never()).awardPoint(any(), any(), any());
         verify(chatbotOrchestrationService, never()).completeReview(any());
     }
@@ -205,7 +217,7 @@ class ReviewServiceTest {
                 .willReturn(2L);
 
         // when
-        reviewService.writeReview(1L, 10L, new WriteReviewRequest(20L, "잘했어요"));
+        reviewService.writeReview(1L, 10L, defaultRequest(20L));
 
         // then
         verify(collaborationPointService)
@@ -235,7 +247,7 @@ class ReviewServiceTest {
                 .willReturn(true);
 
         // when
-        reviewService.writeReview(1L, 10L, new WriteReviewRequest(20L, "잘했어요"));
+        reviewService.writeReview(1L, 10L, defaultRequest(20L));
 
         // then
         verify(collaborationPointService, never()).awardPoint(any(), any(), any());
@@ -313,7 +325,7 @@ class ReviewServiceTest {
                 .willReturn(2L);
 
         // when
-        reviewService.writeReview(1L, 10L, new WriteReviewRequest(20L, "잘했어요"));
+        reviewService.writeReview(1L, 10L, defaultRequest(20L));
 
         // then
         verify(chatbotOrchestrationService).completeReview(team);
@@ -339,7 +351,9 @@ class ReviewServiceTest {
                         .team(team)
                         .reviewer(reviewer)
                         .reviewee(alreadyReviewed)
-                        .content("잘했어요")
+                        .communicationScore(ReviewAgreementLevel.AGREE)
+                        .participationScore(ReviewAgreementLevel.AGREE)
+                        .keywords(List.of(ReviewKeyword.TRUSTWORTHY.name()))
                         .build()));
         given(characterService.findAvatarsByMembers(List.of(alreadyReviewed.getMember(), notYetReviewed.getMember())))
                 .willReturn(Map.of(30L, avatar));
@@ -375,6 +389,14 @@ class ReviewServiceTest {
         assertThatThrownBy(() -> reviewService.getReviewTargets(999L, 10L))
                 .isInstanceOf(TeamException.class)
                 .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.TEAM_NOT_FOUND);
+    }
+
+    private WriteReviewRequest defaultRequest(Long revieweeTeamMemberId) {
+        return new WriteReviewRequest(
+                revieweeTeamMemberId,
+                ReviewAgreementLevel.AGREE,
+                ReviewAgreementLevel.AGREE,
+                List.of(ReviewKeyword.TRUSTWORTHY));
     }
 
     private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {

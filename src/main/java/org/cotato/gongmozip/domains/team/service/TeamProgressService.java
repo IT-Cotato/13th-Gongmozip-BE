@@ -27,6 +27,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class TeamProgressService {
 
+    // 제출 여부 확인에 "진행 완료"로 응답하지 않으면 이 간격으로 계속 재알림한다
+    // (GREETING/팀장 선출 타임아웃과 동일한 2시간 간격, docs/decisions/07-scheduler.md).
+    private static final int SUBMISSION_CHECK_REMINDER_HOURS = 2;
+
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final ChatService chatService;
@@ -53,6 +57,7 @@ public class TeamProgressService {
         TeamMember leader = requireLeader(teamId, memberId);
 
         if (!completed) {
+            team.scheduleSubmissionCheckReminder(LocalDateTime.now().plusHours(SUBMISSION_CHECK_REMINDER_HOURS));
             chatService.postSystemMessage(team, "아직 제출 전이군요. 완료되면 다시 알려주세요!");
             return;
         }

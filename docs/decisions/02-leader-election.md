@@ -58,6 +58,29 @@ unique(team_id, voter_team_member_id, round)
   - "재투표하기" → `LeaderVote.round += 1`, 동률이었던 후보들 대상으로 재투표
   - **(2026-08-05 추가) 라운드 상한**: 재투표(2라운드 이상)도 또 동률이면 더 이상 재투표를
     반복하지 않고 AI 추천 후보로 자동 확정한다("추천 수락하기"를 강제 적용한 것과 동일한 효과).
+  - **(2026-08-06 추가) "재투표하기" 클릭을 팀 전체에 알리는 API 추가**: 원래
+    `LeaderElectionService.castVote`가 라운드를 저장된 표 개수로만 계산해서, "재투표하기"를
+    눌러도 그 사실을 다른 팀원에게 알리는 서버 액션이 없었다(투표는 `POST .../leader-votes`를
+    다시 호출하면 알아서 다음 라운드로 잡히지만, 화면(Figma 5.1.3.2 "재투표")에는 재투표
+    시작을 알리는 별도 챗봇 메시지가 있음). `POST /api/teams/{teamId}/leader-votes/revote`
+    (`LeaderElectionService.requestRevote`) 신규 추가 — 상태는 바꾸지 않고, 마지막 동률
+    카드(`aiRecommendedTeamMemberId`가 있는 `LEADER_VOTE_CARD`)에서 동률이었던
+    `candidateTeamMemberIds`만 그대로 꺼내 "팀원들의 의견에 따라 재투표를 진행합니다. 팀장을
+    다시 선출해 주세요." 안내 카드를 재발행한다. "추천 수락하기"(`acceptAiRecommendation`)와
+    동률 카드 조회 로직(`latestPendingTiebreakCard`)을 공유하며, 동률 상태가 아니면(=최신
+    카드에 `aiRecommendedTeamMemberId`가 없으면) 기존과 동일하게 `NO_PENDING_AI_RECOMMENDATION`
+    으로 거부한다. 여러 명이 "재투표하기"만 동시에 눌러도 안내 카드가 중복 발행될 뿐 상태
+    오염은 없다(투표 자체의 라운드/자격 판정은 여전히 `castVote`가 저장된 표만으로 계산).
+    > ⚠️ **`requestRevote`↔`acceptAiRecommendation` race 정정 (2026-08-06, CodeRabbit 리뷰
+    > 반영)**: 위 "상태 오염 없음" 판단은 재투표끼리의 경합만 본 것이었다 — 실제로는 한 명이
+    > "재투표하기"를 누르는 사이 다른 사람이 "추천 수락하기"를 눌러 팀장이 먼저 확정되면,
+    > 재투표 쪽 트랜잭션이 그 사실을 모른 채 `LEADER_DECIDED` 이후에도 "재투표를 진행합니다"
+    > 카드를 발행할 수 있었다(둘 다 잠금 없이 같은 동률 카드를 읽기만 함). `TeamRepository`에
+    > `findByIdWithLock`(`PESSIMISTIC_WRITE`, 매칭 도메인과 동일한 패턴)을 추가해 두 메서드
+    > 모두 팀 행을 잠그도록 바꿨다 — 나중에 잠금을 얻는 트랜잭션은 앞선 트랜잭션이 커밋한
+    > 최신 상태(`LEADER_DECIDED`)를 보고 `INVALID_TEAM_STATUS`로 안전하게 실패한다. `castVote`/
+    > `submitCandidacy` 등 기존 메서드는 이번 변경 범위 밖이라 잠금을 추가하지 않았다 — 필요성이
+    > 확인되면 별도로 다뤄야 한다.
 
 ## 팀장 추천 규칙기반 알고리즘 (2026-08-05, PM 스펙 반영)
 

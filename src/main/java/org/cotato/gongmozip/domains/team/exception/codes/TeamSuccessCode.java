@@ -18,6 +18,7 @@ public enum TeamSuccessCode implements BaseSuccessCode {
     PROGRESS_UPDATED(HttpStatus.OK, "TEAM_200_6", "진행률 응답에 성공하였습니다."),
     SUBMISSION_RECORDED(HttpStatus.OK, "TEAM_200_7", "제출 여부 응답에 성공하였습니다."),
     AI_RECOMMENDATION_ACCEPTED(HttpStatus.OK, "TEAM_200_8", "AI 추천을 수락하여 팀장이 확정되었습니다."),
+    LEADER_REVOTE_REQUESTED(HttpStatus.OK, "TEAM_200_9", "재투표 안내 메시지를 발행했습니다."),
 
     // 204
     LEFT_CHAT_ROOM(HttpStatus.NO_CONTENT, "TEAM_204_1", "채팅방 나가기에 성공하였습니다.");

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,6 +18,8 @@ import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
 import org.cotato.gongmozip.domains.contest.converter.ContestVotingConverter;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.ContestCandidateItemResponse;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.ContestCandidateListResponse;
+import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.ContestVoteStatusResponse;
+import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.ContestVoteTallyItemResponse;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.entity.ContestCandidate;
 import org.cotato.gongmozip.domains.contest.entity.ContestVote;
@@ -121,11 +124,62 @@ public class ContestVotingService {
         return ContestVotingConverter.toContestCandidateListResponse(candidates, LocalDateTime.now());
     }
 
+    /**
+     * 현재 라운드의 투표 진행 상황을 조회한다. 전원이 투표를 마치기 전에도 호출할 수 있어
+     * "N명 참여중" 카운터와 후보별 득표 막대그래프(Figma "공모전 투표"/"투표 결과" 화면)를
+     * 그릴 수 있다 — 확정 여부(승자 결정, 동률 재투표 등)는 이 API가 아니라 평소처럼 팀 채팅의
+     * 카드 메시지로 온다.
+     */
+    public ContestVoteStatusResponse getVoteStatus(Long teamId, Long memberId) {
+        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        TeamMember requester = requireActiveMember(teamId, memberId);
+
+        List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
+        // 투표가 아직 열려있는 팀만 "다음 라운드가 뭘지" 예측해야 한다(currentRound는 직전
+        // 라운드가 꽉 찼으면 다음 라운드로 미리 넘어간다). 이미 확정된 팀에 이 예측을 그대로
+        // 쓰면 승자를 결정지은 마지막 라운드가 아니라 그다음(투표가 하나도 없는) 라운드를 조회해
+        // 득표수가 전부 0으로 보이는 버그가 생긴다 — 확정된 팀은 실제로 표가 쌓인 마지막
+        // 라운드(maxRound)를 그대로 조회한다.
+        int round = team.getStatus() == TeamStatus.CONTEST_SELECTING
+                ? currentRound(teamId, activeMembers.size())
+                : lastVotedRound(teamId);
+        List<ContestCandidate> eligible = eligibleCandidates(teamId, round);
+        List<ContestVote> votes = contestVoteRepository.findByTeam_TeamIdAndRound(teamId, round);
+
+        Map<Long, Long> voteCountByCandidateId = votes.stream()
+                .collect(Collectors.groupingBy(
+                        vote -> vote.getContestCandidate().getContestCandidateId(), Collectors.counting()));
+        long participatedVoterCount = votes.stream()
+                .map(vote -> vote.getVoterTeamMember().getTeamMemberId())
+                .distinct()
+                .count();
+        boolean myVoted = votes.stream()
+                .anyMatch(vote -> vote.getVoterTeamMember().getTeamMemberId().equals(requester.getTeamMemberId()));
+
+        LocalDateTime now = LocalDateTime.now();
+        List<ContestVoteTallyItemResponse> results = eligible.stream()
+                .map(candidate -> ContestVotingConverter.toContestVoteTallyItemResponse(
+                        candidate, voteCountByCandidateId.getOrDefault(candidate.getContestCandidateId(), 0L), now))
+                .sorted(Comparator.comparingLong(ContestVoteTallyItemResponse::voteCount)
+                        .reversed())
+                .toList();
+
+        return new ContestVoteStatusResponse(round, activeMembers.size(), participatedVoterCount, myVoted, results);
+    }
+
     /** 원하는 공모전을 최대 2개까지 선택해 투표한다. 활성 팀원 전원이 투표하면 자동 개표한다. */
     @Transactional
     public void submitVote(Long teamId, Long voterMemberId, List<Long> contestCandidateIds) {
         Team team = requireTeamInContestSelecting(teamId);
         TeamMember voter = requireActiveMember(teamId, voterMemberId);
+
+        // 마감 확정 스케줄러(resolveDeadlineIfDue)가 아직 안 돌아 팀이 여전히 CONTEST_SELECTING
+        // 이더라도, 마감 시각이 지난 뒤의 투표는 집계에 반영되면 안 된다(투표 마감 리마인더가
+        // 마감 임박 사용자를 계속 투표로 유도하므로 이 경계에서 실제로 발생할 수 있는 race다).
+        LocalDateTime deadline = team.getContestCandidateDeadlineAt();
+        if (deadline != null && !LocalDateTime.now().isBefore(deadline)) {
+            throw new ContestException(ContestErrorCode.CONTEST_VOTE_DEADLINE_PASSED);
+        }
 
         if (contestCandidateIds == null
                 || contestCandidateIds.isEmpty()
@@ -286,6 +340,14 @@ public class ContestVotingService {
         }
         long distinctVotersInMaxRound = contestVoteRepository.countDistinctVotersByTeamIdAndRound(teamId, maxRound);
         return distinctVotersInMaxRound >= activeMemberCount ? maxRound + 1 : maxRound;
+    }
+
+    // 투표가 끝난(더 이상 CONTEST_SELECTING이 아닌) 팀의 마지막 라운드. 표가 하나도 없으면
+    // (참여자 0명으로 무작위 확정된 경우) 1라운드로 취급한다 — eligibleCandidates(1)이 전체
+    // 후보 목록을 반환하므로 득표수 0인 결과 화면으로 자연스럽게 표시된다.
+    private int lastVotedRound(Long teamId) {
+        Integer maxRound = contestVoteRepository.findMaxRoundByTeamId(teamId);
+        return maxRound == null ? 1 : maxRound;
     }
 
     private List<ContestCandidate> eligibleCandidates(Long teamId, int round) {

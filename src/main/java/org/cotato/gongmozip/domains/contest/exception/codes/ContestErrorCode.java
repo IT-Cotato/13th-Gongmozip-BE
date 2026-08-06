@@ -13,6 +13,7 @@ public enum ContestErrorCode implements BaseErrorCode {
     INVALID_CONTEST_INPUT(HttpStatus.BAD_REQUEST, "CONTEST_400_1", "공모전 입력값이 올바르지 않습니다."),
     INVALID_CONTEST_VOTE_SELECTION(HttpStatus.BAD_REQUEST, "CONTEST_400_2", "공모전은 1~2개만 선택할 수 있습니다."),
     NOT_RECOMMENDED_CONTEST(HttpStatus.BAD_REQUEST, "CONTEST_400_3", "추천 대상이 아닌 공모전입니다."),
+    CONTEST_VOTE_DEADLINE_PASSED(HttpStatus.BAD_REQUEST, "CONTEST_400_4", "공모전 투표 마감 시각이 지났습니다."),
 
     // 404
     CONTEST_NOT_FOUND(HttpStatus.NOT_FOUND, "CONTEST_404_1", "존재하지 않는 공모전입니다."),

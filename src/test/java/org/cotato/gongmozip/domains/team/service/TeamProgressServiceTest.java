@@ -143,7 +143,7 @@ class TeamProgressServiceTest {
                 .awardPoint(member.getMember(), team, CollaborationPointReason.PROJECT_COMPLETE_MEMBER);
     }
 
-    @DisplayName("미완료로 응답하면 상태 변화나 포인트 지급 없이 안내만 남는다.")
+    @DisplayName("미완료로 응답하면 상태 변화나 포인트 지급 없이 안내만 남고, 2시간 뒤 재알림이 예약된다.")
     @Test
     void 미완료로_응답하면_상태_변화나_포인트_지급_없이_안내만_남는다() {
         // given
@@ -153,11 +153,14 @@ class TeamProgressServiceTest {
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(leader));
 
         // when
+        LocalDateTime before = LocalDateTime.now();
         teamProgressService.submitCompletion(1L, 10L, false);
+        LocalDateTime after = LocalDateTime.now();
 
         // then
         assertThat(team.getStatus()).isEqualTo(TeamStatus.IN_PROGRESS);
         assertThat(team.isSubmitted()).isFalse();
+        assertThat(team.getSubmissionCheckReminderAt()).isBetween(before.plusHours(2), after.plusHours(2));
         verify(collaborationPointService, never()).awardPoint(any(), any(), any());
         verify(chatService, times(1)).postSystemMessage(eq(team), anyString());
     }

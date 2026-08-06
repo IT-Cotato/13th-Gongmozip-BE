@@ -16,6 +16,7 @@ import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.ContestCandidateItemResponse;
 import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.ContestCandidateListResponse;
+import org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.ContestVoteStatusResponse;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
 import org.cotato.gongmozip.domains.contest.entity.ContestCandidate;
 import org.cotato.gongmozip.domains.contest.entity.ContestVote;
@@ -231,6 +232,231 @@ class ContestVotingServiceTest {
         // then
         assertThat(response.candidates()).hasSize(1);
         assertThat(response.candidates().get(0).contest().contestId()).isEqualTo(100L);
+    }
+
+    @DisplayName("전원이 투표를 마치기 전에도 현재까지의 참여 인원과 후보별 득표수를 조회할 수 있다.")
+    @Test
+    void 투표_진행_상황을_조회한다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
+        TeamMember voter1 = teamMemberOf(team, 10L, "김철수");
+        TeamMember voter2 = teamMemberOf(team, 20L, "이해은");
+        TeamMember voter3 = teamMemberOf(team, 30L, "박준수");
+        Contest contestA = Contest.builder()
+                .contestId(100L)
+                .title("A 공모전")
+                .status(org.cotato.gongmozip.domains.contest.enums.ContestStatus.OPEN)
+                .applyEndAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+        Contest contestB = Contest.builder()
+                .contestId(200L)
+                .title("B 공모전")
+                .status(org.cotato.gongmozip.domains.contest.enums.ContestStatus.OPEN)
+                .applyEndAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+        ContestCandidate candidateA = ContestCandidate.builder()
+                .contestCandidateId(1L)
+                .team(team)
+                .contest(contestA)
+                .addedByTeamMember(voter1)
+                .build();
+        ContestCandidate candidateB = ContestCandidate.builder()
+                .contestCandidateId(2L)
+                .team(team)
+                .contest(contestB)
+                .addedByTeamMember(voter1)
+                .build();
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(voter1));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(voter1, voter2, voter3));
+        given(contestVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
+        given(contestCandidateRepository.findByTeamId(1L)).willReturn(List.of(candidateA, candidateB));
+        given(contestVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(
+                        ContestVote.builder()
+                                .team(team)
+                                .contestCandidate(candidateA)
+                                .voterTeamMember(voter1)
+                                .round(1)
+                                .build(),
+                        ContestVote.builder()
+                                .team(team)
+                                .contestCandidate(candidateA)
+                                .voterTeamMember(voter2)
+                                .round(1)
+                                .build(),
+                        ContestVote.builder()
+                                .team(team)
+                                .contestCandidate(candidateB)
+                                .voterTeamMember(voter2)
+                                .round(1)
+                                .build()));
+
+        // when
+        ContestVoteStatusResponse response = contestVotingService.getVoteStatus(1L, 10L);
+
+        // then
+        assertThat(response.round()).isEqualTo(1);
+        assertThat(response.requiredVoterCount()).isEqualTo(3);
+        assertThat(response.participatedVoterCount()).isEqualTo(2);
+        assertThat(response.myVoted()).isTrue();
+        assertThat(response.results()).hasSize(2);
+        assertThat(response.results().get(0).contestCandidateId()).isEqualTo(1L);
+        assertThat(response.results().get(0).voteCount()).isEqualTo(2L);
+        assertThat(response.results().get(1).contestCandidateId()).isEqualTo(2L);
+        assertThat(response.results().get(1).voteCount()).isEqualTo(1L);
+    }
+
+    @DisplayName("단독 1위로 이미 확정된 팀은 다음 라운드가 아니라 마지막 라운드(1)의 득표수를 반환한다.")
+    @Test
+    void 단독_1위로_확정된_팀은_마지막_라운드의_득표수를_반환한다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.CONTEST_DECIDED).build();
+        TeamMember voter1 = teamMemberOf(team, 10L, "김철수");
+        TeamMember voter2 = teamMemberOf(team, 20L, "이해은");
+        Contest contest = Contest.builder()
+                .contestId(100L)
+                .title("A 공모전")
+                .status(org.cotato.gongmozip.domains.contest.enums.ContestStatus.OPEN)
+                .applyEndAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+        ContestCandidate candidate = ContestCandidate.builder()
+                .contestCandidateId(1L)
+                .team(team)
+                .contest(contest)
+                .addedByTeamMember(voter1)
+                .build();
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(voter1));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(voter1, voter2));
+        given(contestVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);
+        given(contestCandidateRepository.findByTeamId(1L)).willReturn(List.of(candidate));
+        given(contestVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(
+                        ContestVote.builder()
+                                .team(team)
+                                .contestCandidate(candidate)
+                                .voterTeamMember(voter1)
+                                .round(1)
+                                .build(),
+                        ContestVote.builder()
+                                .team(team)
+                                .contestCandidate(candidate)
+                                .voterTeamMember(voter2)
+                                .round(1)
+                                .build()));
+
+        // when
+        ContestVoteStatusResponse response = contestVotingService.getVoteStatus(1L, 10L);
+
+        // then
+        assertThat(response.round()).isEqualTo(1);
+        assertThat(response.results()).hasSize(1);
+        assertThat(response.results().get(0).voteCount()).isEqualTo(2L);
+    }
+
+    @DisplayName("동률 재투표 끝에 확정된 팀은 마지막(2) 라운드의 득표수를 반환한다.")
+    @Test
+    void 재투표_끝에_확정된_팀은_마지막_라운드의_득표수를_반환한다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.CONTEST_DECIDED).build();
+        TeamMember voter1 = teamMemberOf(team, 10L, "김철수");
+        TeamMember voter2 = teamMemberOf(team, 20L, "이해은");
+        Contest contestA = Contest.builder()
+                .contestId(100L)
+                .title("A 공모전")
+                .status(org.cotato.gongmozip.domains.contest.enums.ContestStatus.OPEN)
+                .applyEndAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+        Contest contestB = Contest.builder()
+                .contestId(200L)
+                .title("B 공모전")
+                .status(org.cotato.gongmozip.domains.contest.enums.ContestStatus.OPEN)
+                .applyEndAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+        ContestCandidate candidateA = ContestCandidate.builder()
+                .contestCandidateId(1L)
+                .team(team)
+                .contest(contestA)
+                .addedByTeamMember(voter1)
+                .build();
+        ContestCandidate candidateB = ContestCandidate.builder()
+                .contestCandidateId(2L)
+                .team(team)
+                .contest(contestB)
+                .addedByTeamMember(voter1)
+                .build();
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(voter1));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(voter1, voter2));
+        given(contestVoteRepository.findMaxRoundByTeamId(1L)).willReturn(2);
+        // 1라운드는 동률(각자 1표씩)이라 두 후보 모두 2라운드 자격을 얻는다.
+        given(contestVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(
+                        ContestVote.builder()
+                                .team(team)
+                                .contestCandidate(candidateA)
+                                .voterTeamMember(voter1)
+                                .round(1)
+                                .build(),
+                        ContestVote.builder()
+                                .team(team)
+                                .contestCandidate(candidateB)
+                                .voterTeamMember(voter2)
+                                .round(1)
+                                .build()));
+        // 2라운드에서 A가 단독 승리
+        given(contestVoteRepository.findByTeam_TeamIdAndRound(1L, 2))
+                .willReturn(List.of(
+                        ContestVote.builder()
+                                .team(team)
+                                .contestCandidate(candidateA)
+                                .voterTeamMember(voter1)
+                                .round(2)
+                                .build(),
+                        ContestVote.builder()
+                                .team(team)
+                                .contestCandidate(candidateA)
+                                .voterTeamMember(voter2)
+                                .round(2)
+                                .build()));
+
+        // when
+        ContestVoteStatusResponse response = contestVotingService.getVoteStatus(1L, 10L);
+
+        // then
+        assertThat(response.round()).isEqualTo(2);
+        assertThat(response.results()).hasSize(2);
+        assertThat(response.results().get(0).contestCandidateId()).isEqualTo(1L);
+        assertThat(response.results().get(0).voteCount()).isEqualTo(2L);
+        assertThat(response.results().get(1).contestCandidateId()).isEqualTo(2L);
+        assertThat(response.results().get(1).voteCount()).isEqualTo(0L);
+    }
+
+    @DisplayName("마감 시각이 지난 뒤에는 투표에 실패한다.")
+    @Test
+    void 마감_시각이_지난_뒤에는_투표에_실패한다() {
+        // given
+        Team team = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.CONTEST_SELECTING)
+                .contestCandidateDeadlineAt(java.time.LocalDateTime.now().minusMinutes(1))
+                .build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L))
+                .willReturn(Optional.of(teamMemberOf(team, 10L, "김철수")));
+
+        // when & then
+        assertThatThrownBy(() -> contestVotingService.submitVote(1L, 10L, List.of(1L)))
+                .isInstanceOf(ContestException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ContestErrorCode.CONTEST_VOTE_DEADLINE_PASSED);
     }
 
     @DisplayName("3개를 선택하면 투표에 실패한다.")
