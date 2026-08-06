@@ -253,7 +253,7 @@ class ChatServiceTest {
                 .willReturn(Optional.of(reader));
         given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(reader, other));
-        given(messageRepository.findByTeam_TeamIdAndCreatedAtAfterOrderByCreatedAtAsc(eq(100L), any()))
+        given(messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(eq(100L), any()))
                 .willReturn(List.of(message));
 
         // when
@@ -277,7 +277,7 @@ class ChatServiceTest {
         given(teamRepository.findById(100L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
                 .willReturn(Optional.of(me));
-        given(messageRepository.findByTeam_TeamIdAndCreatedAtAfterOrderByCreatedAtAsc(eq(100L), any()))
+        given(messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(eq(100L), any()))
                 .willReturn(List.of());
 
         // when

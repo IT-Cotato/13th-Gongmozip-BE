@@ -79,6 +79,11 @@ public class ChatService {
      * 다시 계산해 실시간으로 갱신 브로드캐스트한다. 안읽음 수 자체는 실시간 반영이 필요 없다고
      * 봤던 기존 결정(docs/decisions/03-chat.md)과 달리, 메시지별 안읽음 수는 화면에 이미 떠있는
      * 숫자를 살아있는 값으로 유지해야 해서 이번엔 브로드캐스트를 붙인다.
+     *
+     * <p>영향받는 메시지는 {@code getMessages}와 동일하게 최신 {@value #DEFAULT_MESSAGE_PAGE_SIZE}건
+     * 안에서만 찾는다 — 화면에 그 이상 과거 메시지는 애초에 렌더링되지 않으므로, 무제한으로 조회해
+     * 갱신을 보내는 건 낭비다(팀원이 아주 오래 안 읽었을 때 메시지 수만큼 로드/브로드캐스트가
+     * 커지는 문제도 함께 막는다).
      */
     @Transactional
     public void markAsRead(Long teamId, Long memberId) {
@@ -88,8 +93,11 @@ public class ChatService {
 
         member.markRead(LocalDateTime.now());
 
-        List<Message> newlyRead =
-                messageRepository.findByTeam_TeamIdAndCreatedAtAfterOrderByCreatedAtAsc(teamId, unreadSince);
+        List<Message> latestFirst = messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(
+                teamId, PageRequest.of(0, DEFAULT_MESSAGE_PAGE_SIZE));
+        List<Message> newlyRead = latestFirst.stream()
+                .filter(message -> message.getCreatedAt().isAfter(unreadSince))
+                .toList();
         if (newlyRead.isEmpty()) {
             return;
         }
