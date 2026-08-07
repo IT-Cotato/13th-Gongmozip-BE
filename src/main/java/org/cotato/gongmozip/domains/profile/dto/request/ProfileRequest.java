@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.util.List;
 import org.cotato.gongmozip.domains.profile.enums.CertificationCategory;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
+import org.cotato.gongmozip.domains.profile.enums.ProjectCategory;
 
 public class ProfileRequest {
 
@@ -39,6 +40,7 @@ public class ProfileRequest {
 
     public record CreateProjectRequest(
             @NotBlank @Size(min = 1, max = 200) String projectName,
+            @NotNull ProjectCategory category,
             @NotBlank @Size(max = 3000) String description,
             @NotBlank @Size(max = 200) String role,
             @NotNull @Size(min = 1) List<String> techStacks,
@@ -48,6 +50,7 @@ public class ProfileRequest {
 
     public record UpdateProjectRequest(
             @Size(min = 1, max = 200) String projectName,
+            ProjectCategory category,
             @Size(max = 3000) String description,
             @Size(max = 200) String role,
             List<String> techStacks,

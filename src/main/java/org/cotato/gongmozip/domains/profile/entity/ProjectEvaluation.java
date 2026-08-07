@@ -40,6 +40,19 @@ public class ProjectEvaluation extends BaseEntity {
     @Column(name = "score")
     private Integer score;
 
+    @Column(name = "r_score")
+    private Integer rScore;
+
+    @Column(name = "o_score")
+    private Integer oScore;
+
+    @Column(name = "f_score")
+    private Integer fScore;
+
+    @Column(name = "injection_detected", nullable = false)
+    @Builder.Default
+    private boolean injectionDetected = false;
+
     @Column(name = "feedback", columnDefinition = "TEXT")
     private String feedback;
 
@@ -58,8 +71,13 @@ public class ProjectEvaluation extends BaseEntity {
         this.status = AiSummaryStatus.PROCESSING;
     }
 
-    public void complete(Integer score, String feedback) {
+    public void complete(
+            Integer score, Integer rScore, Integer oScore, Integer fScore, boolean injectionDetected, String feedback) {
         this.score = score;
+        this.rScore = rScore;
+        this.oScore = oScore;
+        this.fScore = fScore;
+        this.injectionDetected = injectionDetected;
         this.feedback = feedback;
         this.status = AiSummaryStatus.COMPLETED;
         this.evaluatedAt = LocalDateTime.now();
@@ -73,6 +91,10 @@ public class ProjectEvaluation extends BaseEntity {
 
     public void pending() {
         this.score = null;
+        this.rScore = null;
+        this.oScore = null;
+        this.fScore = null;
+        this.injectionDetected = false;
         this.feedback = null;
         this.errorMessage = null;
         this.evaluatedAt = null;
