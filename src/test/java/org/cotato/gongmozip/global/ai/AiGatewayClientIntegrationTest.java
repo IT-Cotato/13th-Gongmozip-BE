@@ -45,8 +45,7 @@ class AiGatewayClientIntegrationTest {
                                 value = value.substring(1, value.length() - 1);
                             }
                             System.setProperty(key, value);
-                            writer.println(
-                                    "Loaded System Property: " + key + "=" + (key.contains("KEY") ? "******" : value));
+                            writer.println("Loaded System Property: " + key);
                         }
                     }
                 } else {
