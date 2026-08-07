@@ -18,6 +18,7 @@ import org.cotato.gongmozip.domains.profile.dto.response.ProfileResponse.*;
 import org.cotato.gongmozip.domains.profile.entity.*;
 import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
 import org.cotato.gongmozip.domains.profile.enums.CertificationCategory;
+import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.profile.exception.ProfileException;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.repository.*;
@@ -231,6 +232,7 @@ public class ProfileService {
         ProjectExperience project = getProjectAndValidateRelation(profileId, projectId);
 
         if (request.projectName() == null
+                && request.category() == null
                 && request.description() == null
                 && request.role() == null
                 && request.techStacks() == null
@@ -260,6 +262,10 @@ public class ProfileService {
         validateProjectPeriod(started, ended, ongoing);
 
         boolean contentChanged = false;
+        if (request.category() != null && request.category() != project.getCategory()) {
+            project.updateCategory(request.category());
+            contentChanged = true;
+        }
         if (request.projectName() != null && !request.projectName().equals(project.getProjectName())) {
             project.updateProjectName(request.projectName());
             contentChanged = true;
@@ -580,12 +586,16 @@ public class ProfileService {
         String projectName = project.getProjectName();
         String role = project.getRole();
         String description = project.getDescription();
+        InterestCategory category = project.getProfile().getInterestCategories().isEmpty()
+                ? InterestCategory.IT_AI_TECH
+                : project.getProfile().getInterestCategories().get(0);
+
         // 롤백된 프로젝트를 평가하지 않도록 커밋 이후에만 비동기 작업을 제출한다.
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
                 try {
-                    projectEvaluationService.evaluateProjectAsync(projectId, projectName, role, description);
+                    projectEvaluationService.evaluateProjectAsync(projectId, projectName, role, description, category);
                 } catch (TaskRejectedException e) {
                     log.error("자동 프로젝트 평가 트리거 중 쓰레드 풀 포화로 작업 제출 실패", e);
                     projectEvaluationTxService.fail(projectId, "Thread pool saturation: " + e.getMessage());

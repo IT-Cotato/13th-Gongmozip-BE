@@ -9,7 +9,7 @@ public interface AiClient {
 
     String generateSummary(String projectName, String role, String description);
 
-    ProjectEvaluationResult evaluateProject(String projectName, String role, String description);
+    ProjectEvaluationResult evaluateProject(String projectName, String role, String description, String category);
 
     /**
      * 팀장 여부 투표를 시작할 때 정보성으로 보여줄 팀장 후보 추천 (최대 2명).

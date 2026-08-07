@@ -1,5 +1,6 @@
 package org.cotato.gongmozip.domains.profile.service;
 
+import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.cotato.gongmozip.domains.member.entity.Member;
@@ -8,6 +9,8 @@ import org.cotato.gongmozip.domains.profile.dto.response.ProfileResponse.Project
 import org.cotato.gongmozip.domains.profile.entity.ProjectEvaluation;
 import org.cotato.gongmozip.domains.profile.entity.ProjectExperience;
 import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
+import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
+import org.cotato.gongmozip.domains.profile.enums.ProjectCategory;
 import org.cotato.gongmozip.domains.profile.exception.ProfileException;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.repository.ProjectEvaluationRepository;
@@ -32,6 +35,7 @@ public class ProjectEvaluationService {
     private final ProjectEvaluationRepository projectEvaluationRepository;
     private final ProjectExperienceRepository projectExperienceRepository;
     private final ProjectEvaluationTxService projectEvaluationTxService;
+    private final ProjectAiSummaryTxService projectAiSummaryTxService;
     private final AiClient aiClient;
 
     private ProjectEvaluationService self;
@@ -64,12 +68,16 @@ public class ProjectEvaluationService {
         evaluation.pending();
         ProjectEvaluation saved = projectEvaluationRepository.save(evaluation);
 
+        InterestCategory category = project.getProfile().getInterestCategories().isEmpty()
+                ? InterestCategory.IT_AI_TECH
+                : project.getProfile().getInterestCategories().get(0);
+
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
                 try {
                     self.evaluateProjectAsync(
-                            projectId, project.getProjectName(), project.getRole(), project.getDescription());
+                            projectId, project.getProjectName(), project.getRole(), project.getDescription(), category);
                 } catch (TaskRejectedException e) {
                     log.error("AI project evaluation async trigger rejected due to thread pool saturation", e);
                     projectEvaluationTxService.fail(projectId, "Thread pool saturation: " + e.getMessage());
@@ -81,14 +89,17 @@ public class ProjectEvaluationService {
     }
 
     @Async("aiSummaryExecutor")
-    public void evaluateProjectAsync(Long projectId, String projectName, String role, String description) {
+    public void evaluateProjectAsync(
+            Long projectId, String projectName, String role, String description, InterestCategory category) {
         log.info("Starting async AI evaluation for projectId: {}", projectId);
         try {
             projectEvaluationTxService.startProcessing(projectId);
+            projectAiSummaryTxService.startProcessing(projectId);
         } catch (Exception e) {
             log.error("Failed to start processing for projectId: {}", projectId, e);
             try {
                 projectEvaluationTxService.fail(projectId, "Failed to start processing: " + e.getMessage());
+                projectAiSummaryTxService.failSummary(projectId);
             } catch (Exception failure) {
                 log.error("Failed to persist failed state for projectId: {}", projectId, failure);
             }
@@ -98,7 +109,7 @@ public class ProjectEvaluationService {
         ProjectEvaluationResult result = null;
         Exception apiException = null;
         try {
-            result = aiClient.evaluateProject(projectName, role, description);
+            result = aiClient.evaluateProject(projectName, role, description, toKoreanCategory(category));
         } catch (Exception e) {
             apiException = e;
             log.error("AI API call failed for projectId: {}", projectId, e);
@@ -106,13 +117,89 @@ public class ProjectEvaluationService {
 
         try {
             if (apiException == null && result != null) {
-                projectEvaluationTxService.complete(projectId, result.score(), result.feedback());
+                // Calculate D and combined score
+                ProjectExperience project = projectExperienceRepository
+                        .findById(projectId)
+                        .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
+
+                long periodDays;
+                if (project.isOngoing() || project.getEndedAt() == null) {
+                    periodDays = java.time.temporal.ChronoUnit.DAYS.between(project.getStartedAt(), LocalDate.now());
+                } else {
+                    periodDays =
+                            java.time.temporal.ChronoUnit.DAYS.between(project.getStartedAt(), project.getEndedAt());
+                }
+                if (periodDays < 0) {
+                    periodDays = 0;
+                }
+
+                int dScore = lookupD(project.getCategory(), periodDays);
+                int finalScore = Math.min(100, result.score() + dScore);
+
+                projectEvaluationTxService.complete(
+                        projectId,
+                        finalScore,
+                        result.rScore(),
+                        result.oScore(),
+                        result.fScore(),
+                        result.injectionDetected(),
+                        result.feedback());
+                projectAiSummaryTxService.completeSummary(projectId, result.summary());
             } else {
                 projectEvaluationTxService.fail(
                         projectId, apiException != null ? apiException.getMessage() : "Empty result");
+                projectAiSummaryTxService.failSummary(projectId);
             }
         } catch (Exception e) {
             log.error("Failed to save final AI evaluation result for projectId: {}", projectId, e);
+        }
+    }
+
+    private String toKoreanCategory(InterestCategory category) {
+        return switch (category) {
+            case IT_AI_TECH -> "IT/AI/기술";
+            case MARKETING_AD_BRANDING -> "마케팅/광고/브랜딩";
+            case IDEA_PLANNING -> "아이디어/기획";
+            case ART_DESIGN -> "미술/디자인";
+            case PHOTO_VIDEO -> "사진/영상";
+            case DATA_ANALYSIS -> "데이터 분석";
+        };
+    }
+
+    private int lookupD(ProjectCategory category, long periodDays) {
+        if (category == null) {
+            category = ProjectCategory.CONTEST;
+        }
+        if (periodDays < 14) { // 2주 미만
+            return switch (category) {
+                case CONTEST -> 8;
+                case EXTERNAL_ACTIVITY -> 6;
+                case CAMPUS_PROJECT -> 3;
+            };
+        } else if (periodDays < 30) { // 2주 ~ 1개월
+            return switch (category) {
+                case CONTEST -> 12;
+                case EXTERNAL_ACTIVITY -> 10;
+                case CAMPUS_PROJECT -> 6;
+            };
+        } else if (periodDays < 60) { // 1개월 ~ 2개월
+            return switch (category) {
+                case CONTEST -> 16;
+                case EXTERNAL_ACTIVITY -> 14;
+                case CAMPUS_PROJECT -> 10;
+            };
+        } else if (periodDays < 90) { // 2개월 ~ 3개월
+            return switch (category) {
+                case CONTEST -> 20;
+                case EXTERNAL_ACTIVITY -> 18;
+                case CAMPUS_PROJECT -> 13;
+            };
+        } else { // 3개월 이상
+            return switch (category) {
+                case CONTEST -> 25;
+                case EXTERNAL_ACTIVITY -> 22;
+                case CAMPUS_PROJECT -> 17;
+            };
         }
     }
 

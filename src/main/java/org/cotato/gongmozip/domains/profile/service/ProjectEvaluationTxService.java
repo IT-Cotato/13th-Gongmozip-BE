@@ -33,7 +33,14 @@ public class ProjectEvaluationTxService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void complete(Long projectId, int score, String feedback) {
+    public void complete(
+            Long projectId,
+            int score,
+            Integer rScore,
+            Integer oScore,
+            Integer fScore,
+            boolean injectionDetected,
+            String feedback) {
         ProjectExperience project = projectExperienceRepository
                 .findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
@@ -42,7 +49,7 @@ public class ProjectEvaluationTxService {
                 .findByProjectExperience(project)
                 .orElseThrow(() -> new IllegalStateException("Evaluation not found for project: " + projectId));
 
-        evaluation.complete(score, feedback);
+        evaluation.complete(score, rScore, oScore, fScore, injectionDetected, feedback);
         projectEvaluationRepository.saveAndFlush(evaluation);
     }
 
