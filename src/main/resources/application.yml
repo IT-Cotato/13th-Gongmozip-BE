@@ -97,11 +97,12 @@ cloud:
     cloudfront:
       domain: ${AWS_CLOUDFRONT_DOMAIN}
 
-# 9. AI(Gemini) 설정 - 키가 비어있으면 MockAiClient가 키워드 기반 응답으로 대체한다
+# 9. AI(Gateway) 설정 - 키가 비어있으면 MockAiClient가 키워드 기반 응답으로 대체한다
 ai:
-  gemini:
-    api-key: ${GEMINI_API_KEY:}
-    model: ${GEMINI_MODEL:gemini-2.5-flash-lite}
+  gateway:
+    api-key: ${FACTCHAT_API_KEY:}
+    base-url: ${FACTCHAT_BASE_URL:https://factchat-cloud.mindlogic.ai/v1/gateway}
+    model: ${FACTCHAT_MODEL:gemini-2.5-flash}
 
 matching:
   algorithm:
