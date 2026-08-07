@@ -183,5 +183,9 @@ class ProjectEvaluationServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new ProjectEvaluationResult(101, null, null, null, false, false, "피드백", "요약"))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ProjectEvaluationResult(50, -1, 3, 3, false, false, "피드백", "요약"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ProjectEvaluationResult(50, 6, 3, 3, false, false, "피드백", "요약"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

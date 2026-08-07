@@ -511,7 +511,7 @@ class ProfileServiceTest {
         assertThat(project.getAiSummaryStatus()).isEqualTo(AiSummaryStatus.PENDING);
         assertThat(response.aiSummaryStatus()).isEqualTo("PENDING");
         then(projectExperienceRepository).should().save(project);
-        then(projectAiSummaryService).should().generateSummaryAsync(20L, "변경된 프로젝트", "역할", "설명");
+        then(projectAiSummaryService).should().generateSummaryAsync(20L, "변경된 프로젝트", "역할", "설명", null);
     }
 
     @DisplayName("프로젝트 AI 요약 생성 요청 시 정상 접수된다.")
@@ -539,7 +539,7 @@ class ProfileServiceTest {
         // then
         assertThat(project.getAiSummaryStatus()).isEqualTo(AiSummaryStatus.PENDING);
         then(projectExperienceRepository).should().save(project);
-        then(projectAiSummaryService).should().generateSummaryAsync(20L, "프로젝트", "역할", "설명");
+        then(projectAiSummaryService).should().generateSummaryAsync(20L, "프로젝트", "역할", "설명", null);
     }
 
     @DisplayName("이미 생성 중인 프로젝트 AI 요약 생성 요청 시 예외가 발생한다.")
@@ -631,6 +631,6 @@ class ProfileServiceTest {
         // then
         assertThat(project.getAiSummaryStatus()).isEqualTo(AiSummaryStatus.PENDING);
         then(projectExperienceRepository).should().save(project);
-        then(projectAiSummaryService).should().generateSummaryAsync(20L, "프로젝트", "역할", "설명");
+        then(projectAiSummaryService).should().generateSummaryAsync(20L, "프로젝트", "역할", "설명", null);
     }
 }

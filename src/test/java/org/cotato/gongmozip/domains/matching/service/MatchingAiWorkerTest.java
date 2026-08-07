@@ -26,7 +26,7 @@ import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
 import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
-import org.cotato.gongmozip.global.ai.MockAiClient;
+import org.cotato.gongmozip.global.ai.AiClient;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,7 +56,7 @@ class MatchingAiWorkerTest {
     private MatchingGroupMemberRepository matchingGroupMemberRepository;
 
     @Mock
-    private MockAiClient aiClient;
+    private AiClient aiClient;
 
     @Test
     @DisplayName("팀원 성향 점수의 분산을 구하여 상위 일치 성향 Top 2를 식별하고 매칭 사유와 계산된 점수를 저장한다")
