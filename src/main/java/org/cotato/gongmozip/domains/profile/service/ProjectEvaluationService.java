@@ -94,12 +94,10 @@ public class ProjectEvaluationService {
         log.info("Starting async AI evaluation for projectId: {}", projectId);
         try {
             projectEvaluationTxService.startProcessing(projectId);
-            projectAiSummaryTxService.startProcessing(projectId);
         } catch (Exception e) {
             log.error("Failed to start processing for projectId: {}", projectId, e);
             try {
                 projectEvaluationTxService.fail(projectId, "Failed to start processing: " + e.getMessage());
-                projectAiSummaryTxService.failSummary(projectId);
             } catch (Exception failure) {
                 log.error("Failed to persist failed state for projectId: {}", projectId, failure);
             }
@@ -144,14 +142,17 @@ public class ProjectEvaluationService {
                         result.fScore(),
                         result.injectionDetected(),
                         result.feedback());
-                projectAiSummaryTxService.completeSummary(projectId, result.summary());
             } else {
                 projectEvaluationTxService.fail(
                         projectId, apiException != null ? apiException.getMessage() : "Empty result");
-                projectAiSummaryTxService.failSummary(projectId);
             }
         } catch (Exception e) {
             log.error("Failed to save final AI evaluation result for projectId: {}", projectId, e);
+            try {
+                projectEvaluationTxService.fail(projectId, "Failed to complete: " + e.getMessage());
+            } catch (Exception failure) {
+                log.error("Failed to persist failed state on complete error for projectId: {}", projectId, failure);
+            }
         }
     }
 

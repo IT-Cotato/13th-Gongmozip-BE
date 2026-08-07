@@ -203,7 +203,7 @@ public class ProfileService {
 
         ProjectExperience project = ProfileConverter.toProjectExperience(request, profile);
         projectExperienceRepository.save(project);
-        prepareProjectEvaluation(project);
+        prepareProjectEvaluationForCreate(project);
 
         return ProfileConverter.toProjectResponse(project);
     }
@@ -302,7 +302,8 @@ public class ProfileService {
                                 project.getProjectId(),
                                 project.getProjectName(),
                                 project.getRole(),
-                                project.getDescription());
+                                project.getDescription(),
+                                null);
                     } catch (TaskRejectedException e) {
                         log.error("자동 AI 요약 트리거 중 쓰레드 풀 포화로 작업 제출 실패", e);
                         projectAiSummaryTxService.failSummary(project.getProjectId());
@@ -313,7 +314,7 @@ public class ProfileService {
 
         // 콘텐츠가 수정되었다면 기존 평가 유무와 관계없이 매칭용 AI 평가를 다시 생성한다.
         if (contentChanged) {
-            prepareProjectEvaluation(project);
+            prepareProjectEvaluationForUpdate(project);
         }
         String aiStatus = project.getAiSummaryStatus().name();
 
@@ -574,8 +575,7 @@ public class ProfileService {
         }
     }
 
-    private void prepareProjectEvaluation(ProjectExperience project) {
-        // 신규 프로젝트에는 평가 행을 만들고, 수정 프로젝트에는 기존 평가를 PENDING으로 되돌려 최신 내용을 반영한다.
+    private void prepareProjectEvaluationForCreate(ProjectExperience project) {
         ProjectEvaluation evaluation = projectEvaluationRepository
                 .findByProjectExperience(project)
                 .orElseGet(() -> ProjectEvaluationConverter.toProjectEvaluation(project));
@@ -590,7 +590,36 @@ public class ProfileService {
                 ? InterestCategory.IT_AI_TECH
                 : project.getProfile().getInterestCategories().get(0);
 
-        // 롤백된 프로젝트를 평가하지 않도록 커밋 이후에만 비동기 작업을 제출한다.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    projectAiSummaryService.generateSummaryAsync(projectId, projectName, role, description, category);
+                    projectEvaluationService.evaluateProjectAsync(projectId, projectName, role, description, category);
+                } catch (TaskRejectedException e) {
+                    log.error("자동 프로젝트 평가 및 요약 트리거 중 쓰레드 풀 포화로 작업 제출 실패", e);
+                    projectEvaluationTxService.fail(projectId, "Thread pool saturation: " + e.getMessage());
+                    projectAiSummaryTxService.failSummary(projectId);
+                }
+            }
+        });
+    }
+
+    private void prepareProjectEvaluationForUpdate(ProjectExperience project) {
+        ProjectEvaluation evaluation = projectEvaluationRepository
+                .findByProjectExperience(project)
+                .orElseGet(() -> ProjectEvaluationConverter.toProjectEvaluation(project));
+        evaluation.pending();
+        projectEvaluationRepository.save(evaluation);
+
+        Long projectId = project.getProjectId();
+        String projectName = project.getProjectName();
+        String role = project.getRole();
+        String description = project.getDescription();
+        InterestCategory category = project.getProfile().getInterestCategories().isEmpty()
+                ? InterestCategory.IT_AI_TECH
+                : project.getProfile().getInterestCategories().get(0);
+
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
@@ -648,7 +677,8 @@ public class ProfileService {
                             project.getProjectId(),
                             project.getProjectName(),
                             project.getRole(),
-                            project.getDescription());
+                            project.getDescription(),
+                            null);
                 } catch (TaskRejectedException e) {
                     log.error("AI 요약 생성 요청 중 쓰레드 풀 포화로 작업 제출 실패", e);
                     projectAiSummaryTxService.failSummary(project.getProjectId());
