@@ -20,7 +20,6 @@ import org.cotato.gongmozip.domains.matching.repository.MatchingReasonRepository
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
 import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
-import org.cotato.gongmozip.global.ai.MockAiClient;
 import org.cotato.gongmozip.global.ai.dto.LeaderCandidateSnapshot;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -29,6 +28,11 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class MatchingAiWorker {
+
+    private static final int RAW_SCORE_MAX = 12;
+    private static final int DISPLAY_SCORE_MIN = 50;
+    private static final int DISPLAY_SCORE_MAX = 95;
+    private static final int DISPLAY_SCORE_RANGE = DISPLAY_SCORE_MAX - DISPLAY_SCORE_MIN;
 
     private final MatchingTxService matchingTxService;
     private final LeaderRecommendationRepository leaderRecommendationRepository;
@@ -315,9 +319,20 @@ public class MatchingAiWorker {
                             m.getExtroversionScore()))
                     .toList();
 
-            List<Long> recommendedTeamMemberIds = aiClient.recommendLeaderCandidates(teamId, snapshots);
+            List<Long> rawRecommendedIds = aiClient.recommendLeaderCandidates(teamId, snapshots);
+            List<Long> recommendedTeamMemberIds = rawRecommendedIds.stream()
+                    .filter(tmId -> {
+                        TeamMember member = activeMembers.stream()
+                                .filter(m -> m.getTeamMemberId().equals(tmId))
+                                .findFirst()
+                                .orElseThrow();
+                        return member.getLeaderPreference() != LeaderPreference.DOES_NOT_WANT;
+                    })
+                    .toList();
+
             if (recommendedTeamMemberIds.isEmpty()) {
-                throw new IllegalStateException("AiClient recommended 0 candidates for team: " + teamId);
+                throw new IllegalStateException(
+                        "No eligible (non-DOES_NOT_WANT) leader candidates recommended for team: " + teamId);
             }
 
             Long recommendedTeamMemberId = recommendedTeamMemberIds.get(0);
@@ -335,7 +350,6 @@ public class MatchingAiWorker {
                     recommendedTeamMember.getLeaderPreference() == LeaderPreference.WANTS ? "선호" : "필요 시 수락");
 
             List<LeaderCandidateResponse> candidates = new ArrayList<>();
-            MockAiClient mockAiClient = (MockAiClient) aiClient;
 
             for (int i = 0; i < recommendedTeamMemberIds.size(); i++) {
                 Long tmId = recommendedTeamMemberIds.get(i);
@@ -348,8 +362,10 @@ public class MatchingAiWorker {
                         .findFirst()
                         .orElseThrow();
 
-                int rawScore = mockAiClient.finalScore(candidateSnapshot, snapshots);
-                int displayScore = (int) (50.0 + (rawScore / 12.0) * 45.0);
+                int rawScore = aiClient.finalScore(candidateSnapshot, snapshots);
+                int displayScore =
+                        (int) (DISPLAY_SCORE_MIN + ((double) rawScore / RAW_SCORE_MAX) * DISPLAY_SCORE_RANGE);
+                displayScore = Math.max(DISPLAY_SCORE_MIN, Math.min(DISPLAY_SCORE_MAX, displayScore));
 
                 String reason = String.format(
                         "%s 성향과 의사소통 선호도를 바탕으로 팀 일정을 조율하기에 적합합니다.",
