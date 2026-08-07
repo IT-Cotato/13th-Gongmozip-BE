@@ -97,13 +97,25 @@ public class MockAiClient implements AiClient {
                 "%s\n\n[입력 정보]\n프로젝트 이름: %s\n역할: %s\n상세 내용: %s\n신청 카테고리: %s",
                 PROJECT_EVALUATION_SYSTEM_PROMPT, projectName, role, description, category);
 
-        try {
-            String responseContent = aiGatewayClient.generateContent(prompt);
-            return parseAiResponse(responseContent);
-        } catch (Exception e) {
-            log.error("AI Project evaluation failed. Returning error fallback.", e);
-            throw new RuntimeException("AI 평가 중 오류 발생: " + e.getMessage(), e);
+        int maxAttempts = 2;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                String responseContent = aiGatewayClient.generateContent(prompt);
+                return parseAiResponse(responseContent, projectName);
+            } catch (Exception e) {
+                if (attempt == maxAttempts) {
+                    log.error("AI Project evaluation failed after all attempts for project: {}", projectName, e);
+                    throw new RuntimeException("AI 평가 중 오류 발생: " + e.getMessage(), e);
+                }
+                log.warn(
+                        "AI evaluation attempt {}/{} failed for project: {}. Retrying...",
+                        attempt,
+                        maxAttempts,
+                        projectName,
+                        e);
+            }
         }
+        throw new RuntimeException("AI project evaluation failed after retries for project: " + projectName);
     }
 
     @Override
@@ -293,7 +305,7 @@ public class MockAiClient implements AiClient {
         return "아직 그 질문에는 구체적으로 답하기 어려워요. " + "'역할 분담'이나 '타임라인'처럼 구체적으로 물어봐주세요!";
     }
 
-    private ProjectEvaluationResult parseAiResponse(String content) {
+    private ProjectEvaluationResult parseAiResponse(String content, String projectName) {
         try {
             String cleanJson = sanitizeJson(content);
             ObjectMapper mapper = new ObjectMapper();
@@ -327,10 +339,13 @@ public class MockAiClient implements AiClient {
                     response.F() != null ? response.F().reason() : "사유 없음");
 
             String summary = response.summary() != null ? response.summary() : "상세 내용 미기재";
+            if (summary.isBlank() || summary.length() > 40) {
+                throw new IllegalArgumentException("AI 요약본이 비어있거나 40자를 초과합니다: " + summary);
+            }
 
             return new ProjectEvaluationResult(q_llm, r, o, f, injection, insufficient, feedback, summary);
         } catch (Exception e) {
-            log.error("Failed to parse AI response: " + content, e);
+            log.error("Failed to parse AI response for project: {}", projectName, e);
             throw new RuntimeException("AI 응답 해석 실패: " + e.getMessage(), e);
         }
     }

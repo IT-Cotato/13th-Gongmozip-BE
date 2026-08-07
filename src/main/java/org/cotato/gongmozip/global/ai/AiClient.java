@@ -31,4 +31,7 @@ public interface AiClient {
 
     /** 채팅방에서 "@챗봇"으로 말을 걸었을 때 자유 질의에 답한다. */
     String answerTeamQuestion(String question);
+
+    /** 팀장 후보 추천 점수를 계산한다. */
+    int finalScore(LeaderCandidateSnapshot candidate, List<LeaderCandidateSnapshot> allMembers);
 }
