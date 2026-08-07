@@ -30,7 +30,7 @@ public class MockAiClient implements AiClient {
     private static final String ANSWER_TEAM_QUESTION_SYSTEM_PROMPT =
             "너는 대학생 공모전 팀 프로젝트를 돕는 챗봇이야. 팀원의 질문에 2~4문장으로, 바로 실행할 수 있는 " + "조언 위주로 한국어 반말 없이 정중하게 답해줘. 질문: ";
 
-    private final GeminiClient geminiClient;
+    private final AiGatewayClient aiGatewayClient;
     private final ContestRepository contestRepository;
 
     @Override
@@ -219,11 +219,11 @@ public class MockAiClient implements AiClient {
             return "궁금한 점을 말씀해주시면 도와드릴게요! 예) @챗봇 우리 역할 분담 추천해줘";
         }
 
-        if (geminiClient.isEnabled()) {
+        if (aiGatewayClient.isEnabled()) {
             try {
-                return geminiClient.generateContent(ANSWER_TEAM_QUESTION_SYSTEM_PROMPT + question);
+                return aiGatewayClient.generateContent(ANSWER_TEAM_QUESTION_SYSTEM_PROMPT + question);
             } catch (Exception e) {
-                log.warn("Gemini API 호출에 실패해 키워드 기반 응답으로 대체합니다.", e);
+                log.warn("API Gateway 호출에 실패해 키워드 기반 응답으로 대체합니다.", e);
             }
         }
 
