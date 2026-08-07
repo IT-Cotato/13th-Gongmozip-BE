@@ -6,12 +6,15 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.doThrow;
 
+import java.time.LocalDate;
 import java.util.Optional;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.entity.ProjectEvaluation;
 import org.cotato.gongmozip.domains.profile.entity.ProjectExperience;
 import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
+import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
+import org.cotato.gongmozip.domains.profile.enums.ProjectCategory;
 import org.cotato.gongmozip.domains.profile.exception.ProfileException;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.repository.ProjectEvaluationRepository;
@@ -46,6 +49,9 @@ class ProjectEvaluationServiceTest {
     private ProjectEvaluationTxService projectEvaluationTxService;
 
     @Mock
+    private ProjectAiSummaryTxService projectAiSummaryTxService;
+
+    @Mock
     private AiClient aiClient;
 
     private Member member;
@@ -64,8 +70,11 @@ class ProjectEvaluationServiceTest {
                 .projectId(10L)
                 .profile(profile)
                 .projectName("프로젝트")
+                .category(ProjectCategory.CONTEST)
                 .role("개발자")
                 .description("설명")
+                .startedAt(LocalDate.of(2026, 1, 1))
+                .isOngoing(true)
                 .build();
     }
 
@@ -125,7 +134,7 @@ class ProjectEvaluationServiceTest {
         projectEvaluationService.setSelf(mockSelf);
         doThrow(new TaskRejectedException("Thread pool saturated"))
                 .when(mockSelf)
-                .evaluateProjectAsync(any(), any(), any(), any());
+                .evaluateProjectAsync(any(), any(), any(), any(), any());
 
         // when
         projectEvaluationService.evaluateProject(10L, member);
@@ -139,15 +148,16 @@ class ProjectEvaluationServiceTest {
     @Test
     void 비동기_AI_평가_수행_시_성공적으로_결과가_반영된다() {
         // given
-        ProjectEvaluationResult mockResult = new ProjectEvaluationResult(95, "피드백");
-        given(aiClient.evaluateProject("프로젝트", "개발자", "설명")).willReturn(mockResult);
+        ProjectEvaluationResult mockResult = new ProjectEvaluationResult(95, 4, 3, 5, false, false, "피드백", "요약");
+        given(aiClient.evaluateProject("프로젝트", "개발자", "설명", "IT/AI/기술")).willReturn(mockResult);
+        given(projectExperienceRepository.findById(10L)).willReturn(Optional.of(project));
 
         // when
-        projectEvaluationService.evaluateProjectAsync(10L, "프로젝트", "개발자", "설명");
+        projectEvaluationService.evaluateProjectAsync(10L, "프로젝트", "개발자", "설명", InterestCategory.IT_AI_TECH);
 
         // then
         then(projectEvaluationTxService).should().startProcessing(10L);
-        then(projectEvaluationTxService).should().complete(10L, 95, "피드백");
+        then(projectEvaluationTxService).should().complete(10L, 100, 4, 3, 5, false, "피드백");
     }
 
     @DisplayName("비동기 AI 평가 시작 실패 시 실패 상태를 저장한다.")
@@ -159,7 +169,7 @@ class ProjectEvaluationServiceTest {
                 .startProcessing(10L);
 
         // when
-        projectEvaluationService.evaluateProjectAsync(10L, "프로젝트", "개발자", "설명");
+        projectEvaluationService.evaluateProjectAsync(10L, "프로젝트", "개발자", "설명", InterestCategory.IT_AI_TECH);
 
         // then
         then(projectEvaluationTxService).should().startProcessing(10L);
@@ -169,7 +179,9 @@ class ProjectEvaluationServiceTest {
     @DisplayName("ProjectEvaluationResult 점수가 범위를 벗어나면 예외가 발생한다.")
     @Test
     void ProjectEvaluationResult_점수가_범위를_벗어나면_예외가_발생한다() {
-        assertThatThrownBy(() -> new ProjectEvaluationResult(-1, "피드백")).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ProjectEvaluationResult(101, "피드백")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ProjectEvaluationResult(-1, null, null, null, false, false, "피드백", "요약"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ProjectEvaluationResult(101, null, null, null, false, false, "피드백", "요약"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

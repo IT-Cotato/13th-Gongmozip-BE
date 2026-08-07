@@ -19,6 +19,7 @@ import org.cotato.gongmozip.domains.profile.entity.*;
 import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
 import org.cotato.gongmozip.domains.profile.enums.CertificationCategory;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
+import org.cotato.gongmozip.domains.profile.enums.ProjectCategory;
 import org.cotato.gongmozip.domains.profile.exception.ProfileException;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.repository.*;
@@ -262,8 +263,8 @@ class ProfileServiceTest {
                 Profile.builder().profileId(10L).member(member).nickname("러너").build();
         given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
 
-        CreateProjectRequest request =
-                new CreateProjectRequest("프로젝트", "설명", "역할", List.of("Spring"), LocalDate.of(2026, 1, 1), null, true);
+        CreateProjectRequest request = new CreateProjectRequest(
+                "프로젝트", ProjectCategory.CONTEST, "설명", "역할", List.of("Spring"), LocalDate.of(2026, 1, 1), null, true);
 
         // when
         ProjectResponse response = profileService.createProject(10L, request, member);
@@ -283,7 +284,14 @@ class ProfileServiceTest {
         given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
 
         CreateProjectRequest request = new CreateProjectRequest(
-                "프로젝트", "설명", "역할", List.of("Spring"), LocalDate.of(2026, 5, 1), LocalDate.of(2026, 4, 1), false);
+                "프로젝트",
+                ProjectCategory.CONTEST,
+                "설명",
+                "역할",
+                List.of("Spring"),
+                LocalDate.of(2026, 5, 1),
+                LocalDate.of(2026, 4, 1),
+                false);
 
         // when & then
         assertThatThrownBy(() -> profileService.createProject(10L, request, member))
@@ -443,7 +451,7 @@ class ProfileServiceTest {
         given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
 
         profileService.updateProject(
-                10L, 20L, new UpdateProjectRequest(null, null, null, null, null, null, false), member);
+                10L, 20L, new UpdateProjectRequest(null, null, null, null, null, null, null, false), member);
 
         assertThat(project.isOngoing()).isFalse();
         assertThat(project.getEndedAt()).isEqualTo(originalEndedAt);
@@ -469,7 +477,7 @@ class ProfileServiceTest {
         given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
 
         profileService.updateProject(
-                10L, 20L, new UpdateProjectRequest(null, null, null, null, null, endedAt, null), member);
+                10L, 20L, new UpdateProjectRequest(null, null, null, null, null, null, endedAt, null), member);
 
         assertThat(project.isOngoing()).isFalse();
         assertThat(project.getEndedAt()).isEqualTo(endedAt);
@@ -496,7 +504,7 @@ class ProfileServiceTest {
         given(projectExperienceRepository.findById(20L)).willReturn(Optional.of(project));
 
         ProjectResponse response = profileService.updateProject(
-                10L, 20L, new UpdateProjectRequest("변경된 프로젝트", null, null, null, null, null, null), member);
+                10L, 20L, new UpdateProjectRequest("변경된 프로젝트", null, null, null, null, null, null, null), member);
 
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
 
