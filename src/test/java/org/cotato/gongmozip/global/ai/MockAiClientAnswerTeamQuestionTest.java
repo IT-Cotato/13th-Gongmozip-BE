@@ -17,7 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class MockAiClientAnswerTeamQuestionTest {
 
     @Mock
-    private GeminiClient geminiClient;
+    private AiGatewayClient aiGatewayClient;
 
     @InjectMocks
     private MockAiClient aiClient;
@@ -26,8 +26,8 @@ class MockAiClientAnswerTeamQuestionTest {
     @Test
     void Gemini가_활성화돼_있으면_Gemini_응답을_그대로_반환한다() {
         // given
-        given(geminiClient.isEnabled()).willReturn(true);
-        given(geminiClient.generateContent(org.mockito.ArgumentMatchers.anyString()))
+        given(aiGatewayClient.isEnabled()).willReturn(true);
+        given(aiGatewayClient.generateContent(org.mockito.ArgumentMatchers.anyString()))
                 .willReturn("Gemini의 답변이에요.");
 
         // when
@@ -41,9 +41,9 @@ class MockAiClientAnswerTeamQuestionTest {
     @Test
     void Gemini_호출이_실패하면_키워드_기반_응답으로_대체한다() {
         // given
-        given(geminiClient.isEnabled()).willReturn(true);
+        given(aiGatewayClient.isEnabled()).willReturn(true);
         willThrow(new RuntimeException("timeout"))
-                .given(geminiClient)
+                .given(aiGatewayClient)
                 .generateContent(org.mockito.ArgumentMatchers.anyString());
 
         // when
@@ -57,7 +57,7 @@ class MockAiClientAnswerTeamQuestionTest {
     @Test
     void Gemini가_비활성화돼_있으면_키워드_기반_응답으로_대체한다() {
         // given
-        given(geminiClient.isEnabled()).willReturn(false);
+        given(aiGatewayClient.isEnabled()).willReturn(false);
 
         // when
         String answer = aiClient.answerTeamQuestion("우리 타임라인 추천해줘");
@@ -74,6 +74,6 @@ class MockAiClientAnswerTeamQuestionTest {
 
         // then
         assertThat(answer).contains("궁금한 점을 말씀해주시면");
-        verifyNoInteractions(geminiClient);
+        verifyNoInteractions(aiGatewayClient);
     }
 }
