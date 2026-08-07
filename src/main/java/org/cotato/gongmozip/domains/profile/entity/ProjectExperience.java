@@ -22,6 +22,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.cotato.gongmozip.domains.profile.enums.AiSummaryStatus;
+import org.cotato.gongmozip.domains.profile.enums.ProjectCategory;
 import org.cotato.gongmozip.global.entity.BaseEntity;
 
 @Getter
@@ -43,6 +44,11 @@ public class ProjectExperience extends BaseEntity {
 
     @Column(name = "project_name", nullable = false, length = 200)
     private String projectName;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "category", nullable = false, length = 50)
+    @Builder.Default
+    private ProjectCategory category = ProjectCategory.CONTEST;
 
     @Column(name = "description", nullable = false, columnDefinition = "TEXT")
     private String description;
@@ -127,5 +133,9 @@ public class ProjectExperience extends BaseEntity {
 
     public void updateAiSummary(String aiSummary) {
         this.aiSummary = aiSummary;
+    }
+
+    public void updateCategory(ProjectCategory category) {
+        this.category = category;
     }
 }

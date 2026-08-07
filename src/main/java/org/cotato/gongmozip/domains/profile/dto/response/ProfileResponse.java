@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
+import org.cotato.gongmozip.domains.profile.enums.ProjectCategory;
 
 public class ProfileResponse {
 
@@ -107,6 +108,7 @@ public class ProfileResponse {
             Long projectId,
             Long profileId,
             String projectName,
+            ProjectCategory category,
             String description,
             String role,
             List<String> techStacks,
@@ -129,6 +131,7 @@ public class ProfileResponse {
     public record ProjectListItemResponse(
             Long projectId,
             String projectName,
+            ProjectCategory category,
             String role,
             List<String> techStacks,
             LocalDate startedAt,
@@ -141,6 +144,7 @@ public class ProfileResponse {
             Long projectId,
             Long profileId,
             String projectName,
+            ProjectCategory category,
             String description,
             String role,
             List<String> techStacks,

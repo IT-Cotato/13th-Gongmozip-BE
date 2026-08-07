@@ -352,6 +352,7 @@ public class ProfileConverter {
         return ProjectExperience.builder()
                 .profile(profile)
                 .projectName(request.projectName())
+                .category(request.category())
                 .description(request.description())
                 .role(request.role())
                 .techStacks(request.techStacks())
@@ -367,6 +368,7 @@ public class ProfileConverter {
                 project.getProjectId(),
                 project.getProfile().getProfileId(),
                 project.getProjectName(),
+                project.getCategory(),
                 project.getDescription(),
                 project.getRole(),
                 project.getTechStacks(),
@@ -382,6 +384,7 @@ public class ProfileConverter {
                 project.getProjectId(),
                 project.getProfile().getProfileId(),
                 project.getProjectName(),
+                project.getCategory(),
                 project.getDescription(),
                 project.getRole(),
                 project.getTechStacks(),
@@ -396,6 +399,7 @@ public class ProfileConverter {
         return new ProjectListItemResponse(
                 project.getProjectId(),
                 project.getProjectName(),
+                project.getCategory(),
                 project.getRole(),
                 project.getTechStacks(),
                 project.getStartedAt(),
@@ -417,6 +421,7 @@ public class ProfileConverter {
                 project.getProjectId(),
                 project.getProfile().getProfileId(),
                 project.getProjectName(),
+                project.getCategory(),
                 project.getDescription(),
                 project.getRole(),
                 project.getTechStacks(),
