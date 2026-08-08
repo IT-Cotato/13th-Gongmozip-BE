@@ -64,12 +64,31 @@ class S3ServiceTest {
         assertThat(response.contentType()).isEqualTo("image/png");
     }
 
-    @DisplayName("허용되지 않은 확장자(예: svg)로 요청 시 예외가 발생한다.")
+    @DisplayName("JPEG 파일에 대해 image/jpg Content-Type으로 발급 요청하면, MIME 형식이 변환되지 않고 image/jpg 그대로 발급된다.")
+    @Test
+    void Presigned_URL_발급_JPG_타입_보존() throws Exception {
+        // given
+        String fileName = "profile.jpg";
+        String contentType = "image/jpg";
+
+        PresignedPutObjectRequest mockPresignedRequest = mock(PresignedPutObjectRequest.class);
+        given(mockPresignedRequest.url()).willReturn(new URI("https://s3-upload-url.com").toURL());
+        given(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class))).willReturn(mockPresignedRequest);
+
+        // when
+        GetPresignedUrlResponse response = s3Service.getPresignedUrlForUpload(fileName, contentType);
+
+        // then
+        assertThat(response.uploadUrl()).isEqualTo("https://s3-upload-url.com");
+        assertThat(response.contentType()).isEqualTo("image/jpg");
+    }
+
+    @DisplayName("허용되지 않은 확장자(예: txt)로 요청 시 예외가 발생한다.")
     @Test
     void 허용되지_않은_확장자_예외_발생() {
         // given
-        String fileName = "attack.svg";
-        String contentType = "image/svg+xml";
+        String fileName = "attack.txt";
+        String contentType = "text/plain";
 
         // when & then
         assertThatThrownBy(() -> s3Service.getPresignedUrlForUpload(fileName, contentType))

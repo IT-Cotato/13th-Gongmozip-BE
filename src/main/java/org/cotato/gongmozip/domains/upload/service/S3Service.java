@@ -1,6 +1,7 @@
 package org.cotato.gongmozip.domains.upload.service;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -21,12 +22,19 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 @RequiredArgsConstructor
 public class S3Service {
 
-    private static final Map<String, String> ALLOWED_IMAGE_TYPES = Map.of(
-            "jpg", "image/jpeg",
-            "jpeg", "image/jpeg",
-            "png", "image/png",
-            "gif", "image/gif",
-            "webp", "image/webp");
+    private static final Map<String, List<String>> ALLOWED_EXTENSIONS_TO_MIMES = Map.ofEntries(
+            Map.entry("jpg", List.of("image/jpeg", "image/jpg", "image/pjpeg")),
+            Map.entry("jpeg", List.of("image/jpeg", "image/jpg", "image/pjpeg")),
+            Map.entry("png", List.of("image/png", "image/x-png")),
+            Map.entry("gif", List.of("image/gif")),
+            Map.entry("webp", List.of("image/webp")),
+            Map.entry("heic", List.of("image/heic", "image/heic-sequence")),
+            Map.entry("heif", List.of("image/heif", "image/heif-sequence")),
+            Map.entry("bmp", List.of("image/bmp", "image/x-windows-bmp")),
+            Map.entry("tiff", List.of("image/tiff")),
+            Map.entry("tif", List.of("image/tiff")),
+            Map.entry("svg", List.of("image/svg+xml")),
+            Map.entry("ico", List.of("image/x-icon", "image/vnd.microsoft.icon")));
 
     private final S3Presigner s3Presigner;
     private final S3Client s3Client;
@@ -100,16 +108,22 @@ public class S3Service {
     private String validateAndGetCanonicalMimeType(String fileName, String contentType) {
         String extension = getFileExtension(fileName).toLowerCase();
 
-        String canonicalMimeType = ALLOWED_IMAGE_TYPES.get(extension);
-        if (canonicalMimeType == null) {
+        List<String> allowedMimes = ALLOWED_EXTENSIONS_TO_MIMES.get(extension);
+        if (allowedMimes == null) {
             throw new UploadException(UploadErrorCode.INVALID_FILE_TYPE);
         }
 
-        if (!canonicalMimeType.equalsIgnoreCase(contentType)) {
+        if (contentType == null) {
             throw new UploadException(UploadErrorCode.INVALID_FILE_TYPE);
         }
 
-        return canonicalMimeType;
+        String trimmedContentType = contentType.trim();
+        boolean match = allowedMimes.stream().anyMatch(mime -> mime.equalsIgnoreCase(trimmedContentType));
+        if (!match) {
+            throw new UploadException(UploadErrorCode.INVALID_FILE_TYPE);
+        }
+
+        return trimmedContentType;
     }
 
     private String getFileExtension(String fileName) {
