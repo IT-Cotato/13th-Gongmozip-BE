@@ -19,7 +19,7 @@ public class ProfileConverter {
     public static Profile toProfile(CreateProfileRequest request, Member member) {
         return Profile.builder()
                 .member(member)
-                .nickname(request.nickname())
+                .nickname(request.nickname() != null ? request.nickname().trim() : null)
                 .schoolName(request.schoolName())
                 .grade(request.grade())
                 .major(request.major())

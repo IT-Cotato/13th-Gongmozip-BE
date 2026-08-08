@@ -16,6 +16,8 @@ public enum ProfileErrorCode implements BaseErrorCode {
     NO_FIELDS_TO_UPDATE(HttpStatus.BAD_REQUEST, "PROFILE_400_4", "수정할 필드가 없습니다."),
     INVALID_DATE(HttpStatus.BAD_REQUEST, "PROFILE_400_5", "미래 날짜는 입력할 수 없습니다."),
     AI_SUMMARY_ALREADY_EXISTS(HttpStatus.BAD_REQUEST, "PROFILE_400_6", "이미 프로젝트 AI 요약이 생성되었거나 생성 중입니다."),
+    CERTIFICATE_NAME_REQUIRED(HttpStatus.BAD_REQUEST, "PROFILE_400_7", "자격증 명은 필수 입력 항목이며 공백일 수 없습니다."),
+    CERTIFICATION_CODE_REQUIRED(HttpStatus.BAD_REQUEST, "PROFILE_400_8", "자격증 코드는 필수 입력 항목이며 공백일 수 없습니다."),
 
     // 403
     PROFILE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "PROFILE_403_1", "해당 프로필에 접근할 권한이 없습니다."),

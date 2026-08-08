@@ -633,4 +633,39 @@ class ProfileServiceTest {
         then(projectExperienceRepository).should().save(project);
         then(projectAiSummaryService).should().generateSummaryAsync(20L, "프로젝트", "역할", "설명", null);
     }
+
+    @DisplayName("프로필 수정 시 닉네임을 변경할 때 trim을 처리하고 본인 제외 중복 체크가 정상 수행된다.")
+    @Test
+    void 프로필_수정_닉네임_trim_및_본인제외_중복체크() {
+        // given
+        Profile profile =
+                Profile.builder().profileId(10L).member(member).nickname("러너").build();
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
+        given(profileRepository.existsByNicknameAndProfileIdNot("새로운닉네임", 10L)).willReturn(false);
+
+        UpdateProfileRequest request = new UpdateProfileRequest("  새로운닉네임  ", null, null, null, null, null, null, null);
+
+        // when
+        profileService.updateProfile(10L, request, member);
+
+        // then
+        assertThat(profile.getNickname()).isEqualTo("새로운닉네임");
+    }
+
+    @DisplayName("자격증 직접 입력 시 명칭이 공백이면 예외가 발생한다.")
+    @Test
+    void 자격증_직접입력_명칭_공백_예외_발생() {
+        // given
+        Profile profile =
+                Profile.builder().profileId(10L).member(member).nickname("러너").build();
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
+
+        CreateCertificationRequest request = new CreateCertificationRequest(
+                null, "   ", CertificationCategory.LANGUAGE, "기관", java.time.LocalDate.now(), true);
+
+        // when & then
+        assertThatThrownBy(() -> profileService.createProfileCertification(10L, request, member))
+                .isInstanceOf(ProfileException.class)
+                .hasMessage(ProfileErrorCode.CERTIFICATE_NAME_REQUIRED.getMessage());
+    }
 }

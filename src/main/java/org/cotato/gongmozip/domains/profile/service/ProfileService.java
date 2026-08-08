@@ -63,8 +63,9 @@ public class ProfileService {
 
         validateGpa(request.gpa(), request.gpaScale());
 
-        // 닉네임 중복 체크
-        if (profileRepository.existsByNickname(request.nickname())) {
+        // 닉네임 중복 체크 (trim 적용)
+        String trimmedNickname = request.nickname() != null ? request.nickname().trim() : "";
+        if (profileRepository.existsByNickname(trimmedNickname)) {
             throw new ProfileException(ProfileErrorCode.DUPLICATE_NICKNAME);
         }
 
@@ -113,12 +114,15 @@ public class ProfileService {
         Double newGpaScale = request.gpaScale() != null ? request.gpaScale() : profile.getGpaScale();
         validateGpa(newGpa, newGpaScale);
 
-        // 닉네임 변경 시 중복 검사
-        if (request.nickname() != null && !request.nickname().equals(profile.getNickname())) {
-            if (profileRepository.existsByNickname(request.nickname())) {
-                throw new ProfileException(ProfileErrorCode.DUPLICATE_NICKNAME);
+        // 닉네임 변경 시 중복 검사 (trim 및 본인 제외 검증)
+        if (request.nickname() != null) {
+            String trimmedNickname = request.nickname().trim();
+            if (!trimmedNickname.equalsIgnoreCase(profile.getNickname())) {
+                if (profileRepository.existsByNicknameAndProfileIdNot(trimmedNickname, profileId)) {
+                    throw new ProfileException(ProfileErrorCode.DUPLICATE_NICKNAME);
+                }
+                profile.updateNickname(trimmedNickname);
             }
-            profile.updateNickname(request.nickname());
         }
 
         if (request.schoolName() != null) profile.updateSchoolName(request.schoolName());
@@ -399,10 +403,15 @@ public class ProfileService {
         return new CertificationCategoriesResponse(list);
     }
 
-    public CertificationSearchResponse searchCertifications(
-            String keyword, CertificationCategory category, int page, int size) {
+    public CertificationSearchResponse searchCertifications(String keyword, String categoryStr, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
-        Page<Certification> pageResult = certificationRepository.searchCertifications(keyword, category, pageable);
+        CertificationCategory category =
+                (categoryStr != null && !categoryStr.trim().isEmpty()) ? CertificationCategory.from(categoryStr) : null;
+        String searchKeyword = (keyword != null && !keyword.trim().isEmpty())
+                ? "%" + keyword.trim().toLowerCase() + "%"
+                : null;
+        Page<Certification> pageResult =
+                certificationRepository.searchCertifications(searchKeyword, category, pageable);
         return ProfileConverter.toCertificationSearchResponse(pageResult);
     }
 
@@ -416,7 +425,7 @@ public class ProfileService {
         if (!request.isCustom()) {
             if (request.certificationCode() == null
                     || request.certificationCode().trim().isEmpty()) {
-                throw new ProfileException(ProfileErrorCode.CERTIFICATION_NOT_FOUND);
+                throw new ProfileException(ProfileErrorCode.CERTIFICATION_CODE_REQUIRED);
             }
             certification = certificationRepository
                     .findByCertificationCode(request.certificationCode())
@@ -429,7 +438,7 @@ public class ProfileService {
         } else {
             if (request.certificateName() == null
                     || request.certificateName().trim().isEmpty()) {
-                throw new ProfileException(ProfileErrorCode.NO_FIELDS_TO_UPDATE); // 필수값이 없으므로 BAD_REQUEST 처리
+                throw new ProfileException(ProfileErrorCode.CERTIFICATE_NAME_REQUIRED);
             }
             // 직접 입력 자격증 중복 검증
             if (profileCertificationRepository.existsByProfileAndIsCustomTrueAndCertificateNameIgnoreCase(
@@ -446,8 +455,10 @@ public class ProfileService {
     }
 
     public ProfileCertificationListResponse getProfileCertifications(
-            Long profileId, CertificationCategory category, int page, int size, String sort, Member member) {
+            Long profileId, String categoryStr, int page, int size, String sort, Member member) {
         Profile profile = getProfileAndValidateOwner(profileId, member);
+        CertificationCategory category =
+                (categoryStr != null && !categoryStr.trim().isEmpty()) ? CertificationCategory.from(categoryStr) : null;
 
         Sort dbSort = Sort.by(Sort.Direction.DESC, "acquiredAt").and(Sort.by(Sort.Direction.DESC, "createdAt"));
         if ("oldest".equalsIgnoreCase(sort)) {

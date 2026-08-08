@@ -13,7 +13,7 @@ public interface CertificationRepository extends JpaRepository<Certification, Lo
     Optional<Certification> findByCertificationCode(String certificationCode);
 
     @Query("SELECT c FROM Certification c WHERE "
-            + "(:keyword IS NULL OR LOWER(c.certificateName) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND "
+            + "(:keyword IS NULL OR LOWER(c.certificateName) LIKE :keyword) AND "
             + "(:categoryCode IS NULL OR c.categoryCode = :categoryCode)")
     Page<Certification> searchCertifications(
             @Param("keyword") String keyword,

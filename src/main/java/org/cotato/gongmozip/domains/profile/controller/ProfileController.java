@@ -9,7 +9,6 @@ import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
 import org.cotato.gongmozip.domains.profile.dto.request.ProfileRequest.*;
 import org.cotato.gongmozip.domains.profile.dto.response.ProfileResponse.*;
-import org.cotato.gongmozip.domains.profile.enums.CertificationCategory;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileSuccessCode;
 import org.cotato.gongmozip.domains.profile.service.ProfileService;
@@ -296,7 +295,7 @@ public class ProfileController {
     @GetMapping("/profiles/{profileId}/certifications")
     public ResponseEntity<BaseResponse<ProfileCertificationListResponse>> getProfileCertifications(
             @PathVariable("profileId") Long profileId,
-            @RequestParam(name = "category", required = false) CertificationCategory category,
+            @RequestParam(name = "category", required = false) String category,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "10") int size,
             @RequestParam(name = "sort", defaultValue = "newest") String sort,

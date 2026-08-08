@@ -5,7 +5,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.profile.dto.response.ProfileResponse.CertificationCategoriesResponse;
 import org.cotato.gongmozip.domains.profile.dto.response.ProfileResponse.CertificationSearchResponse;
-import org.cotato.gongmozip.domains.profile.enums.CertificationCategory;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileErrorCode;
 import org.cotato.gongmozip.domains.profile.exception.codes.ProfileSuccessCode;
 import org.cotato.gongmozip.domains.profile.service.ProfileService;
@@ -40,7 +39,7 @@ public class CertificationController {
     @GetMapping
     public ResponseEntity<BaseResponse<CertificationSearchResponse>> searchCertifications(
             @RequestParam(name = "keyword", required = false) String keyword,
-            @RequestParam(name = "category", required = false) CertificationCategory category,
+            @RequestParam(name = "category", required = false) String category,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
         CertificationSearchResponse response = profileService.searchCertifications(keyword, category, page, size);
