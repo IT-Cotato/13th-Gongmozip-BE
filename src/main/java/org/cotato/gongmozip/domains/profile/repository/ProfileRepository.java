@@ -14,4 +14,6 @@ public interface ProfileRepository extends JpaRepository<Profile, Long> {
     int countByMember(Member member);
 
     boolean existsByNickname(String nickname);
+
+    boolean existsByNicknameAndProfileIdNot(String nickname, Long profileId);
 }

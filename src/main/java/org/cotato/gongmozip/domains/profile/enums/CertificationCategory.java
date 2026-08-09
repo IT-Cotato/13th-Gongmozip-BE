@@ -1,5 +1,6 @@
 package org.cotato.gongmozip.domains.profile.enums;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -16,4 +17,20 @@ public enum CertificationCategory {
 
     private final String categoryName;
     private final int displayOrder;
+
+    @JsonCreator
+    public static CertificationCategory from(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        for (CertificationCategory category : CertificationCategory.values()) {
+            if (category.name().equalsIgnoreCase(trimmed)
+                    || category.getCategoryName().equalsIgnoreCase(trimmed)
+                    || category.getCategoryName().replace(" 자격증", "").equalsIgnoreCase(trimmed)) {
+                return category;
+            }
+        }
+        return null;
+    }
 }
