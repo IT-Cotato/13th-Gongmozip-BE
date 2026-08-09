@@ -103,7 +103,7 @@ class SurveyServiceTest {
         then(surveyOptionRepository).should().findAllByQuestions(fixture.questions());
     }
 
-    @DisplayName("제출 이력이 없으면 설문 상태는 NONE이다")
+    @DisplayName("제출 이력이 없으면 설문 상태는 NONE이며 재응시가 가능하다")
     @Test
     void getSurveyStatus_returnsNone() {
         given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.empty());
@@ -111,17 +111,34 @@ class SurveyServiceTest {
         SurveyStatusResponse response = surveyService.getSurveyStatus(member);
 
         assertThat(response.status()).isEqualTo("NONE");
+        assertThat(response.canRetest()).isTrue();
+        assertThat(response.nextRetakeAt()).isNull();
     }
 
-    @DisplayName("제출이 완료되었으면 설문 상태는 SUBMITTED이다")
+    @DisplayName("제출이 완료되었으나 3개월이 경과하지 않았으면 canRetest는 false이다")
     @Test
-    void getSurveyStatus_returnsSubmitted() {
-        SurveySubmission submission = submission();
+    void getSurveyStatus_whenSubmittedUnder3Months_returnsCanRetestFalse() {
+        SurveySubmission submission = submission(LocalDateTime.now().minusMonths(1));
         given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.of(submission));
 
         SurveyStatusResponse response = surveyService.getSurveyStatus(member);
 
         assertThat(response.status()).isEqualTo("SUBMITTED");
+        assertThat(response.canRetest()).isFalse();
+        assertThat(response.nextRetakeAt()).isNotNull();
+    }
+
+    @DisplayName("제출이 완료되고 3개월이 경과했으면 canRetest는 true이다")
+    @Test
+    void getSurveyStatus_whenSubmittedOver3Months_returnsCanRetestTrue() {
+        SurveySubmission submission = submission(LocalDateTime.now().minusMonths(4));
+        given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.of(submission));
+
+        SurveyStatusResponse response = surveyService.getSurveyStatus(member);
+
+        assertThat(response.status()).isEqualTo("SUBMITTED");
+        assertThat(response.canRetest()).isTrue();
+        assertThat(response.nextRetakeAt()).isNotNull();
     }
 
     @DisplayName("최초 설문 제출 시 제출과 답변을 생성하고 점수를 submission에 기록한다")

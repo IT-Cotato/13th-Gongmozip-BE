@@ -26,7 +26,12 @@ public class SurveyResponse {
             Long optionId, String optionKey, String optionLabel, String optionValue, int displayOrder) {}
 
     // 설문 제출 상태 조회 응답 (NONE: 미제출 / SUBMITTED: 제출 완료)
-    public record SurveyStatusResponse(String status) {}
+    public record SurveyStatusResponse(String status, Boolean canRetest, java.time.LocalDateTime nextRetakeAt) {
+
+        public SurveyStatusResponse(String status) {
+            this(status, true, null);
+        }
+    }
 
     // 캐릭터 유형별 성향 축 (leftLabel ↔ rightLabel, score 1~5)
     public record AxisResponse(String leftLabel, String rightLabel, BigDecimal score) {}
