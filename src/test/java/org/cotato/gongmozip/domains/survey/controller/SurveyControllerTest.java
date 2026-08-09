@@ -97,7 +97,7 @@ class SurveyControllerTest {
                 .andExpect(jsonPath("$.code").value("SURVEY_200_2"))
                 .andExpect(jsonPath("$.data.status").value("SUBMITTED"))
                 .andExpect(jsonPath("$.data.canRetest").value(false))
-                .andExpect(jsonPath("$.data.nextRetakeAt").exists());
+                .andExpect(jsonPath("$.data.nextRetakeAt").value("2026-11-08T00:00:00"));
     }
 
     @DisplayName("유효한 답변을 제출하면 분석 결과를 반환한다")

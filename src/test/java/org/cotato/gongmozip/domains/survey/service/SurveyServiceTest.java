@@ -118,27 +118,29 @@ class SurveyServiceTest {
     @DisplayName("제출이 완료되었으나 3개월이 경과하지 않았으면 canRetest는 false이다")
     @Test
     void getSurveyStatus_whenSubmittedUnder3Months_returnsCanRetestFalse() {
-        SurveySubmission submission = submission(LocalDateTime.now().minusMonths(1));
+        LocalDateTime submittedAt = LocalDateTime.now().minusMonths(1);
+        SurveySubmission submission = submission(submittedAt);
         given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.of(submission));
 
         SurveyStatusResponse response = surveyService.getSurveyStatus(member);
 
         assertThat(response.status()).isEqualTo("SUBMITTED");
         assertThat(response.canRetest()).isFalse();
-        assertThat(response.nextRetakeAt()).isNotNull();
+        assertThat(response.nextRetakeAt()).isEqualTo(submittedAt.plusMonths(3));
     }
 
     @DisplayName("제출이 완료되고 3개월이 경과했으면 canRetest는 true이다")
     @Test
     void getSurveyStatus_whenSubmittedOver3Months_returnsCanRetestTrue() {
-        SurveySubmission submission = submission(LocalDateTime.now().minusMonths(4));
+        LocalDateTime submittedAt = LocalDateTime.now().minusMonths(4);
+        SurveySubmission submission = submission(submittedAt);
         given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.of(submission));
 
         SurveyStatusResponse response = surveyService.getSurveyStatus(member);
 
         assertThat(response.status()).isEqualTo("SUBMITTED");
         assertThat(response.canRetest()).isTrue();
-        assertThat(response.nextRetakeAt()).isNotNull();
+        assertThat(response.nextRetakeAt()).isEqualTo(submittedAt.plusMonths(3));
     }
 
     @DisplayName("최초 설문 제출 시 제출과 답변을 생성하고 점수를 submission에 기록한다")
