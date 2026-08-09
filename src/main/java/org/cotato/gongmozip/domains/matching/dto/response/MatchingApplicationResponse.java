@@ -23,13 +23,15 @@ public class MatchingApplicationResponse {
             boolean hasProfile,
             // 협업 유형 검사를 끝까지 제출했는지 여부
             boolean surveyCompleted,
-            // 취소나 패스를 포함하여 오늘 이미 신청한 이력이 있는지 여부
+            // 취소나 패스를 포함하여 대상 신청일에 이미 신청한 이력이 있는지 여부
             boolean appliedToday,
             // 최근 협업거리 감소로 매칭이 제한된 경우 제한 종료 시각, 제한 중이 아니면 null
             LocalDateTime matchingBlockedUntil,
-            // 오늘 매칭 신청을 받을 수 있는 마지막 시각
+            // 지금 신청하면 참여하게 되는 매칭 날짜 — 16시 결과 공개 이후에는 다음 날이 된다
+            LocalDate applicationDate,
+            // 대상 신청일의 매칭 신청을 받을 수 있는 마지막 시각
             LocalDateTime applicationDeadlineAt,
-            // 오늘 매칭풀에서 대기하거나 매칭 계산 중인 신청 수
+            // 대상 신청일 매칭풀에서 대기하거나 매칭 계산 중인 신청 수
             long participantCount) {}
 
     // 신청 완료 직후 저장된 매칭 신청의 스냅샷을 반환

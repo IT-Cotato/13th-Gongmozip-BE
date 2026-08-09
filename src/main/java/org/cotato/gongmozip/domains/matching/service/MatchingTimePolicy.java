@@ -64,22 +64,31 @@ public class MatchingTimePolicy {
         return applicationDate.plusDays(1).atStartOfDay();
     }
 
-    // 14:00 정각은 마감 이후이므로 신청 불가다
+    // 14시 정각부터 결과 공개(16시) 전까지는 매칭 진행 구간이라 신청을 받지 않는다
     public boolean isApplicationOpen() {
-        return now().isBefore(applicationDeadline(today()));
+        LocalDateTime now = now();
+        LocalDate date = now.toLocalDate();
+        return now.isBefore(applicationDeadline(date)) || isResultPublished(date, now);
     }
 
-    // 하나의 철회 요청을 14시 전 FREE_CANCEL, 14시 이후 PENALIZED_PASS로 구분한다
+    /** 현재 시각의 신청 대상일. 결과 공개(16시) 전에는 오늘, 공개 이후에는 다음 날 매칭에 신청한다. */
+    public LocalDate currentApplicationDate() {
+        LocalDateTime now = now();
+        LocalDate date = now.toLocalDate();
+        return isResultPublished(date, now) ? date.plusDays(1) : date;
+    }
+
+    // 하나의 철회 요청을 신청일 14시 전 FREE_CANCEL, 14시 이후 PENALIZED_PASS로 구분한다
     public WithdrawalType resolveWithdrawalType(LocalDate applicationDate) {
         if (applicationDate == null) {
             throw new MatchingException(MatchingErrorCode.WITHDRAWAL_NOT_ALLOWED);
         }
         LocalDateTime now = now();
-        LocalDateTime applicationStart = applicationDate.atStartOfDay();
-        // 신청일 이전이거나 다음 날 자정에 도달했다면 어떤 방식으로도 철회할 수 없다
-        if (now.isBefore(applicationStart) || !now.isBefore(withdrawalDeadline(applicationDate))) {
+        // 신청일 다음 날 자정에 도달했다면 어떤 방식으로도 철회할 수 없다
+        if (!now.isBefore(withdrawalDeadline(applicationDate))) {
             throw new MatchingException(MatchingErrorCode.WITHDRAWAL_NOT_ALLOWED);
         }
+        // 16시 이후 접수된 익일 신청은 신청일 전날에도 취소할 수 있으므로 마감 전이면 항상 무료 취소다
         if (now.isBefore(applicationDeadline(applicationDate))) {
             return WithdrawalType.FREE_CANCEL;
         }

@@ -67,7 +67,15 @@ class MatchingApplicationControllerTest {
     void getEligibility() throws Exception {
         given(matchingApplicationService.getEligibility(1L))
                 .willReturn(new EligibilityResponse(
-                        true, List.of(), true, true, false, null, APPLICATION_DATE.atTime(14, 0), 12));
+                        true,
+                        List.of(),
+                        true,
+                        true,
+                        false,
+                        null,
+                        APPLICATION_DATE,
+                        APPLICATION_DATE.atTime(14, 0),
+                        12));
 
         mockMvc.perform(get("/api/matching/applications/eligibility").with(user(userDetails)))
                 .andExpect(status().isOk())
