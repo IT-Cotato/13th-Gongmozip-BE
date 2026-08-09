@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.collaboration.repository.CollaborationPointHistoryRepository;
 import org.cotato.gongmozip.domains.matching.converter.MatchingApplicationConverter;
@@ -70,8 +71,8 @@ public class MatchingApplicationService {
     public EligibilityResponse getEligibility(Long memberId) {
         Member member = getMember(memberId);
 
-        // 신청 시간 관련(14시 이전)
-        LocalDate today = matchingTimePolicy.today();
+        // 16시 결과 공개 이후에는 다음 날이 신청 대상일이 된다
+        LocalDate applicationDate = matchingTimePolicy.currentApplicationDate();
         LocalDateTime now = matchingTimePolicy.now();
 
         // 프로필 개수
@@ -81,8 +82,8 @@ public class MatchingApplicationService {
                 .findByMember(member)
                 .filter(submission -> submission.getStatus() == SubmissionStatus.SUBMITTED)
                 .isPresent();
-        // 오늘 매칭풀 입장했는지 여부
-        boolean appliedToday = matchingApplicationRepository.existsByMemberAndApplicationDate(member, today);
+        // 대상 신청일 매칭풀에 입장했는지 여부
+        boolean appliedToday = matchingApplicationRepository.existsByMemberAndApplicationDate(member, applicationDate);
         // 협업거리 제한
         boolean matchingRestricted = member.isMatchingBlockedAt(now);
         boolean applicationOpen = matchingTimePolicy.isApplicationOpen();
@@ -114,23 +115,30 @@ public class MatchingApplicationService {
             reasons.add(MatchingIneligibilityReason.PROJECT_EVALUATION_NOT_READY);
         }
 
-        long participantCount =
-                matchingApplicationRepository.countByApplicationDateAndStatusIn(today, PARTICIPATING_STATUSES);
+        long participantCount = matchingApplicationRepository.countByApplicationDateAndStatusIn(
+                applicationDate, PARTICIPATING_STATUSES);
         return MatchingApplicationConverter.toEligibilityResponse(
                 reasons,
                 hasProfile,
                 surveyCompleted,
                 appliedToday,
                 matchingRestricted ? member.getMatchingBlockedUntil() : null,
-                matchingTimePolicy.applicationDeadline(today),
+                applicationDate,
+                matchingTimePolicy.applicationDeadline(applicationDate),
                 participantCount);
     }
 
-    // 오늘 신청 조회 — 신청이 없으면 예외 대신 appliedToday=false 응답을 반환한다
+    // 현재 신청 조회 — 신청이 없으면 예외 대신 appliedToday=false 응답을 반환한다
     public TodayApplicationResponse getTodayApplication(Long memberId) {
         Member member = getMember(memberId);
+        LocalDate today = matchingTimePolicy.today();
+        LocalDate applicationDate = matchingTimePolicy.currentApplicationDate();
+        // 16시 이후 익일 신청이 없어도 오늘자 신청(매칭 결과 대기 등)은 계속 보여야 하므로 오늘로 폴백한다
         return matchingApplicationRepository
-                .findByMemberAndApplicationDate(member, matchingTimePolicy.today())
+                .findByMemberAndApplicationDate(member, applicationDate)
+                .or(() -> applicationDate.isEqual(today)
+                        ? Optional.empty()
+                        : matchingApplicationRepository.findByMemberAndApplicationDate(member, today))
                 .map(application -> MatchingApplicationConverter.toTodayApplicationResponse(
                         application, resolveWithdrawalAvailability(member, application)))
                 .orElseGet(MatchingApplicationConverter::toEmptyTodayApplicationResponse);
@@ -139,14 +147,16 @@ public class MatchingApplicationService {
     // 매칭 신청 — 마감 검증 → 중복/자격 검증 → 역량 계산 → 신청 시점 스냅샷 저장 순으로 처리
     @Transactional
     public ApplicationResponse apply(Long memberId, ApplyRequest request) {
-        // 락을 잡기 전에 마감 여부를 먼저 확인해 마감 이후 불필요한 DB 락을 피한다
+        // 락을 잡기 전에 매칭 진행 구간(14~16시) 여부를 먼저 확인해 불필요한 DB 락을 피한다
         if (!matchingTimePolicy.isApplicationOpen()) {
             throw new MatchingException(MatchingErrorCode.APPLICATION_DEADLINE_PASSED);
         }
 
         // 비관적 락 적용
         Member member = getMemberWithLock(memberId);
-        LocalDate applicationDate = matchingTimePolicy.today();
+        // 락 대기 중 14시를 넘길 수 있으므로 락 획득 후 같은 시각으로 마감 여부와 대상일을 함께 판정한다.
+        // 16시 이후에는 다음 날 매칭에 신청된다.
+        LocalDate applicationDate = matchingTimePolicy.resolveApplicationDate();
         LocalDateTime now = matchingTimePolicy.now();
         if (member.isMatchingBlockedAt(now)) {
             throw new MatchingException(MatchingErrorCode.MATCHING_RESTRICTED);

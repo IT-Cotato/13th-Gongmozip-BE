@@ -9,7 +9,8 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum MatchingErrorCode implements BaseErrorCode {
     // 400 Bad Request
-    APPLICATION_DEADLINE_PASSED(HttpStatus.BAD_REQUEST, "MATCHING_400_1", "오늘의 매칭 신청이 마감되었습니다."),
+    APPLICATION_DEADLINE_PASSED(
+            HttpStatus.BAD_REQUEST, "MATCHING_400_1", "매칭 진행 중에는 신청할 수 없습니다. 결과 공개 이후 다음 매칭에 신청해주세요."),
     PROFILE_REQUIRED(HttpStatus.BAD_REQUEST, "MATCHING_400_2", "매칭에 사용할 프로필 작성이 필요합니다."),
     SURVEY_REQUIRED(HttpStatus.BAD_REQUEST, "MATCHING_400_3", "협업 유형 검사를 완료해야 합니다."),
     WITHDRAWAL_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "MATCHING_400_4", "현재는 매칭 신청을 철회할 수 없습니다."),

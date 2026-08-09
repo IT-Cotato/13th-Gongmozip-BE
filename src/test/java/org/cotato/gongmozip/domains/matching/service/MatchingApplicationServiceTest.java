@@ -56,6 +56,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class MatchingApplicationServiceTest {
 
     private static final LocalDate TODAY = LocalDate.of(2026, 7, 31);
+    private static final LocalDate TOMORROW = TODAY.plusDays(1);
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 7, 31, 13, 0);
 
     @Mock
@@ -121,7 +122,7 @@ class MatchingApplicationServiceTest {
         Member member =
                 Member.builder().memberId(1L).matchingBlockedUntil(blockedUntil).build();
         given(memberRepository.findById(member.getMemberId())).willReturn(Optional.of(member));
-        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.currentApplicationDate()).willReturn(TODAY);
         given(matchingTimePolicy.now()).willReturn(NOW);
         given(profileRepository.countByMember(member)).willReturn(0);
         given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.empty());
@@ -146,6 +147,7 @@ class MatchingApplicationServiceTest {
         assertThat(response.surveyCompleted()).isFalse();
         assertThat(response.appliedToday()).isTrue();
         assertThat(response.matchingBlockedUntil()).isEqualTo(blockedUntil);
+        assertThat(response.applicationDate()).isEqualTo(TODAY);
         assertThat(response.participantCount()).isEqualTo(12);
     }
 
@@ -155,6 +157,7 @@ class MatchingApplicationServiceTest {
         Member member = Member.builder().memberId(1L).build();
         given(memberRepository.findById(member.getMemberId())).willReturn(Optional.of(member));
         given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.currentApplicationDate()).willReturn(TODAY);
         given(matchingApplicationRepository.findByMemberAndApplicationDate(member, TODAY))
                 .willReturn(Optional.empty());
 
@@ -173,6 +176,7 @@ class MatchingApplicationServiceTest {
         MatchingApplication application = applicationWithStatus(100L, member, MatchingApplicationStatus.MATCHED);
         given(memberRepository.findById(member.getMemberId())).willReturn(Optional.of(member));
         given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.currentApplicationDate()).willReturn(TODAY);
         given(matchingApplicationRepository.findByMemberAndApplicationDate(member, TODAY))
                 .willReturn(Optional.of(application));
 
@@ -187,6 +191,26 @@ class MatchingApplicationServiceTest {
         verify(matchingTimePolicy, never()).resolveWithdrawalType(any(LocalDate.class));
     }
 
+    @DisplayName("결과 공개 이후 익일 신청이 없으면 오늘자 신청으로 폴백해 조회한다.")
+    @Test
+    void getTodayApplicationFallsBackToTodayAfterResultPublish() {
+        Member member = Member.builder().memberId(1L).build();
+        MatchingApplication application = applicationWithStatus(100L, member, MatchingApplicationStatus.MATCHED);
+        given(memberRepository.findById(member.getMemberId())).willReturn(Optional.of(member));
+        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.currentApplicationDate()).willReturn(TOMORROW);
+        given(matchingApplicationRepository.findByMemberAndApplicationDate(member, TOMORROW))
+                .willReturn(Optional.empty());
+        given(matchingApplicationRepository.findByMemberAndApplicationDate(member, TODAY))
+                .willReturn(Optional.of(application));
+
+        var response = matchingApplicationService.getTodayApplication(member.getMemberId());
+
+        assertThat(response.appliedToday()).isTrue();
+        assertThat(response.applicationDate()).isEqualTo(TODAY);
+        assertThat(response.status()).isEqualTo("MATCHED");
+    }
+
     @DisplayName("결과 공개 전에도 제안된 신청은 패널티 철회 가능으로 반환한다.")
     @Test
     void proposedApplicationIsWithdrawableBeforeResultPublication() {
@@ -197,6 +221,7 @@ class MatchingApplicationServiceTest {
         LocalDateTime beforePublish = MatchingResponseFixture.PUBLISHED_AT.minusSeconds(1);
         given(memberRepository.findById(member.getMemberId())).willReturn(Optional.of(member));
         given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.currentApplicationDate()).willReturn(TODAY);
         given(matchingTimePolicy.now()).willReturn(beforePublish);
         given(matchingApplicationRepository.findByMemberAndApplicationDate(member, TODAY))
                 .willReturn(Optional.of(application));
@@ -226,7 +251,7 @@ class MatchingApplicationServiceTest {
                 new ApplyRequest(profile.getProfileId(), InterestCategory.IT_AI_TECH, LeaderPreference.WANTS, true);
 
         given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
-        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.resolveApplicationDate()).willReturn(TODAY);
         given(matchingTimePolicy.now()).willReturn(NOW);
         given(matchingTimePolicy.applicationDeadline(TODAY)).willReturn(TODAY.atTime(14, 0));
         given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
@@ -260,13 +285,72 @@ class MatchingApplicationServiceTest {
         assertThat(response.skillGroup()).isNull();
     }
 
+    @DisplayName("결과 공개 이후 신청은 다음 날 매칭으로 저장한다.")
+    @Test
+    void applyAfterResultPublishStoresNextDayApplication() {
+        Member member = Member.builder().memberId(1L).collaborationPoint(100).build();
+        Profile profile = Profile.builder()
+                .profileId(10L)
+                .member(member)
+                .gpa(4.0)
+                .gpaScale(4.0)
+                .build();
+        SurveySubmission survey = submittedSurvey(member);
+        ApplyRequest request =
+                new ApplyRequest(profile.getProfileId(), InterestCategory.IT_AI_TECH, LeaderPreference.WANTS, true);
+
+        given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
+        given(matchingTimePolicy.resolveApplicationDate()).willReturn(TOMORROW);
+        given(matchingTimePolicy.now()).willReturn(NOW.withHour(17));
+        given(matchingTimePolicy.applicationDeadline(TOMORROW)).willReturn(TOMORROW.atTime(14, 0));
+        given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
+        given(matchingApplicationRepository.existsByMemberAndApplicationDate(member, TOMORROW))
+                .willReturn(false);
+        given(profileRepository.countByMember(member)).willReturn(1);
+        given(profileRepository.findByProfileIdAndMember(profile.getProfileId(), member))
+                .willReturn(Optional.of(profile));
+        given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.of(survey));
+        given(projectExperienceRepository.findAllByProfile(profile)).willReturn(List.of());
+        given(projectScoreProvider.evaluate(List.of())).willReturn(new BigDecimal("50"));
+        given(collaborationPointHistoryRepository.existsByMember(member)).willReturn(false);
+        given(awardRepository.countByProfile(profile)).willReturn(1);
+        given(profileCertificationRepository.countByProfile(profile)).willReturn(0);
+        given(matchingApplicationRepository.save(any(MatchingApplication.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        var response = matchingApplicationService.apply(member.getMemberId(), request);
+
+        ArgumentCaptor<MatchingApplication> captor = ArgumentCaptor.forClass(MatchingApplication.class);
+        verify(matchingApplicationRepository).save(captor.capture());
+        assertThat(captor.getValue().getApplicationDate()).isEqualTo(TOMORROW);
+        assertThat(response.applicationDate()).isEqualTo(TOMORROW);
+        assertThat(response.applicationDeadlineAt()).isEqualTo(TOMORROW.atTime(14, 0));
+    }
+
+    @DisplayName("락 대기 중 14시를 넘기면 락 획득 후 마감 판정으로 신청을 거절한다.")
+    @Test
+    void applyRejectsWhenDeadlinePassesWhileWaitingForLock() {
+        Member member = Member.builder().memberId(1L).build();
+        ApplyRequest request = new ApplyRequest(10L, InterestCategory.IT_AI_TECH, LeaderPreference.NEUTRAL, true);
+        // 13:59:59에 사전 검사를 통과했지만 락 대기 중 14시를 넘긴 상황을 재현한다
+        given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
+        given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
+        given(matchingTimePolicy.resolveApplicationDate())
+                .willThrow(new MatchingException(MatchingErrorCode.APPLICATION_DEADLINE_PASSED));
+
+        assertThatThrownBy(() -> matchingApplicationService.apply(member.getMemberId(), request))
+                .isInstanceOf(MatchingException.class)
+                .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.APPLICATION_DEADLINE_PASSED);
+        verify(matchingApplicationRepository, never()).save(any(MatchingApplication.class));
+    }
+
     @DisplayName("같은 날 취소 이력이 있어도 다시 신청할 수 없다.")
     @Test
     void duplicateApplicationIsRejected() {
         Member member = Member.builder().memberId(1L).build();
         ApplyRequest request = new ApplyRequest(10L, InterestCategory.IT_AI_TECH, LeaderPreference.NEUTRAL, true);
         given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
-        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.resolveApplicationDate()).willReturn(TODAY);
         given(matchingTimePolicy.now()).willReturn(NOW);
         given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
         given(matchingApplicationRepository.existsByMemberAndApplicationDate(member, TODAY))
@@ -283,7 +367,7 @@ class MatchingApplicationServiceTest {
         Member member = Member.builder().memberId(1L).build();
         ApplyRequest request = new ApplyRequest(10L, InterestCategory.IT_AI_TECH, LeaderPreference.NEUTRAL, true);
         given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
-        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.resolveApplicationDate()).willReturn(TODAY);
         given(matchingTimePolicy.now()).willReturn(NOW);
         given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
         given(matchingGroupMemberRepository.existsOpenResponseForMember(any(), any(), any()))
@@ -301,7 +385,7 @@ class MatchingApplicationServiceTest {
         Member member = Member.builder().memberId(1L).build();
         ApplyRequest request = new ApplyRequest(10L, InterestCategory.IT_AI_TECH, LeaderPreference.NEUTRAL, true);
         given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
-        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.resolveApplicationDate()).willReturn(TODAY);
         given(matchingTimePolicy.now()).willReturn(NOW);
         given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
         given(matchingApplicationRepository.existsByMemberAndApplicationDate(member, TODAY))
@@ -323,7 +407,7 @@ class MatchingApplicationServiceTest {
         ApplyRequest request = new ApplyRequest(10L, InterestCategory.IT_AI_TECH, LeaderPreference.NEUTRAL, true);
         given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
         given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
-        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.resolveApplicationDate()).willReturn(TODAY);
         given(matchingTimePolicy.now()).willReturn(NOW);
 
         assertThatThrownBy(() -> matchingApplicationService.apply(member.getMemberId(), request))
