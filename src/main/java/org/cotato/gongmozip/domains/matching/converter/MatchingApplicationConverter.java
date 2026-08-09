@@ -62,13 +62,14 @@ public final class MatchingApplicationConverter {
                 .build();
     }
 
-    // 신청 자격 검사 결과와 오늘 매칭풀 현황을 조회 응답으로 변환
+    // 신청 자격 검사 결과와 대상 신청일 매칭풀 현황을 조회 응답으로 변환
     public static EligibilityResponse toEligibilityResponse(
             List<MatchingIneligibilityReason> reasons,
             boolean hasProfile,
             boolean surveyCompleted,
             boolean appliedToday,
             LocalDateTime matchingBlockedUntil,
+            LocalDate applicationDate,
             LocalDateTime applicationDeadlineAt,
             long participantCount) {
         return new EligibilityResponse(
@@ -78,6 +79,7 @@ public final class MatchingApplicationConverter {
                 surveyCompleted,
                 appliedToday,
                 matchingBlockedUntil,
+                applicationDate,
                 applicationDeadlineAt,
                 participantCount);
     }

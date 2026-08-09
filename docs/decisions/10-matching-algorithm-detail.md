@@ -70,7 +70,7 @@
 > **구현 코드:** [`MatchingSchedulerJobs.runDailyMatching()`](../../src/main/java/org/cotato/gongmozip/domains/scheduler/MatchingSchedulerJobs.java#L21-L27) → [`MatchingBatchOrchestrator.runDaily()`](../../src/main/java/org/cotato/gongmozip/domains/matching/service/MatchingBatchOrchestrator.java#L36-L98) 순서로 시작한다.
 
 ```text
-14:00 당일 WAITING 신청 마감
+14:00 당일 WAITING 신청 마감 (결과 공개 전까지 신청 불가)
   ↓
 신청 당시 skillScore·성향·협업방식 스냅샷 고정
   ↓
@@ -96,7 +96,7 @@ Brute Force 시간 초과 시 전체 입력으로 Greedy fallback
   ↓
 15:30 새 풀 시작 중단 기준(best effort)
   ↓
-16:00 결과 공개·수락 가능
+16:00 결과 공개·수락 가능, 다음 날 매칭 신청 접수 시작
   ↓
 GET /api/matching/results/me/today로 본인 결과 조회
   ↓
@@ -107,6 +107,11 @@ GET /api/matching/results/me/today로 본인 결과 조회
 ```
 
 카테고리가 다른 신청자는 어떤 예외에서도 섞지 않는다.
+
+신청 접수는 하루 종일 닫히지 않고 매칭 진행 구간(14:00~결과 공개 전)에만 막는다. 결과
+공개(16:00)부터는 신청이 다음 날 매칭으로 접수되며 `application_date`에 다음 날이 저장된다.
+자격/신청 응답의 `applicationDate`가 지금 신청하면 참여하게 되는 매칭 날짜를 알려준다. 취소나
+패스 여부와 무관하게 같은 신청 대상일에는 한 번만 신청할 수 있다.
 
 ## 2. 역량 점수와 카테고리 분류
 
@@ -926,7 +931,8 @@ POST /api/matching/applications/{applicationId}/withdraw
 
 통합 철회 API는 결과 그룹원이 없는 신청에는 기존 무료 취소·패널티 패스 정책을 적용하고, 결과 그룹원이
 있으면 공개 전후와 관계없이 마감 전 `PASSED` 응답으로 처리한다. 같은 패스 요청의 재시도에는 저장된
-`passPenalty`를 반환해 협업거리를 다시 차감하지 않는다.
+`passPenalty`를 반환해 협업거리를 다시 차감하지 않는다. 무료 취소는 신청일 14:00 전까지 가능하므로
+16:00 이후 접수된 익일 신청은 신청일 전날에도 무료 취소로 철회할 수 있다.
 
 3인 제안에서 한 명이 패스하거나 4인 제안에서 두 명이 패스하면 유효 인원이 3명 미만이므로 그룹을
 `CANCELED`로 닫고 피해자만 자동 재배정한다. 4인 제안에서 한 명이 패스한 경우에는 남은 3명의 응답을
@@ -942,6 +948,7 @@ POST /api/matching/applications/{applicationId}/withdraw
 - zone: `Asia/Seoul`
 - 새 풀 시작 중단 기준: 15:30(best effort)
 - 공개 시각: 16:00
+- 신청 접수: ~14:00 당일 신청, 14:00~16:00 신청 불가, 16:00~ 다음 날 신청
 - 응답 마감: 신청일 다음 날 12:00, 마감 대상 재조회 주기 5분
 
 ### 12.2 JDBC ShedLock
