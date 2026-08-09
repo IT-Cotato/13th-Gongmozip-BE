@@ -86,9 +86,16 @@ public class SurveyService {
     public SurveyStatusResponse getSurveyStatus(Member member) {
         return surveySubmissionRepository
                 .findByMember(member)
-                .map(submission ->
-                        new SurveyStatusResponse(submission.getStatus().name()))
-                .orElseGet(() -> new SurveyStatusResponse("NONE"));
+                .map(submission -> {
+                    boolean canRetest = true;
+                    LocalDateTime nextRetakeAt = null;
+                    if (submission.getStatus() == SubmissionStatus.SUBMITTED && submission.getSubmittedAt() != null) {
+                        nextRetakeAt = submission.getSubmittedAt().plusMonths(RETAKE_INTERVAL_MONTHS);
+                        canRetest = !nextRetakeAt.isAfter(LocalDateTime.now());
+                    }
+                    return new SurveyStatusResponse(submission.getStatus().name(), canRetest, nextRetakeAt);
+                })
+                .orElseGet(() -> new SurveyStatusResponse("NONE", true, null));
     }
 
     // 설문 제출 — 답변 검증 → 저장 → 성향 점수 계산 → 캐릭터 유형 판정 순으로 처리

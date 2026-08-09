@@ -89,12 +89,15 @@ class SurveyControllerTest {
     @Test
     void getStatus_returnsMemberSurveyStatus() throws Exception {
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
-        given(surveyService.getSurveyStatus(member)).willReturn(new SurveyStatusResponse("SUBMITTED"));
+        java.time.LocalDateTime testDate = java.time.LocalDateTime.of(2026, 11, 8, 0, 0, 0);
+        given(surveyService.getSurveyStatus(member)).willReturn(new SurveyStatusResponse("SUBMITTED", false, testDate));
 
         mockMvc.perform(get("/api/survey/status").with(user(userDetails)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SURVEY_200_2"))
-                .andExpect(jsonPath("$.data.status").value("SUBMITTED"));
+                .andExpect(jsonPath("$.data.status").value("SUBMITTED"))
+                .andExpect(jsonPath("$.data.canRetest").value(false))
+                .andExpect(jsonPath("$.data.nextRetakeAt").value("2026-11-08T00:00:00"));
     }
 
     @DisplayName("유효한 답변을 제출하면 분석 결과를 반환한다")
