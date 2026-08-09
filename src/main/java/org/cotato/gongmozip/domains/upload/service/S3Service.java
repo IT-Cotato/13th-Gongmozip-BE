@@ -2,6 +2,7 @@ package org.cotato.gongmozip.domains.upload.service;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -33,7 +34,6 @@ public class S3Service {
             Map.entry("bmp", List.of("image/bmp", "image/x-windows-bmp")),
             Map.entry("tiff", List.of("image/tiff")),
             Map.entry("tif", List.of("image/tiff")),
-            Map.entry("svg", List.of("image/svg+xml")),
             Map.entry("ico", List.of("image/x-icon", "image/vnd.microsoft.icon")));
 
     private final S3Presigner s3Presigner;
@@ -106,7 +106,7 @@ public class S3Service {
     }
 
     private String validateAndGetCanonicalMimeType(String fileName, String contentType) {
-        String extension = getFileExtension(fileName).toLowerCase();
+        String extension = getFileExtension(fileName).toLowerCase(Locale.ROOT);
 
         List<String> allowedMimes = ALLOWED_EXTENSIONS_TO_MIMES.get(extension);
         if (allowedMimes == null) {
@@ -135,7 +135,7 @@ public class S3Service {
     }
 
     private String generateUniqueFileName(String fileName) {
-        String extension = getFileExtension(fileName).toLowerCase();
+        String extension = getFileExtension(fileName).toLowerCase(Locale.ROOT);
         return UUID.randomUUID() + "." + extension;
     }
 

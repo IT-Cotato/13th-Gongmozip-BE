@@ -73,14 +73,21 @@ class S3ServiceTest {
 
         PresignedPutObjectRequest mockPresignedRequest = mock(PresignedPutObjectRequest.class);
         given(mockPresignedRequest.url()).willReturn(new URI("https://s3-upload-url.com").toURL());
-        given(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class))).willReturn(mockPresignedRequest);
+
+        org.mockito.ArgumentCaptor<PutObjectPresignRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(PutObjectPresignRequest.class);
+        given(s3Presigner.presignPutObject(captor.capture())).willReturn(mockPresignedRequest);
 
         // when
-        GetPresignedUrlResponse response = s3Service.getPresignedUrlForUpload(fileName, contentType);
+        GetPresignedUrlResponse response = s3Service.getProfileImagePresignedUrl(fileName, contentType);
 
         // then
         assertThat(response.uploadUrl()).isEqualTo("https://s3-upload-url.com");
         assertThat(response.contentType()).isEqualTo("image/jpg");
+        assertThat(response.imageUrl())
+                .startsWith("https://test.cloudfront.net/members/profiles/")
+                .endsWith(".jpg");
+        assertThat(captor.getValue().putObjectRequest().contentType()).isEqualTo("image/jpg");
     }
 
     @DisplayName("허용되지 않은 확장자(예: txt)로 요청 시 예외가 발생한다.")

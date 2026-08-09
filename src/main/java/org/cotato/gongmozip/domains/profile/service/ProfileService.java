@@ -114,10 +114,13 @@ public class ProfileService {
         Double newGpaScale = request.gpaScale() != null ? request.gpaScale() : profile.getGpaScale();
         validateGpa(newGpa, newGpaScale);
 
-        // 닉네임 변경 시 중복 검사 (trim 및 본인 제외 검증)
+        // 닉네임 변경 시 중복 검사 (trim, 공백 검사 및 본인 제외 검증)
         if (request.nickname() != null) {
             String trimmedNickname = request.nickname().trim();
-            if (!trimmedNickname.equalsIgnoreCase(profile.getNickname())) {
+            if (trimmedNickname.isEmpty()) {
+                throw new ProfileException(ProfileErrorCode.NO_FIELDS_TO_UPDATE);
+            }
+            if (!trimmedNickname.equals(profile.getNickname())) {
                 if (profileRepository.existsByNicknameAndProfileIdNot(trimmedNickname, profileId)) {
                     throw new ProfileException(ProfileErrorCode.DUPLICATE_NICKNAME);
                 }
@@ -405,8 +408,7 @@ public class ProfileService {
 
     public CertificationSearchResponse searchCertifications(String keyword, String categoryStr, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
-        CertificationCategory category =
-                (categoryStr != null && !categoryStr.trim().isEmpty()) ? CertificationCategory.from(categoryStr) : null;
+        CertificationCategory category = parseAndValidateCategory(categoryStr);
         String searchKeyword = (keyword != null && !keyword.trim().isEmpty())
                 ? "%" + keyword.trim().toLowerCase() + "%"
                 : null;
@@ -457,8 +459,7 @@ public class ProfileService {
     public ProfileCertificationListResponse getProfileCertifications(
             Long profileId, String categoryStr, int page, int size, String sort, Member member) {
         Profile profile = getProfileAndValidateOwner(profileId, member);
-        CertificationCategory category =
-                (categoryStr != null && !categoryStr.trim().isEmpty()) ? CertificationCategory.from(categoryStr) : null;
+        CertificationCategory category = parseAndValidateCategory(categoryStr);
 
         Sort dbSort = Sort.by(Sort.Direction.DESC, "acquiredAt").and(Sort.by(Sort.Direction.DESC, "createdAt"));
         if ("oldest".equalsIgnoreCase(sort)) {
@@ -555,6 +556,17 @@ public class ProfileService {
             throw new ProfileException(ProfileErrorCode.PROJECT_NOT_FOUND);
         }
         return project;
+    }
+
+    private CertificationCategory parseAndValidateCategory(String categoryStr) {
+        if (categoryStr == null || categoryStr.trim().isEmpty()) {
+            return null;
+        }
+        CertificationCategory category = CertificationCategory.from(categoryStr);
+        if (category == null) {
+            throw new ProfileException(ProfileErrorCode.UNSUPPORTED_CERTIFICATION_CATEGORY);
+        }
+        return category;
     }
 
     private Award getAwardAndValidateRelation(Long profileId, Long awardId) {

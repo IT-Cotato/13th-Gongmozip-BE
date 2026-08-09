@@ -650,6 +650,7 @@ class ProfileServiceTest {
 
         // then
         assertThat(profile.getNickname()).isEqualTo("새로운닉네임");
+        then(profileRepository).should().existsByNicknameAndProfileIdNot("새로운닉네임", 10L);
     }
 
     @DisplayName("자격증 직접 입력 시 명칭이 공백이면 예외가 발생한다.")
