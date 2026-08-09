@@ -78,6 +78,22 @@ public class MatchingTimePolicy {
         return isResultPublished(date, now) ? date.plusDays(1) : date;
     }
 
+    /**
+     * 신청 가능 여부와 대상일을 하나의 시각으로 함께 판정한다. 열림 검사와 대상일 계산 사이에 14시를
+     * 넘기면 배치가 지나간 당일 신청이 저장될 수 있으므로 매칭 진행 구간이면 마감 예외를 던진다.
+     */
+    public LocalDate resolveApplicationDate() {
+        LocalDateTime now = now();
+        LocalDate date = now.toLocalDate();
+        if (now.isBefore(applicationDeadline(date))) {
+            return date;
+        }
+        if (isResultPublished(date, now)) {
+            return date.plusDays(1);
+        }
+        throw new MatchingException(MatchingErrorCode.APPLICATION_DEADLINE_PASSED);
+    }
+
     // 하나의 철회 요청을 신청일 14시 전 FREE_CANCEL, 14시 이후 PENALIZED_PASS로 구분한다
     public WithdrawalType resolveWithdrawalType(LocalDate applicationDate) {
         if (applicationDate == null) {

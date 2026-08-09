@@ -154,8 +154,9 @@ public class MatchingApplicationService {
 
         // 비관적 락 적용
         Member member = getMemberWithLock(memberId);
-        // 16시 이후에는 다음 날 매칭에 신청된다
-        LocalDate applicationDate = matchingTimePolicy.currentApplicationDate();
+        // 락 대기 중 14시를 넘길 수 있으므로 락 획득 후 같은 시각으로 마감 여부와 대상일을 함께 판정한다.
+        // 16시 이후에는 다음 날 매칭에 신청된다.
+        LocalDate applicationDate = matchingTimePolicy.resolveApplicationDate();
         LocalDateTime now = matchingTimePolicy.now();
         if (member.isMatchingBlockedAt(now)) {
             throw new MatchingException(MatchingErrorCode.MATCHING_RESTRICTED);

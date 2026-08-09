@@ -251,7 +251,7 @@ class MatchingApplicationServiceTest {
                 new ApplyRequest(profile.getProfileId(), InterestCategory.IT_AI_TECH, LeaderPreference.WANTS, true);
 
         given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
-        given(matchingTimePolicy.currentApplicationDate()).willReturn(TODAY);
+        given(matchingTimePolicy.resolveApplicationDate()).willReturn(TODAY);
         given(matchingTimePolicy.now()).willReturn(NOW);
         given(matchingTimePolicy.applicationDeadline(TODAY)).willReturn(TODAY.atTime(14, 0));
         given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
@@ -300,7 +300,7 @@ class MatchingApplicationServiceTest {
                 new ApplyRequest(profile.getProfileId(), InterestCategory.IT_AI_TECH, LeaderPreference.WANTS, true);
 
         given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
-        given(matchingTimePolicy.currentApplicationDate()).willReturn(TOMORROW);
+        given(matchingTimePolicy.resolveApplicationDate()).willReturn(TOMORROW);
         given(matchingTimePolicy.now()).willReturn(NOW.withHour(17));
         given(matchingTimePolicy.applicationDeadline(TOMORROW)).willReturn(TOMORROW.atTime(14, 0));
         given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
@@ -327,13 +327,30 @@ class MatchingApplicationServiceTest {
         assertThat(response.applicationDeadlineAt()).isEqualTo(TOMORROW.atTime(14, 0));
     }
 
+    @DisplayName("락 대기 중 14시를 넘기면 락 획득 후 마감 판정으로 신청을 거절한다.")
+    @Test
+    void applyRejectsWhenDeadlinePassesWhileWaitingForLock() {
+        Member member = Member.builder().memberId(1L).build();
+        ApplyRequest request = new ApplyRequest(10L, InterestCategory.IT_AI_TECH, LeaderPreference.NEUTRAL, true);
+        // 13:59:59에 사전 검사를 통과했지만 락 대기 중 14시를 넘긴 상황을 재현한다
+        given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
+        given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
+        given(matchingTimePolicy.resolveApplicationDate())
+                .willThrow(new MatchingException(MatchingErrorCode.APPLICATION_DEADLINE_PASSED));
+
+        assertThatThrownBy(() -> matchingApplicationService.apply(member.getMemberId(), request))
+                .isInstanceOf(MatchingException.class)
+                .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.APPLICATION_DEADLINE_PASSED);
+        verify(matchingApplicationRepository, never()).save(any(MatchingApplication.class));
+    }
+
     @DisplayName("같은 날 취소 이력이 있어도 다시 신청할 수 없다.")
     @Test
     void duplicateApplicationIsRejected() {
         Member member = Member.builder().memberId(1L).build();
         ApplyRequest request = new ApplyRequest(10L, InterestCategory.IT_AI_TECH, LeaderPreference.NEUTRAL, true);
         given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
-        given(matchingTimePolicy.currentApplicationDate()).willReturn(TODAY);
+        given(matchingTimePolicy.resolveApplicationDate()).willReturn(TODAY);
         given(matchingTimePolicy.now()).willReturn(NOW);
         given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
         given(matchingApplicationRepository.existsByMemberAndApplicationDate(member, TODAY))
@@ -350,7 +367,7 @@ class MatchingApplicationServiceTest {
         Member member = Member.builder().memberId(1L).build();
         ApplyRequest request = new ApplyRequest(10L, InterestCategory.IT_AI_TECH, LeaderPreference.NEUTRAL, true);
         given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
-        given(matchingTimePolicy.currentApplicationDate()).willReturn(TODAY);
+        given(matchingTimePolicy.resolveApplicationDate()).willReturn(TODAY);
         given(matchingTimePolicy.now()).willReturn(NOW);
         given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
         given(matchingGroupMemberRepository.existsOpenResponseForMember(any(), any(), any()))
@@ -368,7 +385,7 @@ class MatchingApplicationServiceTest {
         Member member = Member.builder().memberId(1L).build();
         ApplyRequest request = new ApplyRequest(10L, InterestCategory.IT_AI_TECH, LeaderPreference.NEUTRAL, true);
         given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
-        given(matchingTimePolicy.currentApplicationDate()).willReturn(TODAY);
+        given(matchingTimePolicy.resolveApplicationDate()).willReturn(TODAY);
         given(matchingTimePolicy.now()).willReturn(NOW);
         given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
         given(matchingApplicationRepository.existsByMemberAndApplicationDate(member, TODAY))
@@ -390,7 +407,7 @@ class MatchingApplicationServiceTest {
         ApplyRequest request = new ApplyRequest(10L, InterestCategory.IT_AI_TECH, LeaderPreference.NEUTRAL, true);
         given(matchingTimePolicy.isApplicationOpen()).willReturn(true);
         given(memberRepository.findByIdWithLock(member.getMemberId())).willReturn(Optional.of(member));
-        given(matchingTimePolicy.currentApplicationDate()).willReturn(TODAY);
+        given(matchingTimePolicy.resolveApplicationDate()).willReturn(TODAY);
         given(matchingTimePolicy.now()).willReturn(NOW);
 
         assertThatThrownBy(() -> matchingApplicationService.apply(member.getMemberId(), request))

@@ -64,6 +64,32 @@ class MatchingTimePolicyTest {
         assertThat(policy.currentApplicationDate()).isEqualTo(APPLICATION_DATE);
     }
 
+    @DisplayName("단일 시각 판정은 14시 전이면 오늘을 신청 대상일로 반환한다.")
+    @Test
+    void 단일_시각_판정은_마감_전이면_오늘을_반환한다() {
+        MatchingTimePolicy policy = policyAt("2026-07-31T04:59:59Z");
+
+        assertThat(policy.resolveApplicationDate()).isEqualTo(APPLICATION_DATE);
+    }
+
+    @DisplayName("단일 시각 판정은 매칭 진행 구간(14~16시)이면 마감 예외를 던진다.")
+    @Test
+    void 단일_시각_판정은_매칭_진행_구간이면_마감_예외다() {
+        MatchingTimePolicy policy = policyAt("2026-07-31T05:00:00Z");
+
+        assertThatThrownBy(policy::resolveApplicationDate)
+                .isInstanceOf(MatchingException.class)
+                .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.APPLICATION_DEADLINE_PASSED);
+    }
+
+    @DisplayName("단일 시각 판정은 16시 결과 공개부터 다음 날을 신청 대상일로 반환한다.")
+    @Test
+    void 단일_시각_판정은_결과_공개_후_다음_날을_반환한다() {
+        MatchingTimePolicy policy = policyAt("2026-07-31T07:00:00Z");
+
+        assertThat(policy.resolveApplicationDate()).isEqualTo(APPLICATION_DATE.plusDays(1));
+    }
+
     @DisplayName("16시 이후 접수된 익일 신청은 신청일 전날에도 무료 취소로 판정한다.")
     @Test
     void 익일_신청은_전날에도_무료_취소다() {
