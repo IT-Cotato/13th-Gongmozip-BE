@@ -97,6 +97,17 @@ jobs:
           ssh -i ~/.ssh/ec2_key "$EC2_USERNAME@$EC2_HOST" \
             "cd ~/gongmozip && DOCKERHUB_USERNAME='$DOCKERHUB_USERNAME' IMAGE_TAG='$IMAGE_TAG' docker compose -f docker-compose.prod.yml pull && DOCKERHUB_USERNAME='$DOCKERHUB_USERNAME' IMAGE_TAG='$IMAGE_TAG' docker compose -f docker-compose.prod.yml up -d --remove-orphans"
 
+      # nginx/default.conf는 bind mount(:ro)라 내용만 바뀌면 compose가 변경으로 인식하지 못해
+      # `up -d`만으로는 재시작되지 않는다 - 매 배포마다 무조건 재시작해 최신 설정을 반영한다
+      # (이슈 #122: PR #121의 WebSocket Upgrade 헤더 설정이 배포됐는데도 반영 안 됐던 문제).
+      - name: Restart nginx to pick up latest config
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+        run: |
+          ssh -i ~/.ssh/ec2_key "$EC2_USERNAME@$EC2_HOST" \
+            "cd ~/gongmozip && docker compose -f docker-compose.prod.yml restart nginx"
+
       - name: Verify server and Swagger
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
