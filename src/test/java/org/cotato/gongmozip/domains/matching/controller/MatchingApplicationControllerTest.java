@@ -17,6 +17,7 @@ import java.util.List;
 import org.cotato.gongmozip.domains.matching.dto.request.MatchingApplicationRequest.ApplyRequest;
 import org.cotato.gongmozip.domains.matching.dto.response.MatchingApplicationResponse.ApplicationResponse;
 import org.cotato.gongmozip.domains.matching.dto.response.MatchingApplicationResponse.EligibilityResponse;
+import org.cotato.gongmozip.domains.matching.dto.response.MatchingApplicationResponse.ParticipantCountResponse;
 import org.cotato.gongmozip.domains.matching.dto.response.MatchingApplicationResponse.TodayApplicationResponse;
 import org.cotato.gongmozip.domains.matching.dto.response.MatchingApplicationResponse.WithdrawalResponse;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
@@ -61,6 +62,31 @@ class MatchingApplicationControllerTest {
     private final Member member =
             Member.builder().memberId(1L).email("member@example.com").build();
     private final CustomUserDetails userDetails = new CustomUserDetails(member);
+
+    @DisplayName("인증된 회원은 현재 매칭 신청 인원과 카운트다운 기준 시각을 조회한다.")
+    @Test
+    void getParticipantCount() throws Exception {
+        given(matchingApplicationService.getParticipantCount())
+                .willReturn(new ParticipantCountResponse(
+                        42,
+                        APPLICATION_DATE.atTime(14, 0),
+                        APPLICATION_DATE.atTime(16, 0),
+                        APPLICATION_DATE.atTime(13, 0)));
+
+        mockMvc.perform(get("/api/matching/applications/participant-count").with(user(userDetails)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("MATCHING_200_10"))
+                .andExpect(jsonPath("$.data.participantCount").value(42))
+                .andExpect(jsonPath("$.data.applicationDeadlineAt").value("2026-07-31T14:00:00"))
+                .andExpect(jsonPath("$.data.resultPublishAt").value("2026-07-31T16:00:00"))
+                .andExpect(jsonPath("$.data.serverTime").value("2026-07-31T13:00:00"));
+    }
+
+    @DisplayName("비인증 사용자는 현재 매칭 신청 인원을 조회할 수 없다.")
+    @Test
+    void getParticipantCountRejectsUnauthenticatedUser() throws Exception {
+        mockMvc.perform(get("/api/matching/applications/participant-count")).andExpect(status().isUnauthorized());
+    }
 
     @DisplayName("인증된 회원은 매칭 신청 자격과 오늘의 참여 인원을 조회한다.")
     @Test
