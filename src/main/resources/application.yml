@@ -78,6 +78,10 @@ spring:
           timeout: 5000
           writetimeout: 5000
 
+# Nginx 리버스 프록시의 X-Forwarded-* 헤더를 반영
+server:
+  forward-headers-strategy: framework
+
 # 6. JWT 설정
 jwt:
   secret: ${JWT_SECRET}
