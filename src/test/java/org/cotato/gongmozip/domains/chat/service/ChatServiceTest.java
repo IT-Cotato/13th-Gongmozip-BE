@@ -153,6 +153,8 @@ class ChatServiceTest {
         ReflectionTestUtils.setField(
                 chatbotMessage, "createdAt", java.time.LocalDateTime.now().minusMinutes(1));
         ReflectionTestUtils.setField(memberMessage, "createdAt", java.time.LocalDateTime.now());
+        ReflectionTestUtils.setField(chatbotMessage, "messageId", 1L);
+        ReflectionTestUtils.setField(memberMessage, "messageId", 2L);
         MemberAvatarResponse otherAvatar =
                 new MemberAvatarResponse(2L, CharacterType.TRACK_RUNNER, CharacterPalette.DEFAULT, null, null);
 
@@ -202,6 +204,7 @@ class ChatServiceTest {
                     .build();
             ReflectionTestUtils.setField(
                     message, "createdAt", LocalDateTime.now().minusMinutes(i));
+            ReflectionTestUtils.setField(message, "messageId", 51L - i);
             latestFirstOverPageSize.add(message);
         }
 

@@ -68,14 +68,16 @@ public final class ChatConverter {
                 unreadCount);
     }
 
-    // 리포지토리는 최신순(DESC)으로 조회하므로 화면 표시 순서(오래된 순)로 뒤집는다.
+    // 리포지토리는 messageId 내림차순으로 조회하므로 화면 표시 순서(오래된 순)로 뒤집는다.
+    // 정렬 기준을 리포지토리 쿼리(findByTeamIdBeforeCursor)와 동일하게 messageId로 맞춰야
+    // cursor 페이지 경계에서 순서가 어긋나지 않는다.
     public static MessageListResponse toMessageListResponse(
             List<Message> latestFirstMessages,
             Map<Long, MemberAvatarResponse> avatarsByMemberId,
             List<TeamMember> activeMembers,
             boolean hasNext) {
         List<MessageItemResponse> chronological = latestFirstMessages.stream()
-                .sorted(Comparator.comparing(Message::getCreatedAt))
+                .sorted(Comparator.comparing(Message::getMessageId))
                 .map(message -> {
                     TeamMember sender = message.getSenderTeamMember();
                     MemberAvatarResponse avatar = sender != null
