@@ -64,6 +64,17 @@ class MatchingTimePolicyTest {
         assertThat(policy.currentApplicationDate()).isEqualTo(APPLICATION_DATE);
     }
 
+    @DisplayName("시각 스냅샷 판정은 16시 정각을 경계로 오늘과 다음 날을 나눈다.")
+    @Test
+    void 시각_스냅샷_판정은_결과_공개_경계에서_일관된다() {
+        MatchingTimePolicy policy = policyAt("2026-07-31T00:00:00Z");
+
+        assertThat(policy.currentApplicationDate(APPLICATION_DATE.atTime(15, 59, 59)))
+                .isEqualTo(APPLICATION_DATE);
+        assertThat(policy.currentApplicationDate(APPLICATION_DATE.atTime(16, 0)))
+                .isEqualTo(APPLICATION_DATE.plusDays(1));
+    }
+
     @DisplayName("단일 시각 판정은 14시 전이면 오늘을 신청 대상일로 반환한다.")
     @Test
     void 단일_시각_판정은_마감_전이면_오늘을_반환한다() {
