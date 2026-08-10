@@ -24,11 +24,15 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
             throws IOException {
         log.warn("[AuthenticationEntryPoint] 인증 실패: {}", authException.getMessage());
 
+        boolean tokenExpired =
+                Boolean.TRUE.equals(request.getAttribute(JwtAuthenticationFilter.TOKEN_EXPIRED_ATTRIBUTE));
+        AuthErrorCode errorCode = tokenExpired ? AuthErrorCode.TOKEN_EXPIRED : AuthErrorCode.UNAUTHORIZED;
+
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED); // 401 상태코드 설정
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
 
-        BaseResponse<Void> errorResponse = BaseResponse.error(AuthErrorCode.UNAUTHORIZED);
+        BaseResponse<Void> errorResponse = BaseResponse.error(errorCode);
         response.getWriter().write(objectMapper.writeValueAsString(errorResponse));
     }
 }

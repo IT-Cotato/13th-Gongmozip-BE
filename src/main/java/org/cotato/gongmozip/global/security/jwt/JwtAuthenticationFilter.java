@@ -1,5 +1,7 @@
 package org.cotato.gongmozip.global.security.jwt;
 
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,6 +25,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    public static final String TOKEN_EXPIRED_ATTRIBUTE = "tokenExpired";
+
     private static final String AUTHORIZATION_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String BLACKLIST_PREFIX = "blacklist:";
@@ -37,15 +41,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = extractToken(request);
 
-        if (StringUtils.hasText(token) && jwtProvider.validateToken(token) && !isBlacklisted(token)) {
-            String email = jwtProvider.getEmail(token);
-            UserDetails userDetails = customUserDetailsService.loadUserByUsername(email);
+        if (StringUtils.hasText(token)) {
+            try {
+                String email = jwtProvider.getEmail(token);
 
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                if (!isBlacklisted(token)) {
+                    UserDetails userDetails = customUserDetailsService.loadUserByUsername(email);
 
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
+            } catch (ExpiredJwtException e) {
+                request.setAttribute(TOKEN_EXPIRED_ATTRIBUTE, true);
+            } catch (JwtException | IllegalArgumentException e) {
+                // 위조/무효 토큰은 인증 없이 통과시켜 EntryPoint에서 UNAUTHORIZED 처리
+            }
         }
 
         filterChain.doFilter(request, response);
