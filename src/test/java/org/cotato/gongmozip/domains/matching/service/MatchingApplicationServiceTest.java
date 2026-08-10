@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import org.cotato.gongmozip.domains.collaboration.enums.CollaborationPointReason;
@@ -113,6 +114,66 @@ class MatchingApplicationServiceTest {
                 projectScoreProvider,
                 new SkillScoreCalculator(),
                 matchingTimePolicy);
+    }
+
+    @DisplayName("결과 공개 전에는 오늘 매칭풀의 신청 수와 오늘 기준 카운트다운 시각을 반환한다.")
+    @Test
+    void getParticipantCountReturnsTodayPoolCountBeforeResultPublish() {
+        given(matchingTimePolicy.now()).willReturn(NOW);
+        given(matchingTimePolicy.currentApplicationDate(NOW)).willReturn(TODAY);
+        given(matchingApplicationRepository.countByApplicationDateAndStatusIn(
+                        TODAY, EnumSet.of(MatchingApplicationStatus.WAITING, MatchingApplicationStatus.MATCHING)))
+                .willReturn(42L);
+        given(matchingTimePolicy.applicationDeadline(TODAY)).willReturn(TODAY.atTime(14, 0));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(TODAY.atTime(16, 0));
+
+        var response = matchingApplicationService.getParticipantCount();
+
+        assertThat(response.participantCount()).isEqualTo(42);
+        assertThat(response.applicationDeadlineAt()).isEqualTo(TODAY.atTime(14, 0));
+        assertThat(response.resultPublishAt()).isEqualTo(TODAY.atTime(16, 0));
+        assertThat(response.serverTime()).isEqualTo(NOW);
+    }
+
+    @DisplayName("결과 공개 이후에는 다음 날 매칭풀 기준으로 집계하고 다음 날 시각을 반환하며 신청이 없으면 0명이다.")
+    @Test
+    void getParticipantCountCountsNextDayPoolAfterResultPublish() {
+        LocalDateTime afterPublish = TODAY.atTime(17, 0);
+        given(matchingTimePolicy.now()).willReturn(afterPublish);
+        given(matchingTimePolicy.currentApplicationDate(afterPublish)).willReturn(TOMORROW);
+        given(matchingApplicationRepository.countByApplicationDateAndStatusIn(
+                        TOMORROW, EnumSet.of(MatchingApplicationStatus.WAITING, MatchingApplicationStatus.MATCHING)))
+                .willReturn(0L);
+        given(matchingTimePolicy.applicationDeadline(TOMORROW)).willReturn(TOMORROW.atTime(14, 0));
+        given(matchingTimePolicy.resultPublishAt(TOMORROW)).willReturn(TOMORROW.atTime(16, 0));
+
+        var response = matchingApplicationService.getParticipantCount();
+
+        assertThat(response.participantCount()).isZero();
+        assertThat(response.applicationDeadlineAt()).isEqualTo(TOMORROW.atTime(14, 0));
+        assertThat(response.resultPublishAt()).isEqualTo(TOMORROW.atTime(16, 0));
+        assertThat(response.serverTime()).isEqualTo(afterPublish);
+    }
+
+    @DisplayName("16시 경계에서 시계를 한 번만 읽어 대상일과 serverTime이 어긋나지 않는다.")
+    @Test
+    void getParticipantCountReadsClockOnceAtPublishBoundary() {
+        LocalDateTime justBeforePublish = TODAY.atTime(15, 59, 59);
+        LocalDateTime justAfterPublish = TODAY.atTime(16, 0);
+        // 첫 호출 직후 16시를 넘긴 상황 — 두 번 읽으면 대상일은 오늘, serverTime은 16시 이후로 어긋난다
+        given(matchingTimePolicy.now()).willReturn(justBeforePublish, justAfterPublish);
+        given(matchingTimePolicy.currentApplicationDate(justBeforePublish)).willReturn(TODAY);
+        given(matchingApplicationRepository.countByApplicationDateAndStatusIn(
+                        TODAY, EnumSet.of(MatchingApplicationStatus.WAITING, MatchingApplicationStatus.MATCHING)))
+                .willReturn(7L);
+        given(matchingTimePolicy.applicationDeadline(TODAY)).willReturn(TODAY.atTime(14, 0));
+        given(matchingTimePolicy.resultPublishAt(TODAY)).willReturn(TODAY.atTime(16, 0));
+
+        var response = matchingApplicationService.getParticipantCount();
+
+        verify(matchingTimePolicy).now();
+        assertThat(response.serverTime()).isEqualTo(justBeforePublish);
+        assertThat(response.serverTime()).isBefore(response.resultPublishAt());
     }
 
     @DisplayName("신청할 수 없는 모든 사유를 누락 없이 함께 반환한다.")

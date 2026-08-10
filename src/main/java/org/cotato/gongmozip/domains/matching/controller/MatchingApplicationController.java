@@ -36,6 +36,28 @@ public class MatchingApplicationController {
     private final MatchingWithdrawalService matchingWithdrawalService;
 
     @Operation(
+            summary = "현재 매칭 신청 인원 조회",
+            description =
+                    """
+                    홈 화면의 "지금 000명이 함께할 팀을 찾고 있어요!"에 표시할 현재 매칭 신청 인원을 조회합니다.
+
+                    대상 신청일 매칭풀에서 대기(`WAITING`) 또는 매칭 계산 중(`MATCHING`)인 신청 수를 반환합니다.
+                    - 16시 결과 공개 전: 오늘 매칭풀의 신청 수
+                    - 16시 결과 공개 이후: 다음 날 매칭풀에 미리 신청한 수
+
+                    카운트다운 표시를 위한 기준 시각을 함께 반환합니다.
+                    - `applicationDeadlineAt`: 대상 신청일의 신청 마감 시각(14시). 14~16시 매칭 진행 구간에는 이미 지난 시각이므로 카운트다운을 표시하지 않습니다.
+                    - `resultPublishAt`: 대상 신청일의 매칭 결과 공개 시각(16시)
+                    - `serverTime`: 서버 현재 시각. 클라이언트는 기기 시계 대신 `serverTime`과의 차이로 남은 시간을 계산해야 합니다.
+                    """)
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = MatchingErrorCode.class)
+    @GetMapping("/participant-count")
+    public ResponseEntity<BaseResponse<ParticipantCountResponse>> getParticipantCount() {
+        ParticipantCountResponse response = matchingApplicationService.getParticipantCount();
+        return BaseResponseFormatter.success(MatchingSuccessCode.PARTICIPANT_COUNT_RETRIEVED, response);
+    }
+
+    @Operation(
             summary = "매칭 신청 자격 및 오늘 참여 현황 조회",
             description =
                     """

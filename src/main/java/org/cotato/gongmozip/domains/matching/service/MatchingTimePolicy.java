@@ -73,7 +73,11 @@ public class MatchingTimePolicy {
 
     /** 현재 시각의 신청 대상일. 결과 공개(16시) 전에는 오늘, 공개 이후에는 다음 날 매칭에 신청한다. */
     public LocalDate currentApplicationDate() {
-        LocalDateTime now = now();
+        return currentApplicationDate(now());
+    }
+
+    /** 호출 사이에 16시를 넘겨 대상일과 응답 시각이 어긋나지 않도록 동일한 시각 스냅샷으로 판정한다. */
+    public LocalDate currentApplicationDate(LocalDateTime now) {
         LocalDate date = now.toLocalDate();
         return isResultPublished(date, now) ? date.plusDays(1) : date;
     }

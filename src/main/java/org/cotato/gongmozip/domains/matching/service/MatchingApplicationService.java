@@ -67,6 +67,20 @@ public class MatchingApplicationService {
     private final SkillScoreCalculator skillScoreCalculator;
     private final MatchingTimePolicy matchingTimePolicy;
 
+    // 현재 매칭 신청 인원 조회 — 대상 신청일 매칭풀의 WAITING/MATCHING 신청 수
+    public ParticipantCountResponse getParticipantCount() {
+        // 판정과 응답 사이에 16시를 넘겨도 대상일과 serverTime이 어긋나지 않도록 시각을 한 번만 읽는다
+        LocalDateTime now = matchingTimePolicy.now();
+        LocalDate applicationDate = matchingTimePolicy.currentApplicationDate(now);
+        long participantCount = matchingApplicationRepository.countByApplicationDateAndStatusIn(
+                applicationDate, PARTICIPATING_STATUSES);
+        return new ParticipantCountResponse(
+                participantCount,
+                matchingTimePolicy.applicationDeadline(applicationDate),
+                matchingTimePolicy.resultPublishAt(applicationDate),
+                now);
+    }
+
     // 신청 자격 조회 — 매칭 신청 조건 검사
     public EligibilityResponse getEligibility(Long memberId) {
         Member member = getMember(memberId);
