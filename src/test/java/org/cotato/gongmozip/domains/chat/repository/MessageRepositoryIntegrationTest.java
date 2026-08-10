@@ -49,12 +49,64 @@ class MessageRepositoryIntegrationTest {
 
         // when
         List<Message> latestFirst =
-                messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(team.getTeamId(), PageRequest.of(0, 10));
+                messageRepository.findByTeamIdBeforeCursor(team.getTeamId(), null, PageRequest.of(0, 10));
 
         // then
         assertThat(latestFirst)
                 .extracting(Message::getMessageId)
                 .containsExactly(third.getMessageId(), second.getMessageId(), first.getMessageId());
+    }
+
+    @DisplayName("cursor를 넘기면 그 messageId보다 오래된 메시지만 최신순으로 반환한다.")
+    @Test
+    void cursor를_넘기면_그_messageId보다_오래된_메시지만_반환한다() {
+        // given
+        Team team = teamRepository.save(team());
+        LocalDateTime now = LocalDateTime.now();
+        Message first = saveMessageAt(team, "1번째", now.minusMinutes(3));
+        Message second = saveMessageAt(team, "2번째", now.minusMinutes(2));
+        Message third = saveMessageAt(team, "3번째", now.minusMinutes(1));
+
+        // when
+        List<Message> beforeThird = messageRepository.findByTeamIdBeforeCursor(
+                team.getTeamId(), third.getMessageId(), PageRequest.of(0, 10));
+
+        // then
+        assertThat(beforeThird)
+                .extracting(Message::getMessageId)
+                .containsExactly(second.getMessageId(), first.getMessageId());
+    }
+
+    @DisplayName(
+            "동시 저장으로 messageId 순서와 createdAt 순서가 어긋나도, 정렬과 cursor 필터 모두 messageId 기준이라 페이지 경계에서 메시지가 중복되거나 누락되지 않는다.")
+    @Test
+    void messageId와_createdAt_순서가_어긋나도_cursor_페이지네이션이_중복이나_누락_없이_이어진다() {
+        // given: messageId(삽입 순서) 오름차순과 createdAt 오름차순이 정반대가 되도록 백데이트한다 —
+        // 동시에 여러 메시지가 저장될 때 앱에서 찍는 createdAt과 DB IDENTITY 채번 순서가 어긋날 수
+        // 있는 상황을 재현한다.
+        Team team = teamRepository.save(team());
+        LocalDateTime now = LocalDateTime.now();
+        Message oldestByMessageIdButNewestByCreatedAt = saveMessageAt(team, "1번째 삽입", now);
+        Message middle = saveMessageAt(team, "2번째 삽입", now.minusMinutes(1));
+        Message newestByMessageIdButOldestByCreatedAt = saveMessageAt(team, "3번째 삽입", now.minusMinutes(2));
+
+        // when: 페이지 크기 1로 첫 페이지를 조회하고, 받은 것 중 가장 오래된(messageId가 가장 작은)
+        // 메시지의 messageId를 cursor로 다음 페이지를 이어서 조회한다.
+        List<Message> firstPage =
+                messageRepository.findByTeamIdBeforeCursor(team.getTeamId(), null, PageRequest.of(0, 1));
+        List<Message> secondPage = messageRepository.findByTeamIdBeforeCursor(
+                team.getTeamId(), firstPage.get(0).getMessageId(), PageRequest.of(0, 1));
+        List<Message> thirdPage = messageRepository.findByTeamIdBeforeCursor(
+                team.getTeamId(), secondPage.get(0).getMessageId(), PageRequest.of(0, 1));
+
+        // then: createdAt 순서와 무관하게 messageId 내림차순으로만 페이지가 이어지고, 중복/누락이 없다.
+        assertThat(firstPage)
+                .extracting(Message::getMessageId)
+                .containsExactly(newestByMessageIdButOldestByCreatedAt.getMessageId());
+        assertThat(secondPage).extracting(Message::getMessageId).containsExactly(middle.getMessageId());
+        assertThat(thirdPage)
+                .extracting(Message::getMessageId)
+                .containsExactly(oldestByMessageIdButNewestByCreatedAt.getMessageId());
     }
 
     @DisplayName("여러 팀에 걸친 메시지 중 각 팀의 가장 최근 메시지만 하나씩 반환한다.")

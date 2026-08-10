@@ -13,8 +13,13 @@ import org.springframework.data.repository.query.Param;
 public interface MessageRepository extends JpaRepository<Message, Long> {
 
     // 발신자 팀원의 profile/member까지 fetch join한다 — 안 그러면 메시지마다(닉네임, 아바타 조회용
-    // memberId 각각) lazy load가 발생한다. createdAt이 같은 메시지가 여러 개면 순서가 흔들릴 수
-    // 있어 messageId를 2차 정렬 기준으로 추가해 결과를 항상 결정적으로 만든다.
+    // memberId 각각) lazy load가 발생한다.
+    //
+    // cursor는 "이전 메시지 더보기" 커서이자 정렬 기준이다 — null이면 최신 페이지를, 값이 있으면
+    // 그보다 messageId가 작은(=더 오래된) 메시지를 조회한다. createdAt을 정렬에 섞으면 동시
+    // 저장 시 messageId(삽입 순서)와 createdAt(애플리케이션에서 찍는 타임스탬프) 순서가 어긋날 수
+    // 있어, cursor 필터와 정렬 모두 messageId 단일 기준으로 통일해 페이지 경계에서 메시지가
+    // 중복되거나 누락되지 않도록 한다(CodeRabbit 리뷰, PR #116).
     @Query(
             """
             SELECT m FROM Message m
@@ -22,9 +27,11 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             LEFT JOIN FETCH stm.profile
             LEFT JOIN FETCH stm.member
             WHERE m.team.teamId = :teamId
-            ORDER BY m.createdAt DESC, m.messageId DESC
+            AND (:cursor IS NULL OR m.messageId < :cursor)
+            ORDER BY m.messageId DESC
             """)
-    List<Message> findByTeam_TeamIdOrderByCreatedAtDesc(@Param("teamId") Long teamId, Pageable pageable);
+    List<Message> findByTeamIdBeforeCursor(
+            @Param("teamId") Long teamId, @Param("cursor") Long cursor, Pageable pageable);
 
     Optional<Message> findFirstByTeam_TeamIdOrderByCreatedAtDesc(Long teamId);
 

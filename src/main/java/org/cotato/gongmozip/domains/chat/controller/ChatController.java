@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -33,12 +34,17 @@ public class ChatController {
 
     private final ChatService chatService;
 
-    @Operation(summary = "메시지 목록 조회")
+    @Operation(
+            summary = "메시지 목록 조회",
+            description = "최신 메시지부터 페이지 단위로 조회한다. cursor를 생략하면 최신 페이지를, "
+                    + "직전 응답에서 받은 가장 오래된 메시지의 messageId를 cursor로 넘기면 그 이전 메시지를 이어서 조회한다.")
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = TeamErrorCode.class)
     @GetMapping("/messages")
     public ResponseEntity<BaseResponse<MessageListResponse>> getMessages(
-            @PathVariable("teamId") Long teamId, @AuthenticationPrincipal CustomUserDetails userDetails) {
-        MessageListResponse response = chatService.getMessages(teamId, userDetails.getMemberId());
+            @PathVariable("teamId") Long teamId,
+            @RequestParam(name = "cursor", required = false) Long cursor,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        MessageListResponse response = chatService.getMessages(teamId, userDetails.getMemberId(), cursor);
         return BaseResponseFormatter.success(ChatSuccessCode.MESSAGE_LIST_RETRIEVED, response);
     }
 

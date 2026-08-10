@@ -56,12 +56,20 @@ public class ChatService {
         return broadcast(teamId, saved);
     }
 
-    public MessageListResponse getMessages(Long teamId, Long requesterMemberId) {
+    /**
+     * cursor가 null이면 최신 {@value #DEFAULT_MESSAGE_PAGE_SIZE}건을, cursor가 있으면(직전 응답의
+     * 가장 오래된 메시지 messageId) 그보다 더 오래된 메시지를 이어서 조회한다. 다음 페이지 존재
+     * 여부를 별도 COUNT 쿼리 없이 판단하려고 페이지 크기보다 1건 더 조회해 잘라낸다.
+     */
+    public MessageListResponse getMessages(Long teamId, Long requesterMemberId, Long cursor) {
         teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
         requireActiveMember(teamId, requesterMemberId);
 
-        List<Message> latestFirst = messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(
-                teamId, PageRequest.of(0, DEFAULT_MESSAGE_PAGE_SIZE));
+        List<Message> fetched = messageRepository.findByTeamIdBeforeCursor(
+                teamId, cursor, PageRequest.of(0, DEFAULT_MESSAGE_PAGE_SIZE + 1));
+        boolean hasNext = fetched.size() > DEFAULT_MESSAGE_PAGE_SIZE;
+        List<Message> latestFirst = hasNext ? fetched.subList(0, DEFAULT_MESSAGE_PAGE_SIZE) : fetched;
+
         List<Member> senders = latestFirst.stream()
                 .map(Message::getSenderTeamMember)
                 .filter(Objects::nonNull)
@@ -71,7 +79,7 @@ public class ChatService {
         Map<Long, MemberAvatarResponse> avatarsByMemberId = characterService.findAvatarsByMembers(senders);
         List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
 
-        return ChatConverter.toMessageListResponse(latestFirst, avatarsByMemberId, activeMembers);
+        return ChatConverter.toMessageListResponse(latestFirst, avatarsByMemberId, activeMembers, hasNext);
     }
 
     /**
@@ -80,10 +88,13 @@ public class ChatService {
      * 봤던 기존 결정(docs/decisions/03-chat.md)과 달리, 메시지별 안읽음 수는 화면에 이미 떠있는
      * 숫자를 살아있는 값으로 유지해야 해서 이번엔 브로드캐스트를 붙인다.
      *
-     * <p>영향받는 메시지는 {@code getMessages}와 동일하게 최신 {@value #DEFAULT_MESSAGE_PAGE_SIZE}건
-     * 안에서만 찾는다 — 화면에 그 이상 과거 메시지는 애초에 렌더링되지 않으므로, 무제한으로 조회해
-     * 갱신을 보내는 건 낭비다(팀원이 아주 오래 안 읽었을 때 메시지 수만큼 로드/브로드캐스트가
-     * 커지는 문제도 함께 막는다).
+     * <p>영향받는 메시지는 최신 {@value #DEFAULT_MESSAGE_PAGE_SIZE}건으로 캡을 둔다 — cursor
+     * 페이지네이션(이슈 #115)으로 화면이 그 너머까지 보일 수 있지만, 메시지별 안읽음 수는 한 번
+     * 0에 도달하면 다시 바뀌지 않는 값이라 "활발히 보고 있을 만한 최근 구간"만 실시간으로 맞춰주면
+     * 충분하다고 판단했다. 그보다 오래된 메시지는 {@code getMessages}가 요청마다 그 자리에서 다시
+     * 계산해 내려주므로(그 페이지를 다시 불러오는 순간 항상 정확한 값), 실시간 push 없이도
+     * eventually consistent하게 맞는 값을 보게 된다. 팀원이 몇 주씩 안 읽다가 한 번에 수천 건을
+     * 읽는 극단적인 경우에 쿼리/브로드캐스트가 무제한으로 커지는 것도 이 캡으로 함께 막는다.
      */
     @Transactional
     public void markAsRead(Long teamId, Long memberId) {
@@ -93,8 +104,8 @@ public class ChatService {
 
         member.markRead(LocalDateTime.now());
 
-        List<Message> latestFirst = messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(
-                teamId, PageRequest.of(0, DEFAULT_MESSAGE_PAGE_SIZE));
+        List<Message> latestFirst =
+                messageRepository.findByTeamIdBeforeCursor(teamId, null, PageRequest.of(0, DEFAULT_MESSAGE_PAGE_SIZE));
         List<Message> newlyRead = latestFirst.stream()
                 .filter(message -> message.getCreatedAt().isAfter(unreadSince))
                 .toList();

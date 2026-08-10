@@ -70,7 +70,7 @@ Phase 0~9([README.md](./README.md) 참고)로 구현한 팀 매칭과 매칭 이
 | GET | `/api/teams/{teamId}/members` | 대화상대(팀원) 목록 조회 |
 | DELETE | `/api/teams/{teamId}/members/me` | 채팅방 나가기 (협업거리 -10m) |
 | PATCH | `/api/teams/{teamId}/chatbot` | 챗봇 추가/삭제 — body `{ "enabled": boolean }` |
-| GET | `/api/teams/{teamId}/messages` | 메시지 목록 조회 (최신순, 최근 50개) |
+| GET | `/api/teams/{teamId}/messages?cursor={messageId}` | 메시지 목록 조회 (최신순, 50개씩 cursor 페이지네이션) |
 | PATCH | `/api/teams/{teamId}/read` | 채팅방 읽음 처리 |
 | POST | `/api/reports` | 사용자 신고 — body `{ reportedMemberId, teamId?, reasonCode, customReasonText? }` |
 
@@ -83,8 +83,14 @@ Phase 0~9([README.md](./README.md) 참고)로 구현한 팀 매칭과 매칭 이
 | 서버→클라이언트 | `/user/queue/errors` | 본인에게만 오는 처리 실패 에러 메시지 |
 
 메시지가 처음 웹소켓을 구독하기 **전에** 이미 서버에서 발행된 경우(예: 팀 생성 직후 챗봇 인사)는
-실시간 브로드캐스트로는 못 받으므로, 연결 시 `GET /api/teams/{teamId}/messages`로 과거 내역을
-먼저 채워야 합니다 (`chat-test.html` 참고).
+실시간 브로드캐스트로는 못 받으므로, 연결 시 `GET /api/teams/{teamId}/messages`(cursor 없이)로
+과거 내역을 먼저 채워야 합니다 (`chat-test.html` 참고).
+
+**과거 메시지 더 불러오기(위로 스크롤)**: 응답 `MessageListResponse.hasNext`가 `true`면 더 오래된
+메시지가 남아있다는 뜻 — 지금 화면에 있는 가장 오래된 메시지의 `messageId`를 `cursor` 쿼리
+파라미터로 넘겨 `GET /api/teams/{teamId}/messages?cursor={messageId}`를 다시 호출하면 그 이전
+50건을 이어서 받는다. `hasNext`가 `false`가 될 때까지 반복하면 팀 생성 시 발행된 인사 메시지까지
+도달한다.
 
 메시지의 `messageType`으로 카드형 메시지 종류를, `metadata`(JSON 문자열)로 카드 렌더링에 필요한
 id 목록을 내려줍니다 — 실제 이름/아바타 등은 프론트가 팀원 목록/캐릭터 API로 조회해서 채웁니다.

@@ -73,18 +73,32 @@
   destination을 둬서, 프론트가 새 메시지 수신과 안읽음 갱신을 명확히 구분해 처리할 수 있게 했다.
   **(2026-08-06 PR #86 코드래빗 리뷰 반영)** 처음엔 안읽음 이후 메시지를 전부 조회하는 새
   쿼리를 추가했었는데, 팀원이 아주 오래 안 읽으면 그만큼 조회/브로드캐스트 규모가 무제한으로
-  커지는 문제가 있었다. 어차피 화면(`getMessages`)도 최신 50건만 보여주므로 그 이상 과거
+  커지는 문제가 있었다. 어차피 화면에 기본으로 뜨는 건 최신 50건뿐이므로 그 이상 과거
   메시지의 갱신을 보내는 건 무의미하다고 보고, 새 쿼리 대신 이미 있던
-  `findByTeam_TeamIdOrderByCreatedAtDesc`(최신 50건, `senderTeamMember.member`까지 이미
-  fetch join)를 그대로 재사용해 메모리에서 필터링하는 방식으로 바꿨다 — 조회 규모도
+  `findByTeamIdBeforeCursor`(cursor 없이 호출하면 최신 50건, `senderTeamMember.member`까지
+  이미 fetch join)를 그대로 재사용해 메모리에서 필터링하는 방식으로 바꿨다 — 조회 규모도
   자연스럽게 50건으로 제한되고, 발신자 N+1 문제도 같이 해결됐다.
+  **(2026-08-10 이슈 #115, cursor 페이지네이션 도입 후 재검토)** `getMessages`에 cursor를 붙여
+  최신 50건 너머까지 스크롤해 볼 수 있게 되면서, "화면은 최신 50건뿐이라 그 이상은 무의미하다"는
+  위 전제가 깨진 게 아닌지 한 번 의심했다. 잠시 캡을 없애고 `unreadSince` 이후 전체를 무제한
+  조회하도록 바꿨다가, 그러면 팀원이 몇 주씩 안 읽다가 한 번에 수천 건을 읽었을 때 쿼리/브로드
+  캐스트가 다시 무제한으로 커지는 원래 문제(PR #86)가 되살아나서 되돌렸다. 대신 메시지별
+  안읽음 수는 **0에 도달하면 다시는 바뀌지 않는 값**이라는 성질에 기대기로 했다 — 카카오톡 등
+  대형 채팅 서비스도 이 카운트를 전체 이력에 걸쳐 실시간으로 갱신하지 않고, "활발히 보고 있을
+  만한 최근 구간"만 실시간으로 맞추고 그보다 오래된 메시지는 다음에 그 페이지를 다시 불러올 때
+  (`getMessages`가 요청마다 그 자리에서 새로 계산해 내려줌) 정확한 값으로 맞춰지는 eventually
+  consistent 방식을 쓴다. 그래서 `markAsRead`는 `findByTeamIdBeforeCursor`로 여전히 최신 50건
+  범위 안에서만 실시간 갱신을 계산하고, cursor로 더 과거를 스크롤해 본 메시지의 안읽음 수는
+  그 페이지를 재조회할 때 정확한 값을 받는 것으로 의도적으로 남겨뒀다.
 
 ## 구현 현황 (Phase 2 완료, 2026-07-29 WebSocket으로 전환)
 
 - 엔티티: `domains/chat/entity/Message.java`
 - 리포지토리: `domains/chat/repository/MessageRepository.java`
-- 서비스: `domains/chat/service/ChatService.java` — `sendMessage`, `getMessages`(최신 50건),
-  `markAsRead`, `postSystemMessage`(팀 도메인에서 나가기/챗봇 토글 시 호출). 메시지가 저장될
+- 서비스: `domains/chat/service/ChatService.java` — `sendMessage`,
+  `getMessages`(cursor 없으면 최신 50건, cursor 있으면 그 이전 50건 + `hasNext`,
+  2026-08-10 이슈 #115), `markAsRead`, `postSystemMessage`(팀 도메인에서 나가기/챗봇 토글 시
+  호출). 메시지가 저장될
   때마다 `SimpMessagingTemplate`으로 `/topic/teams/{teamId}`에 브로드캐스트한다 — `sendMessage`,
   `postSystemMessage` 양쪽 다 이 경로를 타므로, 나중에 챗봇/투표 결과 메시지를 추가해도
   실시간 push를 별도로 구현할 필요 없음.
@@ -92,10 +106,19 @@
   `senderAvatar`(`characterType`+`paletteCode`) 추가 — `getMessages`는 조회된 메시지의
   발신 팀원들을 모아 `CharacterService.findAvatarsByMembers`로 배치 조회하고, 실시간
   브로드캐스트(`broadcast`)는 방금 보낸 발신자 1명만 조회한다. 이걸 하면서
-  `MessageRepository.findByTeam_TeamIdOrderByCreatedAtDesc`도 `senderTeamMember`/`profile`/
+  `MessageRepository.findByTeam_TeamIdOrderByCreatedAtDesc`(2026-08-10 이슈 #115에서
+  `findByTeamIdBeforeCursor`로 이름 변경)도 `senderTeamMember`/`profile`/
   `member`를 LEFT JOIN FETCH하도록 고쳤다 — 원래 `sender.getProfile().getNickname()` 자체가
   메시지마다 lazy load되는 기존 N+1이었는데 이번에 같이 잡음. CHATBOT/SYSTEM 메시지나 협업
   유형 검사를 안 한 발신자는 `senderAvatar`가 null.
+- **cursor 페이지네이션 (2026-08-10, 이슈 #115)**: `GET /messages`가 항상 최신 50건만 반환하고
+  더 과거 메시지를 불러올 방법이 없어, 대화가 쌓인 방에서는 팀 생성 시 발행되는 인사 메시지 등
+  가장 오래된 메시지가 API로 영구히 조회 불가능했다. `messageId` 기반 `cursor` 쿼리 파라미터와
+  응답 `hasNext` 플래그를 추가해 위로 스크롤 시 이전 메시지를 이어서 조회할 수 있게 했다.
+  cursor 필터(`messageId < cursor`)와 정렬을 처음엔 `createdAt DESC, messageId DESC`로 뒀는데,
+  동시 저장 시 `messageId`(삽입 순서)와 `createdAt`(애플리케이션이 찍는 타임스탬프) 순서가
+  어긋나면 페이지 경계에서 메시지가 중복/누락될 수 있다는 코드래빗 리뷰(PR #116)를 받아 정렬을
+  `messageId DESC` 단일 기준으로 통일했다.
 - **전송(WebSocket)**: `domains/chat/websocket/ChatWebSocketController` —
   STOMP `@MessageMapping("/teams/{teamId}/messages")`. 인증은 `global/websocket/
   StompAuthChannelInterceptor`가 STOMP `CONNECT` 프레임의 `Authorization` 헤더로 처리
