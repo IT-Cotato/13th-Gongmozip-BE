@@ -13,6 +13,17 @@ public class MatchingApplicationResponse {
 
     private MatchingApplicationResponse() {}
 
+    // 홈 화면에 표시하는 현재 매칭 신청 인원과 카운트다운 기준 시각
+    public record ParticipantCountResponse(
+            // 대상 신청일 매칭풀에서 대기하거나 매칭 계산 중인 신청 수
+            long participantCount,
+            // 대상 신청일의 신청 마감 시각(14시) — 마감 카운트다운 기준
+            LocalDateTime applicationDeadlineAt,
+            // 대상 신청일의 매칭 결과 공개 시각(16시) — 결과 발표 카운트다운 기준
+            LocalDateTime resultPublishAt,
+            // 응답 생성 시점의 서버 시각 — 클라이언트 시계 오차 보정용
+            LocalDateTime serverTime) {}
+
     // 매칭 신청 화면에 들어가기 전 필요한 자격 조건과 현재 매칭풀 현황
     public record EligibilityResponse(
             // 아래 신청 조건을 모두 만족하는 경우에만 true
