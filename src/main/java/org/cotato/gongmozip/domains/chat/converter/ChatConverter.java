@@ -72,7 +72,8 @@ public final class ChatConverter {
     public static MessageListResponse toMessageListResponse(
             List<Message> latestFirstMessages,
             Map<Long, MemberAvatarResponse> avatarsByMemberId,
-            List<TeamMember> activeMembers) {
+            List<TeamMember> activeMembers,
+            boolean hasNext) {
         List<MessageItemResponse> chronological = latestFirstMessages.stream()
                 .sorted(Comparator.comparing(Message::getCreatedAt))
                 .map(message -> {
@@ -83,7 +84,7 @@ public final class ChatConverter {
                     return toMessageItemResponse(message, avatar, countUnreadMembers(message, activeMembers));
                 })
                 .toList();
-        return new MessageListResponse(chronological);
+        return new MessageListResponse(chronological, hasNext);
     }
 
     /**

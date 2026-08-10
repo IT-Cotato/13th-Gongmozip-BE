@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -160,14 +161,15 @@ class ChatServiceTest {
                 .willReturn(Optional.of(me));
         given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(me, other));
-        given(messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(any(Long.class), any()))
+        given(messageRepository.findByTeamIdBeforeCursor(any(Long.class), isNull(), any()))
                 .willReturn(List.of(chatbotMessage, memberMessage));
         given(characterService.findAvatarsByMembers(List.of(other.getMember()))).willReturn(Map.of(2L, otherAvatar));
 
         // when
-        MessageListResponse response = chatService.getMessages(100L, 1L);
+        MessageListResponse response = chatService.getMessages(100L, 1L, null);
 
         // then
+        assertThat(response.hasNext()).isFalse();
         assertThat(response.messages())
                 .filteredOn(m -> "MEMBER".equals(m.senderType()))
                 .singleElement()
@@ -182,6 +184,41 @@ class ChatServiceTest {
                     assertThat(m.senderAvatar()).isNull();
                     assertThat(m.unreadCount()).isEqualTo(2); // 발신자 없음, me/other 모두 안읽음
                 });
+    }
+
+    @DisplayName("cursor로 조회했을 때 페이지 크기보다 많은 메시지가 남아있으면 hasNext가 true이고 페이지 크기만큼만 반환된다.")
+    @Test
+    void cursor로_조회했을_때_페이지_크기보다_많은_메시지가_남아있으면_hasNext가_true이다() {
+        // given
+        Team team = Team.builder().teamId(100L).build();
+        TeamMember me = teamMemberOf(team, 1L, "김철수");
+        List<Message> latestFirstOverPageSize = new java.util.ArrayList<>();
+        for (int i = 0; i < 51; i++) {
+            Message message = Message.builder()
+                    .team(team)
+                    .senderType(MessageSenderType.SYSTEM)
+                    .messageType(MessageType.SYSTEM_NOTICE)
+                    .content("메시지" + i)
+                    .build();
+            ReflectionTestUtils.setField(
+                    message, "createdAt", LocalDateTime.now().minusMinutes(i));
+            latestFirstOverPageSize.add(message);
+        }
+
+        given(teamRepository.findById(100L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
+                .willReturn(Optional.of(me));
+        given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(me));
+        given(messageRepository.findByTeamIdBeforeCursor(eq(100L), eq(200L), any()))
+                .willReturn(latestFirstOverPageSize);
+
+        // when
+        MessageListResponse response = chatService.getMessages(100L, 1L, 200L);
+
+        // then
+        assertThat(response.hasNext()).isTrue();
+        assertThat(response.messages()).hasSize(50);
     }
 
     @DisplayName("챗봇이 꺼져있으면 챗봇 메시지를 남기지 않는다.")
@@ -253,7 +290,7 @@ class ChatServiceTest {
                 .willReturn(Optional.of(reader));
         given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(reader, other));
-        given(messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(eq(100L), any()))
+        given(messageRepository.findByTeamIdBeforeCursor(eq(100L), isNull(), any()))
                 .willReturn(List.of(message));
 
         // when
@@ -277,7 +314,7 @@ class ChatServiceTest {
         given(teamRepository.findById(100L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(100L, 1L))
                 .willReturn(Optional.of(me));
-        given(messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(eq(100L), any()))
+        given(messageRepository.findByTeamIdBeforeCursor(eq(100L), isNull(), any()))
                 .willReturn(List.of());
 
         // when

@@ -15,6 +15,10 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     // 발신자 팀원의 profile/member까지 fetch join한다 — 안 그러면 메시지마다(닉네임, 아바타 조회용
     // memberId 각각) lazy load가 발생한다. createdAt이 같은 메시지가 여러 개면 순서가 흔들릴 수
     // 있어 messageId를 2차 정렬 기준으로 추가해 결과를 항상 결정적으로 만든다.
+    //
+    // cursor는 "이전 메시지 더보기" 커서다 — null이면 최신 페이지를, 값이 있으면 그보다 messageId가
+    // 작은(=더 오래된) 메시지를 조회한다. messageId는 IDENTITY라 항상 삽입 순서와 일치하므로
+    // createdAt과 별도로 비교하지 않아도 cursor 기준 필터링이 정렬 순서와 어긋나지 않는다.
     @Query(
             """
             SELECT m FROM Message m
@@ -22,9 +26,11 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             LEFT JOIN FETCH stm.profile
             LEFT JOIN FETCH stm.member
             WHERE m.team.teamId = :teamId
+            AND (:cursor IS NULL OR m.messageId < :cursor)
             ORDER BY m.createdAt DESC, m.messageId DESC
             """)
-    List<Message> findByTeam_TeamIdOrderByCreatedAtDesc(@Param("teamId") Long teamId, Pageable pageable);
+    List<Message> findByTeamIdBeforeCursor(
+            @Param("teamId") Long teamId, @Param("cursor") Long cursor, Pageable pageable);
 
     Optional<Message> findFirstByTeam_TeamIdOrderByCreatedAtDesc(Long teamId);
 

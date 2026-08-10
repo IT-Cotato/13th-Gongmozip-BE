@@ -49,12 +49,32 @@ class MessageRepositoryIntegrationTest {
 
         // when
         List<Message> latestFirst =
-                messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(team.getTeamId(), PageRequest.of(0, 10));
+                messageRepository.findByTeamIdBeforeCursor(team.getTeamId(), null, PageRequest.of(0, 10));
 
         // then
         assertThat(latestFirst)
                 .extracting(Message::getMessageId)
                 .containsExactly(third.getMessageId(), second.getMessageId(), first.getMessageId());
+    }
+
+    @DisplayName("cursor를 넘기면 그 messageId보다 오래된 메시지만 최신순으로 반환한다.")
+    @Test
+    void cursor를_넘기면_그_messageId보다_오래된_메시지만_반환한다() {
+        // given
+        Team team = teamRepository.save(team());
+        LocalDateTime now = LocalDateTime.now();
+        Message first = saveMessageAt(team, "1번째", now.minusMinutes(3));
+        Message second = saveMessageAt(team, "2번째", now.minusMinutes(2));
+        Message third = saveMessageAt(team, "3번째", now.minusMinutes(1));
+
+        // when
+        List<Message> beforeThird = messageRepository.findByTeamIdBeforeCursor(
+                team.getTeamId(), third.getMessageId(), PageRequest.of(0, 10));
+
+        // then
+        assertThat(beforeThird)
+                .extracting(Message::getMessageId)
+                .containsExactly(second.getMessageId(), first.getMessageId());
     }
 
     @DisplayName("여러 팀에 걸친 메시지 중 각 팀의 가장 최근 메시지만 하나씩 반환한다.")

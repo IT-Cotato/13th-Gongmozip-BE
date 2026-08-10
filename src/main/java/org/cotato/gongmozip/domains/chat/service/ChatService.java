@@ -56,12 +56,20 @@ public class ChatService {
         return broadcast(teamId, saved);
     }
 
-    public MessageListResponse getMessages(Long teamId, Long requesterMemberId) {
+    /**
+     * cursor가 null이면 최신 {@value #DEFAULT_MESSAGE_PAGE_SIZE}건을, cursor가 있으면(직전 응답의
+     * 가장 오래된 메시지 messageId) 그보다 더 오래된 메시지를 이어서 조회한다. 다음 페이지 존재
+     * 여부를 별도 COUNT 쿼리 없이 판단하려고 페이지 크기보다 1건 더 조회해 잘라낸다.
+     */
+    public MessageListResponse getMessages(Long teamId, Long requesterMemberId, Long cursor) {
         teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
         requireActiveMember(teamId, requesterMemberId);
 
-        List<Message> latestFirst = messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(
-                teamId, PageRequest.of(0, DEFAULT_MESSAGE_PAGE_SIZE));
+        List<Message> fetched = messageRepository.findByTeamIdBeforeCursor(
+                teamId, cursor, PageRequest.of(0, DEFAULT_MESSAGE_PAGE_SIZE + 1));
+        boolean hasNext = fetched.size() > DEFAULT_MESSAGE_PAGE_SIZE;
+        List<Message> latestFirst = hasNext ? fetched.subList(0, DEFAULT_MESSAGE_PAGE_SIZE) : fetched;
+
         List<Member> senders = latestFirst.stream()
                 .map(Message::getSenderTeamMember)
                 .filter(Objects::nonNull)
@@ -71,7 +79,7 @@ public class ChatService {
         Map<Long, MemberAvatarResponse> avatarsByMemberId = characterService.findAvatarsByMembers(senders);
         List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
 
-        return ChatConverter.toMessageListResponse(latestFirst, avatarsByMemberId, activeMembers);
+        return ChatConverter.toMessageListResponse(latestFirst, avatarsByMemberId, activeMembers, hasNext);
     }
 
     /**
@@ -93,8 +101,8 @@ public class ChatService {
 
         member.markRead(LocalDateTime.now());
 
-        List<Message> latestFirst = messageRepository.findByTeam_TeamIdOrderByCreatedAtDesc(
-                teamId, PageRequest.of(0, DEFAULT_MESSAGE_PAGE_SIZE));
+        List<Message> latestFirst =
+                messageRepository.findByTeamIdBeforeCursor(teamId, null, PageRequest.of(0, DEFAULT_MESSAGE_PAGE_SIZE));
         List<Message> newlyRead = latestFirst.stream()
                 .filter(message -> message.getCreatedAt().isAfter(unreadSince))
                 .toList();
