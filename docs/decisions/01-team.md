@@ -96,8 +96,10 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
 
 - 엔티티: `domains/team/entity/Team.java`, `TeamMember.java`
 - 리포지토리: `domains/team/repository/TeamRepository.java`, `TeamMemberRepository.java`
-- 서비스: `domains/team/service/TeamService.java` — `createTeam`(내부 계약, 컨트롤러 미노출),
-  `getMyChatRooms`(채팅방 목록), `getTeamMembers`(대화상대 조회, 팀 소속 검증 포함)
+- 서비스: `domains/team/service/TeamService.java` — `createTeam`(일반 매칭 컨트롤러에는 미노출,
+  매칭 서비스가 직접 호출하는 내부 계약이지만 QA용 `TeamTestController`에서는 `X-Test-Api-Key`
+  헤더로 인가한 뒤 HTTP로도 호출 가능 — 위 "미정" 섹션 참고), `getMyChatRooms`(채팅방 목록),
+  `getTeamMembers`(대화상대 조회, 팀 소속 검증 포함)
 - **성능 개선 (2026-08-01)**: `getMyChatRooms`가 원래 채팅방 개수(N)만큼
   팀원 목록/마지막 메시지 조회 쿼리를 반복하고, 팀원의 `member`가 fetch join 안 돼있어 팀원
   수만큼 추가 lazy load까지 겹치는 N+1이었다. `TeamMemberRepository.findByTeamIdInAndStatus`

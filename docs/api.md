@@ -270,7 +270,7 @@ id 목록을 내려줍니다 — 실제 이름/아바타 등은 프론트가 팀
 > 뒤집었다 — 이제 기본값은 항상 "꺼짐"이고, 로컬에서 쓰려면 `--spring.profiles.active=local`을
 > 명시적으로 켜야 한다 (README 참고). **배포 서버에는 이 프로필을 켠 적이 없어 이 엔드포인트는
 > 배포 환경에서 쓸 수 없다.**
-
+>
 > ⚠️ **`/api/test/teams` 보안 노트 (2026-08-11, 이슈 #115 후속)**: QA가 채팅/팀장선출/공모전
 > 투표 시나리오를 검증하려면 배포 서버에서도 팀을 만들 수 있어야 하는데, 위 이유로
 > `@Profile("local")`은 배포 서버에서 못 쓴다. 그렇다고 `SPRING_PROFILES_ACTIVE=local`을 배포
@@ -283,6 +283,34 @@ id 목록을 내려줍니다 — 실제 이름/아바타 등은 프론트가 팀
 |---|---|---|---|
 | POST | `/api/test/auth/quick-login` | `@Profile("local")` | 이메일 인증 없이 회원+프로필 즉시 생성하고 accessToken 발급 |
 | POST | `/api/test/teams` | `X-Test-Api-Key` 헤더 | `TeamCreationRequest` 그대로 받아 실제 매칭 플로우와 동일하게 팀 생성 (QA 시나리오 재현용) |
+
+### `/api/test/teams` 요청/응답 예시
+
+memberId/profileId는 `quick-login` 응답이나 실제 가입 계정에서 얻는다. 아래는 팀장 희망자가
+정확히 1명(AUTO_ASSIGNED 시나리오)인 예시 — 원하는 시나리오에 맞게 `leaderPreference` 조합만
+바꾸면 된다(0명이면 OPEN_NOMINATION, 2명 이상이면 CANDIDATE_VOTE).
+
+**request**
+```
+POST /api/test/teams
+X-Test-Api-Key: <서버 .env의 TEST_API_KEY 값>
+Content-Type: application/json
+```
+```json
+{
+  "members": [
+    { "memberId": 6, "profileId": 11, "leaderPreference": "WANTS", "extroversionType": "E", "extroversionScore": 4.20 },
+    { "memberId": 7, "profileId": 12, "leaderPreference": "NEUTRAL", "extroversionType": "I", "extroversionScore": 2.10 },
+    { "memberId": 8, "profileId": 13, "leaderPreference": "NEUTRAL", "extroversionType": "E", "extroversionScore": 3.80 }
+  ],
+  "preferredCategory": "PHOTO_VIDEO"
+}
+```
+
+**response**
+```json
+{ "teamId": 5, "status": "GREETING", "leaderSelectionMode": "AUTO_ASSIGNED" }
+```
 
 ## 관련 문서
 

@@ -1,7 +1,9 @@
 package org.cotato.gongmozip.domains.team.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.TeamCreationRequest;
 import org.cotato.gongmozip.domains.team.entity.Team;
@@ -27,6 +29,11 @@ import org.springframework.web.bind.annotation.RestController;
  * api.md 참고)이 아니라, {@code .env}의 {@code TEST_API_KEY}와 일치하는 헤더가 있을 때만
  * 동작하는 이 엔드포인트 전용 게이트를 쓴다 — quick-login 등 다른 로컬 전용 엔드포인트까지
  * 한꺼번에 열리는 걸 막기 위함. 값이 비어있으면(기본값) 어떤 요청도 통과할 수 없다 — fail-safe.
+ *
+ * <p>키 검사가 요청 본문 역직렬화 이후(핸들러 진입 시점)에 일어나 키가 없는 요청도 JSON 파싱
+ * 비용은 치른다 — Security filter/AuthorizationManager로 옮기면 막을 수 있지만, QA 종료 후
+ * 삭제될 임시 엔드포인트라 그 정도 리팩터링 비용을 들이지 않기로 했다(CodeRabbit 리뷰,
+ * PR #131). 키가 틀렸을 때 요청이 실행되는 건 여전히 막혀 있어 인가 자체는 안전하다.
  */
 @Tag(name = "TeamTest", description = "[개발용] 실제 매칭 플로우와 동일하게 팀(채팅방)을 즉시 생성 - QA 시나리오 재현용")
 @RestController
@@ -44,8 +51,10 @@ public class TeamTestController {
     @Operation(summary = "[개발용] 매칭 신청/수락 없이 팀(채팅방)을 즉시 생성")
     @PostMapping
     public TeamCreationTestResponse createTeam(
-            @RequestHeader(value = API_KEY_HEADER, required = false) String apiKey,
-            @RequestBody TeamCreationRequest request) {
+            @Parameter(required = true, description = ".env의 TEST_API_KEY와 일치해야 하는 게이트 키")
+                    @RequestHeader(value = API_KEY_HEADER, required = false)
+                    String apiKey,
+            @RequestBody @Valid TeamCreationRequest request) {
         requireValidApiKey(apiKey);
         Team team = teamService.createTeam(request);
         return new TeamCreationTestResponse(
