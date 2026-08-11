@@ -140,13 +140,21 @@ class ProfileServiceTest {
     @Test
     void 공개_프로필은_정상_조회된다() {
         // given
+        Member testMember = Member.builder()
+                .memberId(1L)
+                .email("test@gongmozip.com")
+                .gender(org.cotato.gongmozip.domains.member.enums.Gender.MALE)
+                .birthDate(LocalDate.of(2000, 1, 1))
+                .build();
         Profile profile = Profile.builder()
                 .profileId(10L)
-                .member(member)
+                .member(testMember)
                 .nickname("공개")
                 .schoolName("학교")
                 .grade(3)
                 .major("컴공")
+                .gpa(4.0)
+                .gpaScale(4.5)
                 .isPublic(true)
                 .build();
         given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
@@ -156,6 +164,11 @@ class ProfileServiceTest {
 
         // then
         assertThat(response.nickname()).isEqualTo("공개");
+        assertThat(response.gender()).isEqualTo(org.cotato.gongmozip.domains.member.enums.Gender.MALE);
+        assertThat(response.birthYear()).isEqualTo(2000);
+        assertThat(response.age()).isEqualTo(LocalDate.now().getYear() - 2000 + 1);
+        assertThat(response.gpa()).isEqualTo(4.0);
+        assertThat(response.gpaScale()).isEqualTo(4.5);
     }
 
     @DisplayName("비공개 프로필(isPublic = false)을 조회하면 닉네임만 채워지고 나머지는 비운 채로 응답한다.")
@@ -186,6 +199,11 @@ class ProfileServiceTest {
         assertThat(response.projects()).isEmpty();
         assertThat(response.awards()).isEmpty();
         assertThat(response.certifications()).isEmpty();
+        assertThat(response.gender()).isNull();
+        assertThat(response.age()).isNull();
+        assertThat(response.birthYear()).isNull();
+        assertThat(response.gpa()).isNull();
+        assertThat(response.gpaScale()).isNull();
     }
 
     // 프로필 수정 및 대표 프로필 삭제 테스트
