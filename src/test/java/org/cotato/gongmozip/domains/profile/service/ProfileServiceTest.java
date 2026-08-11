@@ -166,7 +166,9 @@ class ProfileServiceTest {
         assertThat(response.nickname()).isEqualTo("공개");
         assertThat(response.gender()).isEqualTo(org.cotato.gongmozip.domains.member.enums.Gender.MALE);
         assertThat(response.birthYear()).isEqualTo(2000);
-        assertThat(response.age()).isEqualTo(LocalDate.now().getYear() - 2000 + 1);
+        assertThat(response.age())
+                .isEqualTo(java.time.Period.between(LocalDate.of(2000, 1, 1), LocalDate.now())
+                        .getYears());
         assertThat(response.gpa()).isEqualTo(4.0);
         assertThat(response.gpaScale()).isEqualTo(4.5);
     }

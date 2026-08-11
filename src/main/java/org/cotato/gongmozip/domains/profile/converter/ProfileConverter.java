@@ -171,7 +171,9 @@ public class ProfileConverter {
         org.cotato.gongmozip.domains.member.enums.Gender gender = member.getGender();
         java.time.LocalDate birthDate = member.getBirthDate();
         Integer birthYear = birthDate != null ? birthDate.getYear() : null;
-        Integer age = birthDate != null ? java.time.LocalDate.now().getYear() - birthYear + 1 : null;
+        Integer age = birthDate != null
+                ? java.time.Period.between(birthDate, java.time.LocalDate.now()).getYears()
+                : null;
 
         return new PublicProfileResponse(
                 profile.getProfileId(),
