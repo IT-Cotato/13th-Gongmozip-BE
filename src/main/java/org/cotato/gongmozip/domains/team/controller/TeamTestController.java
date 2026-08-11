@@ -2,6 +2,7 @@ package org.cotato.gongmozip.domains.team.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -48,10 +49,16 @@ public class TeamTestController {
     @Value("${test.api-key:}")
     private String testApiKey;
 
-    @Operation(summary = "[개발용] 매칭 신청/수락 없이 팀(채팅방)을 즉시 생성")
+    @Operation(
+            summary = "[개발용] 매칭 신청/수락 없이 팀(채팅방)을 즉시 생성",
+            description = "실제 매칭 플로우와 동일하게 TeamService.createTeam을 호출한다. leaderPreference 조합으로 "
+                    + "AUTO_ASSIGNED(WANTS 1명)/CANDIDATE_VOTE(WANTS 2명+)/OPEN_NOMINATION(WANTS 0명) 시나리오를 직접 고를 수 있다.")
     @PostMapping
     public TeamCreationTestResponse createTeam(
-            @Parameter(required = true, description = ".env의 TEST_API_KEY와 일치해야 하는 게이트 키")
+            @Parameter(
+                            required = true,
+                            description = "서버 .env의 TEST_API_KEY와 일치해야 하는 게이트 키. 값이 없거나 다르면 403.",
+                            example = "gongmozip-qa-<발급받은 값>")
                     @RequestHeader(value = API_KEY_HEADER, required = false)
                     String apiKey,
             @RequestBody @Valid TeamCreationRequest request) {
@@ -71,5 +78,10 @@ public class TeamTestController {
         }
     }
 
-    public record TeamCreationTestResponse(Long teamId, String status, String leaderSelectionMode) {}
+    @Schema(name = "TeamCreationTestResponse", description = "즉시 생성된 팀(채팅방) 정보")
+    public record TeamCreationTestResponse(
+            @Schema(description = "생성된 팀(채팅방) ID — 이후 채팅/투표 API의 teamId로 그대로 사용", example = "5") Long teamId,
+            @Schema(description = "팀 상태 — 인사 유도 단계로 시작한다", example = "GREETING") String status,
+            @Schema(description = "leaderPreference 조합으로 계산된 팀장 선출 모드", example = "AUTO_ASSIGNED")
+                    String leaderSelectionMode) {}
 }
