@@ -63,6 +63,7 @@ public class SecurityConfig {
                                 "/ws/**", // WebSocket(STOMP) 핸드셰이크 - 인증은 CONNECT 프레임에서 별도 처리
                                 "/chat-test.html", // 로컬 수동 테스트용 정적 페이지
                                 "/api/test/auth/quick-login", // [개발용] 이메일 인증 없이 토큰 발급
+                                "/api/test/teams", // [개발용] 매칭 없이 팀 즉시 생성 - 자체 API 키 헤더로 별도 인가
                                 "/api/inquiries", // 문의 작성
                                 "/api/inquiries/list", // 문의 내역 조회
                                 "/api/inquiries/*" // 문의 상세 조회

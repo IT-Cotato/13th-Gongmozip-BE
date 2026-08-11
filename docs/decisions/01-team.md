@@ -85,10 +85,12 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
 
 - 팀장 변경(수동 위임) 기능 — 챗봇 안내 문구에 언급되지만 화면/플로우 미정. TeamMember.role
   갱신 API로 충분해 보이나 별도 스코프로 분리 예정.
-- **(2026-08-06 삭제)** `domains/team/controller/TeamTestController.java`(`POST /api/test/teams`) —
-  매칭 연동이 실제로 완료돼(위 참고) 더 이상 필요 없어 삭제했다. `chat-test.html`의 "빠른 준비"
-  버튼도 이미 `TeamMemberInput`에 추가된 필드(leaderPreference 등)를 안 보내고 있어 어차피
-  실패하던 상태였다 — 함께 제거했다. 자세한 내용은 [03-chat.md](./03-chat.md) 참고.
+- **(2026-08-06 삭제, 2026-08-11 QA 용도로 재추가)** `domains/team/controller/TeamTestController.java`
+  (`POST /api/test/teams`) — 매칭 연동이 실제로 완료돼(위 참고) 더 이상 필요 없어 한 번
+  삭제했다. `chat-test.html`의 "빠른 준비" 버튼도 이미 `TeamMemberInput`에 추가된 필드
+  (leaderPreference 등)를 안 보내고 있어 어차피 실패하던 상태였다 — 함께 제거했다(자세한 내용은
+  [03-chat.md](./03-chat.md) 참고). 이후 QA가 배포 서버에서 특정 팀장 선출 시나리오를 재현할
+  필요가 생겨 다시 추가함 — "구현 현황" 섹션의 2026-08-11 항목 참고.
 
 ## 구현 현황 (Phase 1 완료)
 
@@ -155,12 +157,16 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
   역시 최신 메시지 순으로 이어붙이는 방식이었다. `unreadCount == 0` 여부(오름차순, 즉
   안읽은 방이 먼저) → `lastMessageAt` 내림차순 2단 정렬로 구현. 메시지가 한 번도 없던 방
   (`lastMessageAt = null`)은 두 정렬 기준 모두에서 항상 맨 뒤로 보낸다.
-- ⚠️ **임시**: `domains/team/controller/TeamTestController.java` (`POST /api/test/teams`,
-  `@Profile("local")`) — 원래 매칭 연동 전까지 수동 테스트(WebSocket 채팅 등)를 위해 `createTeam`을
-  직접 호출할 수 있게 열어둔 개발용 엔드포인트. `local` 프로필을 명시적으로 켰을 때만 활성화되는
-  fail-safe 방식(보안 검토 후 `!prod`에서 변경, 자세한 이유는 [api.md](../api.md) 참고).
-  **(2026-08-05 갱신)** 매칭 도메인 연동(`MatchingGroupCompletionService`)이 이미 완료돼 삭제
-  대상이지만, 로컬 수동 테스트 용도로 계속 쓰이고 있어 우선 남겨둠 — 위 "미정" 섹션 참고.
+- ⚠️ **임시**: `domains/team/controller/TeamTestController.java` (`POST /api/test/teams`) —
+  원래 매칭 연동 전까지 수동 테스트(WebSocket 채팅 등)를 위해 `createTeam`을 직접 호출할 수
+  있게 열어둔 개발용 엔드포인트였다. **(2026-08-05 삭제)** 매칭 도메인 연동
+  (`MatchingGroupCompletionService`)이 완료돼 더 이상 필요 없어 삭제했다(위 "미정" 섹션 참고).
+  **(2026-08-11 재추가, 이슈 #115 후속)** QA가 채팅/팀장선출/공모전 투표 시나리오를 배포
+  서버에서 직접 재현할 수 있어야 한다는 필요가 생겨 다시 추가했다 — 팀원별 `leaderPreference`
+  등을 원하는 대로 지정해 AUTO_ASSIGNED/CANDIDATE_VOTE/OPEN_NOMINATION 등 특정 분기를
+  의도적으로 재현할 수 있다. 이번엔 `@Profile("local")`(배포 서버에서 원천적으로 안 켜짐) 대신
+  이 엔드포인트 전용 `X-Test-Api-Key` 헤더 게이트를 쓴다 — 자세한 이유는 [api.md](../api.md)
+  참고.
 
 ## 구현 현황 (Phase 4 — 챗봇 상태머신 골격)
 
