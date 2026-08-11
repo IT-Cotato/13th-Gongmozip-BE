@@ -108,6 +108,10 @@ ai:
     base-url: ${FACTCHAT_BASE_URL:https://factchat-cloud.mindlogic.ai/v1/gateway}
     model: ${FACTCHAT_MODEL:gemini-2.5-flash}
 
+# 10. QA용 팀 즉시 생성 엔드포인트(TeamTestController) 게이트 키 - 비어있으면(기본값) 항상 거부
+test:
+  api-key: ${TEST_API_KEY:}
+
 matching:
   algorithm:
     # 운영값은 matchingBenchmark 결과로 조정한다.

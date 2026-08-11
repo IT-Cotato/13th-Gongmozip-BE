@@ -255,23 +255,62 @@ id 목록을 내려줍니다 — 실제 이름/아바타 등은 프론트가 팀
   리뷰 제출 응답을 받으면 곧바로 "협업거리가 10m 더 늘었어요!" 화면으로 넘어가면 됨. 실제 지급
   여부/금액 확인은 위 "협업거리 보상 금액" 섹션의 조회 API 참고.
 
-## 개발용 임시 엔드포인트 (`@Profile("local")`, 기본값은 비활성)
+## 개발용 임시 엔드포인트
 
-실제 회원가입/매칭 플로우가 자리잡기 전까지 수동 테스트를 위해 만든 엔드포인트입니다. 나중에
-삭제될 예정이므로 프론트에서 정식으로 의존하면 안 됩니다.
+실제 회원가입/매칭 플로우가 자리잡기 전까지, 또는 QA가 특정 시나리오를 재현하기 위해 만든
+엔드포인트입니다. 나중에 삭제될 예정이므로 프론트에서 정식으로 의존하면 안 됩니다. 게이트 방식이
+엔드포인트마다 다르니 아래 표를 참고하세요.
 
-> ⚠️ **보안 노트**: 처음엔 `@Profile("!prod")`("prod가 아니면 켜짐")로 막아뒀는데, 이 방식은
-> 아무 프로필도 안 잡힌 기본 상태에서 **기본값이 "켜짐"**이라 서버에 `SPRING_PROFILES_ACTIVE=prod`가
-> 실제로 설정돼 있는지에 안전이 좌우되는 구조였다. 이 저장소 코드만으로는 배포 서버의 `.env`를
-> 확인할 수 없고(`docker-compose.prod.yml`도 `SPRING_PROFILES_ACTIVE`를 명시하지 않음), `cd.yml`이
-> `develop` push 시 바로 배포하는 구조라 "나중에 서버 설정 확인" 방식은 위험하다고 판단해
-> `@Profile("local")`("local일 때만 켜짐")로 뒤집었다 — 이제 기본값은 항상 "꺼짐"이고, 로컬에서
-> 쓰려면 `--spring.profiles.active=local`을 명시적으로 켜야 한다 (README 참고).
+> ⚠️ **`/api/test/auth/quick-login` 보안 노트**: 처음엔 `@Profile("!prod")`("prod가 아니면
+> 켜짐")로 막아뒀는데, 이 방식은 아무 프로필도 안 잡힌 기본 상태에서 **기본값이 "켜짐"**이라
+> 서버에 `SPRING_PROFILES_ACTIVE=prod`가 실제로 설정돼 있는지에 안전이 좌우되는 구조였다. 이
+> 저장소 코드만으로는 배포 서버의 `.env`를 확인할 수 없고(`docker-compose.prod.yml`도
+> `SPRING_PROFILES_ACTIVE`를 명시하지 않음), `cd.yml`이 `develop` push 시 바로 배포하는 구조라
+> "나중에 서버 설정 확인" 방식은 위험하다고 판단해 `@Profile("local")`("local일 때만 켜짐")로
+> 뒤집었다 — 이제 기본값은 항상 "꺼짐"이고, 로컬에서 쓰려면 `--spring.profiles.active=local`을
+> 명시적으로 켜야 한다 (README 참고). **배포 서버에는 이 프로필을 켠 적이 없어 이 엔드포인트는
+> 배포 환경에서 쓸 수 없다.**
+>
+> ⚠️ **`/api/test/teams` 보안 노트 (2026-08-11, 이슈 #115 후속)**: QA가 채팅/팀장선출/공모전
+> 투표 시나리오를 검증하려면 배포 서버에서도 팀을 만들 수 있어야 하는데, 위 이유로
+> `@Profile("local")`은 배포 서버에서 못 쓴다. 그렇다고 `SPRING_PROFILES_ACTIVE=local`을 배포
+> 서버에 설정하면 `quick-login`을 포함해 앞으로 추가될 모든 `@Profile("local")` 엔드포인트가
+> 한꺼번에 열려버려 통제 범위가 넓어진다. 그래서 이 엔드포인트만 별도로 `.env`의
+> `TEST_API_KEY`와 일치하는 `X-Test-Api-Key` 헤더가 있어야 동작하도록 전용 게이트를 뒀다 —
+> 키가 비어있으면(기본값) 어떤 요청도 통과할 수 없다.
 
-| Method | Path | 설명 |
-|---|---|---|
-| POST | `/api/test/auth/quick-login` | 이메일 인증 없이 회원+프로필 즉시 생성하고 accessToken 발급 |
-| POST | `/api/test/teams` | `TeamCreationRequest` 그대로 받아 팀 생성 (매칭 도메인이 나중에 대체) |
+| Method | Path | 게이트 | 설명 |
+|---|---|---|---|
+| POST | `/api/test/auth/quick-login` | `@Profile("local")` | 이메일 인증 없이 회원+프로필 즉시 생성하고 accessToken 발급 |
+| POST | `/api/test/teams` | `X-Test-Api-Key` 헤더 | `TeamCreationRequest` 그대로 받아 실제 매칭 플로우와 동일하게 팀 생성 (QA 시나리오 재현용) |
+
+### `/api/test/teams` 요청/응답 예시
+
+memberId/profileId는 `quick-login` 응답이나 실제 가입 계정에서 얻는다. 아래는 팀장 희망자가
+정확히 1명(AUTO_ASSIGNED 시나리오)인 예시 — 원하는 시나리오에 맞게 `leaderPreference` 조합만
+바꾸면 된다(0명이면 OPEN_NOMINATION, 2명 이상이면 CANDIDATE_VOTE).
+
+**request**
+```
+POST /api/test/teams
+X-Test-Api-Key: <서버 .env의 TEST_API_KEY 값>
+Content-Type: application/json
+```
+```json
+{
+  "members": [
+    { "memberId": 6, "profileId": 11, "leaderPreference": "WANTS", "extroversionType": "E", "extroversionScore": 4.20 },
+    { "memberId": 7, "profileId": 12, "leaderPreference": "NEUTRAL", "extroversionType": "I", "extroversionScore": 2.10 },
+    { "memberId": 8, "profileId": 13, "leaderPreference": "NEUTRAL", "extroversionType": "E", "extroversionScore": 3.80 }
+  ],
+  "preferredCategory": "PHOTO_VIDEO"
+}
+```
+
+**response**
+```json
+{ "teamId": 5, "status": "GREETING", "leaderSelectionMode": "AUTO_ASSIGNED" }
+```
 
 ## 관련 문서
 

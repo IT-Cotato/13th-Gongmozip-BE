@@ -68,6 +68,10 @@ public class SecurityConfig {
                                 "/api/inquiries/*" // 문의 상세 조회
                                 )
                         .permitAll()
+                        // POST만 명시적으로 허용 - 이 경로에 다른 메서드 핸들러가 나중에 추가돼도
+                        // JWT 검증 없이 노출되지 않도록 범위를 좁혀둔다(CodeRabbit 리뷰, PR #131).
+                        .requestMatchers(HttpMethod.POST, "/api/test/teams") // [개발용] 매칭 없이 팀 즉시 생성 - 자체 API 키 헤더로 별도 인가
+                        .permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/contests")
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/contests/*")
