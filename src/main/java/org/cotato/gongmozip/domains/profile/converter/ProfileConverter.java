@@ -167,6 +167,12 @@ public class ProfileConverter {
                 .map(c -> new PublicCertificationResponse(c.getCertificateName()))
                 .collect(Collectors.toList());
 
+        org.cotato.gongmozip.domains.member.entity.Member member = profile.getMember();
+        org.cotato.gongmozip.domains.member.enums.Gender gender = member.getGender();
+        java.time.LocalDate birthDate = member.getBirthDate();
+        Integer birthYear = birthDate != null ? birthDate.getYear() : null;
+        Integer age = birthDate != null ? java.time.LocalDate.now().getYear() - birthYear + 1 : null;
+
         return new PublicProfileResponse(
                 profile.getProfileId(),
                 profile.getNickname(),
@@ -179,7 +185,12 @@ public class ProfileConverter {
                 profile.getSecondaryMajor(),
                 projectDetails,
                 awardDetails,
-                certDetails);
+                certDetails,
+                gender,
+                age,
+                birthYear,
+                profile.getGpa(),
+                profile.getGpaScale());
     }
 
     // 비공개 프로필 — 닉네임/캐릭터(아바타)만 채우고 나머지는 전부 비워서 내려준다.
@@ -197,7 +208,12 @@ public class ProfileConverter {
                 null,
                 List.of(),
                 List.of(),
-                List.of());
+                List.of(),
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     private static CharacterSummary toCharacterSummary(CurrentCharacterResponse currentCharacter) {

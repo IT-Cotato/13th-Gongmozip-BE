@@ -44,12 +44,33 @@ class ProfileControllerTest {
 
         given(profileService.getPublicProfile(1L))
                 .willReturn(new PublicProfileResponse(
-                        1L, "러너", null, true, "서울 소재 대학교", "학교", 3, "컴퓨터공학", null, List.of(), List.of(), List.of()));
+                        1L,
+                        "러너",
+                        null,
+                        true,
+                        "서울 소재 대학교",
+                        "학교",
+                        3,
+                        "컴퓨터공학",
+                        null,
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        org.cotato.gongmozip.domains.member.enums.Gender.MALE,
+                        25,
+                        2002,
+                        4.0,
+                        4.5));
 
         mockMvc.perform(get("/api/public/profiles/{profileId}", 1L).with(user(userDetails)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.profileId").value(1L))
-                .andExpect(jsonPath("$.data.nickname").value("러너"));
+                .andExpect(jsonPath("$.data.nickname").value("러너"))
+                .andExpect(jsonPath("$.data.gender").value("MALE"))
+                .andExpect(jsonPath("$.data.age").value(25))
+                .andExpect(jsonPath("$.data.birthYear").value(2002))
+                .andExpect(jsonPath("$.data.gpa").value(4.0))
+                .andExpect(jsonPath("$.data.gpaScale").value(4.5));
     }
 
     @Test

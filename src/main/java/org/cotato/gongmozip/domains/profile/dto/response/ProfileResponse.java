@@ -95,7 +95,13 @@ public class ProfileResponse {
             @Schema(nullable = true, description = "비공개 프로필이면 null") String secondaryMajor,
             List<PublicProjectResponse> projects,
             List<PublicAwardResponse> awards,
-            List<PublicCertificationResponse> certifications) {}
+            List<PublicCertificationResponse> certifications,
+            @Schema(nullable = true, description = "비공개 프로필이면 null")
+                    org.cotato.gongmozip.domains.member.enums.Gender gender,
+            @Schema(nullable = true, description = "비공개 프로필이면 null") Integer age,
+            @Schema(nullable = true, description = "비공개 프로필이면 null") Integer birthYear,
+            @Schema(nullable = true, description = "비공개 프로필이면 null") Double gpa,
+            @Schema(nullable = true, description = "비공개 프로필이면 null") Double gpaScale) {}
 
     public record PublicProjectResponse(String projectName, String role, String aiSummary) {}
 
