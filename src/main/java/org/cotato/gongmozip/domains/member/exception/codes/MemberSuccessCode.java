@@ -20,6 +20,7 @@ public enum MemberSuccessCode implements BaseSuccessCode {
     MARKETING_CONSENT_UPDATED(HttpStatus.OK, "MEMBER_200_6", "마케팅 수신 동의 수정 성공"),
     PROFILE_IMAGE_PRESIGNED_URL_GENERATED(HttpStatus.OK, "MEMBER_200_7", "프로필 이미지 업로드 Presigned URL 발급 성공"),
     PROFILE_IMAGE_UPDATED(HttpStatus.OK, "MEMBER_200_8", "프로필 이미지 수정 성공"),
+    MEMBER_WITHDRAWN(HttpStatus.OK, "MEMBER_200_9", "회원탈퇴가 완료되었습니다."),
 
     // 201
     SIGN_UP_SUCCESS(HttpStatus.CREATED, "MEMBER_201_1", "회원가입에 성공하였습니다.");

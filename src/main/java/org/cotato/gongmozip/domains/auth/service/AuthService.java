@@ -69,6 +69,11 @@ public class AuthService {
                 .findByEmail(request.email())
                 .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
 
+        // 탈퇴한 회원은 로그인 차단
+        if (member.isWithdrawn()) {
+            throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
+        }
+
         String loginFailureKey = LOGIN_FAILURE_PREFIX + member.getMemberId();
         String failureCount = redisUtil.get(loginFailureKey);
         if (failureCount != null && Long.parseLong(failureCount) >= MAX_LOGIN_FAILURES) {
@@ -116,6 +121,15 @@ public class AuthService {
         String storedToken = redisUtil.get(REFRESH_TOKEN_PREFIX + memberId);
         if (!refreshToken.equals(storedToken)) {
             throw new AuthException(AuthErrorCode.INVALID_REFRESH_TOKEN);
+        }
+
+        // 탈퇴한 회원은 재발급을 차단하고, 탈퇴 커밋과 경합해 남아 있을 수 있는 refresh 토큰을 정리한다
+        Member member = memberRepository
+                .findById(memberId)
+                .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
+        if (member.isWithdrawn()) {
+            redisUtil.delete(REFRESH_TOKEN_PREFIX + memberId);
+            throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
         }
 
         // access 토큰과 refresh 토큰 새로 발급

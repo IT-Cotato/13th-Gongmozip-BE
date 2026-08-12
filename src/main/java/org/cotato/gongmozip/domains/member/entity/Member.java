@@ -87,6 +87,13 @@ public class Member extends BaseEntity {
     @Column(name = "profile_image_url")
     private String profileImageUrl;
 
+    @Column(name = "withdrawn_at")
+    private LocalDateTime withdrawnAt;
+
+    @Builder.Default
+    @Column(name = "anonymized", nullable = false)
+    private boolean anonymized = false;
+
     public void registerRequiredInfo(Gender gender, LocalDate birthDate) {
         this.gender = gender;
         this.birthDate = birthDate;
@@ -123,5 +130,29 @@ public class Member extends BaseEntity {
         if (this.matchingBlockedUntil == null || this.matchingBlockedUntil.isBefore(blockedUntil)) {
             this.matchingBlockedUntil = blockedUntil;
         }
+    }
+
+    public boolean isWithdrawn() {
+        return status == MemberStatus.WITHDRAWN;
+    }
+
+    public void withdraw(LocalDateTime withdrawnAt) {
+        this.status = MemberStatus.WITHDRAWN;
+        this.withdrawnAt = withdrawnAt;
+        this.marketingConsentEmail = false;
+        this.marketingConsentSms = false;
+        this.profileImageUrl = null;
+    }
+
+    // 재가입 제한 기간이 지난 뒤 이메일 unique 제약을 해제하고 개인정보를 파기한다.
+    public void anonymize() {
+        this.email = "withdrawn-" + memberId + "@withdrawn.invalid";
+        this.password = null;
+        this.name = null;
+        this.snsType = null;
+        this.snsEmail = null;
+        this.birthDate = null;
+        this.gender = null;
+        this.anonymized = true;
     }
 }

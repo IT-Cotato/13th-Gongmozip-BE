@@ -9,6 +9,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 
 import java.time.LocalDate;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import org.cotato.gongmozip.domains.auth.repository.AuthAccountRepository;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyConfirmRequest;
@@ -16,6 +17,7 @@ import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVe
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.SignUpRequest;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.enums.Gender;
+import org.cotato.gongmozip.domains.member.enums.MemberStatus;
 import org.cotato.gongmozip.domains.member.exception.MemberException;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
@@ -65,7 +67,11 @@ class MemberServiceTest {
     void 이미_가입된_이메일로_인증코드_요청시_중복_이메일_예외가_발생한다() {
         // given
         EmailVerifyRequest request = new EmailVerifyRequest(TEST_EMAIL);
-        given(memberRepository.existsByEmail(TEST_EMAIL)).willReturn(true);
+        given(memberRepository.findByEmail(TEST_EMAIL))
+                .willReturn(Optional.of(Member.builder()
+                        .email(TEST_EMAIL)
+                        .status(MemberStatus.ACTIVE)
+                        .build()));
 
         // when & then
         assertThatThrownBy(() -> memberService.sendVerificationCode(request))
@@ -73,12 +79,29 @@ class MemberServiceTest {
                 .hasMessage(MemberErrorCode.DUPLICATE_EMAIL.getMessage());
     }
 
+    @DisplayName("탈퇴 후 재가입 제한 기간의 이메일로 인증코드를 요청하면 재가입 제한 예외가 발생한다.")
+    @Test
+    void 탈퇴한_이메일로_인증코드_요청시_재가입_제한_예외가_발생한다() {
+        // given
+        EmailVerifyRequest request = new EmailVerifyRequest(TEST_EMAIL);
+        given(memberRepository.findByEmail(TEST_EMAIL))
+                .willReturn(Optional.of(Member.builder()
+                        .email(TEST_EMAIL)
+                        .status(MemberStatus.WITHDRAWN)
+                        .build()));
+
+        // when & then
+        assertThatThrownBy(() -> memberService.sendVerificationCode(request))
+                .isInstanceOf(MemberException.class)
+                .hasMessage(MemberErrorCode.REJOIN_RESTRICTED.getMessage());
+    }
+
     @DisplayName("유효한 이메일로 회원가입 인증코드 전송을 요청한다.")
     @Test
     void 유효한_이메일로_인증코드_요청시_Redis에_코드와_발급내역이_저장된다() {
         // given
         EmailVerifyRequest request = new EmailVerifyRequest(TEST_EMAIL);
-        given(memberRepository.existsByEmail(TEST_EMAIL)).willReturn(false);
+        given(memberRepository.findByEmail(TEST_EMAIL)).willReturn(Optional.empty());
 
         // when
         memberService.sendVerificationCode(request);
@@ -92,7 +115,7 @@ class MemberServiceTest {
     void 이메일_서버_오류로_인증코드_전송_실패시_이메일_전송_실패_예외가_발생한다() {
         // given
         EmailVerifyRequest request = new EmailVerifyRequest(TEST_EMAIL);
-        given(memberRepository.existsByEmail(TEST_EMAIL)).willReturn(false);
+        given(memberRepository.findByEmail(TEST_EMAIL)).willReturn(Optional.empty());
         willThrow(new MailSendException("SMTP timeout"))
                 .given(emailVerificationService)
                 .sendCode(Purpose.SIGN_UP, TEST_EMAIL, "[공모집] 이메일 인증코드");

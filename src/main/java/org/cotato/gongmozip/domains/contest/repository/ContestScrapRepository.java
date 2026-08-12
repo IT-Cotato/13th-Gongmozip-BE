@@ -30,4 +30,8 @@ public interface ContestScrapRepository extends JpaRepository<ContestScrap, Long
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.data.jpa.repository.Query("DELETE FROM ContestScrap cs WHERE cs.contest = :contest")
     void deleteAllByContest(@org.springframework.data.repository.query.Param("contest") Contest contest);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("DELETE FROM ContestScrap cs WHERE cs.member = :member")
+    void deleteAllByMember(@org.springframework.data.repository.query.Param("member") Member member);
 }

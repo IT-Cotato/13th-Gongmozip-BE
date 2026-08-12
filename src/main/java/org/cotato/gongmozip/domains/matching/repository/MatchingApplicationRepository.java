@@ -26,6 +26,18 @@ public interface MatchingApplicationRepository extends JpaRepository<MatchingApp
 
     Optional<MatchingApplication> findByMemberAndApplicationDate(Member member, LocalDate applicationDate);
 
+    // 탈퇴 처리 시 배치 준비와 같은 신청을 두고 경합하지 않도록 행을 잠가 최신 상태를 읽는다
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+            """
+            SELECT ma
+            FROM MatchingApplication ma
+            WHERE ma.member = :member
+              AND ma.status IN :statuses
+            """)
+    List<MatchingApplication> findAllByMemberAndStatusInWithLock(
+            @Param("member") Member member, @Param("statuses") Collection<MatchingApplicationStatus> statuses);
+
     // 결과 조회에서 회원·선택 프로필·배치를 함께 읽어 지연 로딩과 추가 쿼리를 피한다.
     @Query(
             """
@@ -44,6 +56,8 @@ public interface MatchingApplicationRepository extends JpaRepository<MatchingApp
     List<MatchingApplication> findAllByMatchingBatch(MatchingBatch matchingBatch);
 
     // 준비 작업끼리 같은 WAITING 신청을 분류하지 못하도록 아직 배치가 없는 행을 잠가 조회한다.
+    // 탈퇴 시 WAITING 신청은 서비스에서 자동 취소되지만, 데이터 이상 시 탈퇴 회원이
+    // 매칭풀에 섞이지 않도록 ACTIVE 회원 조건으로 한 번 더 방어한다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
             """
@@ -54,6 +68,7 @@ public interface MatchingApplicationRepository extends JpaRepository<MatchingApp
             WHERE ma.applicationDate = :applicationDate
               AND ma.status = :status
               AND ma.matchingBatch IS NULL
+              AND ma.member.status = org.cotato.gongmozip.domains.member.enums.MemberStatus.ACTIVE
             ORDER BY ma.contestCategory, ma.skillScore, ma.createdAt, ma.matchingApplicationId
             """)
     List<MatchingApplication> findUnpreparedWaitingWithLock(
