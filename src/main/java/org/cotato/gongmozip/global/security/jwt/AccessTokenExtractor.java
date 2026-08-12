@@ -20,7 +20,11 @@ public final class AccessTokenExtractor {
     public static String extract(HttpServletRequest request) {
         String bearerToken = request.getHeader(AUTHORIZATION_HEADER);
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith(BEARER_PREFIX)) {
-            return bearerToken.substring(BEARER_PREFIX.length());
+            String token = bearerToken.substring(BEARER_PREFIX.length());
+            // 빈 Bearer 헤더("Bearer ")는 무시하고 쿠키 폴백으로 넘어간다
+            if (StringUtils.hasText(token)) {
+                return token;
+            }
         }
 
         Cookie[] cookies = request.getCookies();
