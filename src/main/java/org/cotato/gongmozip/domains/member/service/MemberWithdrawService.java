@@ -76,9 +76,9 @@ public class MemberWithdrawService {
     @Transactional
     // 회원 탈퇴 메서드
     public void withdraw(Long memberId, String accessToken, WithdrawMemberRequest request) {
-        // 회원이 존재하지 않는 경우
+        // 회원 행을 잠가 탈퇴 진행 중 매칭 신청 등 동시 요청이 끼어들지 못하게 한다
         Member member = memberRepository
-                .findById(memberId)
+                .findByIdWithLock(memberId)
                 .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
 
         // 이미 탈퇴한 회원인 경우
