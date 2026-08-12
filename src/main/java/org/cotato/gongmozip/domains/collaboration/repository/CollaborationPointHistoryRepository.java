@@ -31,4 +31,8 @@ public interface CollaborationPointHistoryRepository extends JpaRepository<Colla
               AND h.createdAt >= :since
             """)
     long sumLossSince(@Param("member") Member member, @Param("since") LocalDateTime since);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("DELETE FROM CollaborationPointHistory h WHERE h.member = :member")
+    void deleteAllByMember(@Param("member") Member member);
 }
