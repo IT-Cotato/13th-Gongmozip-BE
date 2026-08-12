@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import org.cotato.gongmozip.domains.member.enums.Gender;
+import org.cotato.gongmozip.domains.member.enums.WithdrawalReasonType;
 import org.cotato.gongmozip.global.validation.annotation.ValidBirthDate;
 
 public final class MemberRequest {
@@ -25,4 +26,9 @@ public final class MemberRequest {
             @NotBlank(message = "컨텐츠 타입은 필수 입력 항목입니다.") String contentType) {}
 
     public record UpdateProfileImageRequest(String profileImageUrl) {}
+
+    public record WithdrawMemberRequest(
+            String password,
+            @NotNull(message = "탈퇴 사유는 필수 입력 항목입니다.") WithdrawalReasonType reason,
+            @Size(max = 500, message = "탈퇴 사유 상세는 최대 500자까지 입력 가능합니다.") String reasonDetail) {}
 }

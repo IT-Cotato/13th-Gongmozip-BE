@@ -2,16 +2,19 @@ package org.cotato.gongmozip.domains.member.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyConfirmRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.EmailVerifyRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.RegisterRequiredInfoRequest;
 import org.cotato.gongmozip.domains.member.dto.request.MemberAuthRequest.SignUpRequest;
+import org.cotato.gongmozip.domains.member.dto.request.MemberRequest.WithdrawMemberRequest;
 import org.cotato.gongmozip.domains.member.dto.response.MemberAuthResponse.SignUpResponse;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberSuccessCode;
 import org.cotato.gongmozip.domains.member.service.MemberService;
+import org.cotato.gongmozip.domains.member.service.MemberWithdrawService;
 import org.cotato.gongmozip.global.exception.GlobalErrorCode;
 import org.cotato.gongmozip.global.response.BaseResponse;
 import org.cotato.gongmozip.global.response.BaseResponseFormatter;
@@ -19,6 +22,8 @@ import org.cotato.gongmozip.global.security.jwt.CustomUserDetails;
 import org.cotato.gongmozip.global.swagger.CustomErrorCodes;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MemberController {
 
     private final MemberService memberService;
+    private final MemberWithdrawService memberWithdrawService;
 
     @Operation(summary = "이메일 인증코드 발송")
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = MemberErrorCode.class)
@@ -125,5 +131,25 @@ public class MemberController {
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         memberService.updateProfileImage(userDetails.getMemberId(), request);
         return BaseResponseFormatter.success(MemberSuccessCode.PROFILE_IMAGE_UPDATED);
+    }
+
+    @Operation(summary = "회원 탈퇴", description = "이메일 가입 회원은 비밀번호 검증 후 탈퇴 처리됩니다. 탈퇴 후 14일간 같은 이메일로 재가입할 수 없습니다.")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = MemberErrorCode.class)
+    @DeleteMapping("/me")
+    public ResponseEntity<BaseResponse<Void>> withdraw(
+            @RequestBody @Valid WithdrawMemberRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            HttpServletRequest httpRequest) {
+        memberWithdrawService.withdraw(userDetails.getMemberId(), extractToken(httpRequest), request);
+        return BaseResponseFormatter.success(MemberSuccessCode.MEMBER_WITHDRAWN);
+    }
+
+    // Authorization 헤더에서 access 토큰 추출 (탈퇴 시 블랙리스트 처리용)
+    private String extractToken(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
     }
 }
