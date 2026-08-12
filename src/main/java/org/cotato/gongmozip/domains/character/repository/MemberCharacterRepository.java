@@ -7,6 +7,7 @@ import org.cotato.gongmozip.domains.member.entity.Member;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface MemberCharacterRepository extends JpaRepository<MemberCharacter, Long> {
 
@@ -16,5 +17,5 @@ public interface MemberCharacterRepository extends JpaRepository<MemberCharacter
 
     @Modifying
     @Query("DELETE FROM MemberCharacter mc WHERE mc.member = :member")
-    void deleteAllByMember(Member member);
+    void deleteAllByMember(@Param("member") Member member);
 }
