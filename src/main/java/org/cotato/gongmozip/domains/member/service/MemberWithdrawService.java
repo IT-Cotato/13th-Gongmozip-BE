@@ -143,8 +143,9 @@ public class MemberWithdrawService {
 
     // 대기 중인 매칭 신청은 자동 철회하고, 배치 진행 중인 신청이 있으면 탈퇴를 차단한다
     private void cancelWaitingApplications(Member member) {
+        // 배치 준비·계산과 경합하지 않도록 행을 잠근 뒤 최신 상태로 차단 여부를 판단한다
         List<MatchingApplication> applications =
-                matchingApplicationRepository.findAllByMemberAndStatusIn(member, ACTIVE_APPLICATION_STATUSES);
+                matchingApplicationRepository.findAllByMemberAndStatusInWithLock(member, ACTIVE_APPLICATION_STATUSES);
 
         boolean hasBlockingApplication = applications.stream()
                 .anyMatch(application -> application.getStatus() != MatchingApplicationStatus.WAITING);

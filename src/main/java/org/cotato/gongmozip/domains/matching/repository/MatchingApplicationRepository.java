@@ -26,7 +26,17 @@ public interface MatchingApplicationRepository extends JpaRepository<MatchingApp
 
     Optional<MatchingApplication> findByMemberAndApplicationDate(Member member, LocalDate applicationDate);
 
-    List<MatchingApplication> findAllByMemberAndStatusIn(Member member, Collection<MatchingApplicationStatus> statuses);
+    // 탈퇴 처리 시 배치 준비와 같은 신청을 두고 경합하지 않도록 행을 잠가 최신 상태를 읽는다
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+            """
+            SELECT ma
+            FROM MatchingApplication ma
+            WHERE ma.member = :member
+              AND ma.status IN :statuses
+            """)
+    List<MatchingApplication> findAllByMemberAndStatusInWithLock(
+            @Param("member") Member member, @Param("statuses") Collection<MatchingApplicationStatus> statuses);
 
     // 결과 조회에서 회원·선택 프로필·배치를 함께 읽어 지연 로딩과 추가 쿼리를 피한다.
     @Query(
