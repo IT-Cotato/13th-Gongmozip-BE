@@ -39,6 +39,9 @@ class MemberControllerTest {
     @MockitoBean
     private MemberService memberService;
 
+    @MockitoBean
+    private org.cotato.gongmozip.domains.member.service.MemberWithdrawService memberWithdrawService;
+
     private Member member() {
         return Member.builder()
                 .memberId(1L)
@@ -139,5 +142,38 @@ class MemberControllerTest {
                         .with(user(new CustomUserDetails(member))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("MEMBER_200_8"));
+    }
+
+    @Test
+    @DisplayName("로그인한 회원은 탈퇴 사유와 비밀번호로 회원 탈퇴할 수 있다")
+    void withdrawSuccess() throws Exception {
+        Member member = member();
+        org.cotato.gongmozip.domains.member.dto.request.MemberRequest.WithdrawMemberRequest request =
+                new org.cotato.gongmozip.domains.member.dto.request.MemberRequest.WithdrawMemberRequest(
+                        "password123!",
+                        org.cotato.gongmozip.domains.member.enums.WithdrawalReasonType.MATCHING_DISSATISFIED,
+                        null);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/members/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .with(user(new CustomUserDetails(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("MEMBER_200_9"));
+    }
+
+    @Test
+    @DisplayName("탈퇴 사유 없이 회원 탈퇴를 요청하면 실패한다")
+    void withdrawFailsWithoutReason() throws Exception {
+        Member member = member();
+        org.cotato.gongmozip.domains.member.dto.request.MemberRequest.WithdrawMemberRequest request =
+                new org.cotato.gongmozip.domains.member.dto.request.MemberRequest.WithdrawMemberRequest(
+                        "password123!", null, null);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/members/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .with(user(new CustomUserDetails(member))))
+                .andExpect(status().isBadRequest());
     }
 }
