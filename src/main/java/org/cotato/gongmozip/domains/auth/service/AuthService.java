@@ -123,6 +123,15 @@ public class AuthService {
             throw new AuthException(AuthErrorCode.INVALID_REFRESH_TOKEN);
         }
 
+        // 탈퇴한 회원은 재발급을 차단하고, 탈퇴 커밋과 경합해 남아 있을 수 있는 refresh 토큰을 정리한다
+        Member member = memberRepository
+                .findById(memberId)
+                .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
+        if (member.isWithdrawn()) {
+            redisUtil.delete(REFRESH_TOKEN_PREFIX + memberId);
+            throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
+        }
+
         // access 토큰과 refresh 토큰 새로 발급
         String newAccessToken = jwtProvider.generateAccessToken(memberId, email);
         String newRefreshToken = jwtProvider.generateRefreshToken(memberId, email);

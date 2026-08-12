@@ -286,6 +286,25 @@ class AuthServiceTest {
                 .hasMessage(AuthErrorCode.INVALID_REFRESH_TOKEN.getMessage());
     }
 
+    @DisplayName("탈퇴한 회원이 재발급하면 탈퇴 회원 예외가 발생하고 Refresh Token이 삭제된다.")
+    @Test
+    void 탈퇴한_회원이_재발급하면_탈퇴_회원_예외가_발생하고_RefreshToken이_삭제된다() {
+        // given
+        Member member = createMember();
+        member.withdraw(java.time.LocalDateTime.now());
+        given(jwtProvider.validateToken(REFRESH_TOKEN)).willReturn(true);
+        given(jwtProvider.getMemberId(REFRESH_TOKEN)).willReturn(TEST_MEMBER_ID);
+        given(redisUtil.get("refresh:" + TEST_MEMBER_ID)).willReturn(REFRESH_TOKEN);
+        given(memberRepository.findById(TEST_MEMBER_ID)).willReturn(Optional.of(member));
+
+        // when & then
+        assertThatThrownBy(() -> authService.reissue(REFRESH_TOKEN))
+                .isInstanceOf(MemberException.class)
+                .hasMessage(MemberErrorCode.WITHDRAWN_MEMBER.getMessage());
+        then(redisUtil).should().delete("refresh:" + TEST_MEMBER_ID);
+        then(jwtProvider).should(never()).generateAccessToken(anyLong(), anyString());
+    }
+
     @DisplayName("재발급 성공 시 새 Access Token과 Refresh Token이 반환된다.")
     @Test
     void 재발급_성공_시_새_AccessToken과_RefreshToken이_반환된다() {
@@ -294,6 +313,7 @@ class AuthServiceTest {
         given(jwtProvider.getMemberId(REFRESH_TOKEN)).willReturn(TEST_MEMBER_ID);
         given(jwtProvider.getEmail(REFRESH_TOKEN)).willReturn(TEST_EMAIL);
         given(redisUtil.get("refresh:" + TEST_MEMBER_ID)).willReturn(REFRESH_TOKEN);
+        given(memberRepository.findById(TEST_MEMBER_ID)).willReturn(Optional.of(createMember()));
         given(jwtProvider.generateAccessToken(TEST_MEMBER_ID, TEST_EMAIL)).willReturn(NEW_ACCESS_TOKEN);
         given(jwtProvider.generateRefreshToken(TEST_MEMBER_ID, TEST_EMAIL)).willReturn(NEW_REFRESH_TOKEN);
 
@@ -313,6 +333,7 @@ class AuthServiceTest {
         given(jwtProvider.getMemberId(REFRESH_TOKEN)).willReturn(TEST_MEMBER_ID);
         given(jwtProvider.getEmail(REFRESH_TOKEN)).willReturn(TEST_EMAIL);
         given(redisUtil.get("refresh:" + TEST_MEMBER_ID)).willReturn(REFRESH_TOKEN);
+        given(memberRepository.findById(TEST_MEMBER_ID)).willReturn(Optional.of(createMember()));
         given(jwtProvider.generateAccessToken(TEST_MEMBER_ID, TEST_EMAIL)).willReturn(NEW_ACCESS_TOKEN);
         given(jwtProvider.generateRefreshToken(TEST_MEMBER_ID, TEST_EMAIL)).willReturn(NEW_REFRESH_TOKEN);
 
