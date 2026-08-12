@@ -44,10 +44,8 @@ public class MemberService {
     // 회원가입 인증 코드 전송 메서드
     public void sendVerificationCode(EmailVerifyRequest request) {
 
-        // 이메일이 DB에 존재하는 경우(중복 가입 방지)
-        if (memberRepository.existsByEmail(request.email())) {
-            throw new CustomException(MemberErrorCode.DUPLICATE_EMAIL);
-        }
+        // 이메일이 DB에 존재하는 경우(중복 가입 방지), 탈퇴 회원이면 재가입 제한 안내
+        validateEmailNotRegistered(request.email());
 
         // 공통 이메일 인증 서비스를 통해 인증 코드 전송
         try {
@@ -82,6 +80,9 @@ public class MemberService {
             throw new MemberException(MemberErrorCode.EMAIL_NOT_VERIFIED);
         }
 
+        // 인증 코드 발송 이후 가입/탈퇴가 발생했을 수 있으므로 가입 시점에 다시 검증
+        validateEmailNotRegistered(request.email());
+
         try {
             // 비밀번호를 암호화하여 회원 저장
             Member member = MemberConverter.toMember(request, passwordEncoder.encode(request.password()));
@@ -98,6 +99,16 @@ public class MemberService {
             // 동시에 같은 이메일로 가입한 경우
             throw new MemberException(MemberErrorCode.DUPLICATE_EMAIL);
         }
+    }
+
+    // 이미 가입된 이메일이면 중복 예외, 재가입 제한 기간 중인 탈퇴 회원이면 재가입 제한 예외를 던진다
+    private void validateEmailNotRegistered(String email) {
+        memberRepository.findByEmail(email).ifPresent(existing -> {
+            if (existing.isWithdrawn()) {
+                throw new MemberException(MemberErrorCode.REJOIN_RESTRICTED);
+            }
+            throw new CustomException(MemberErrorCode.DUPLICATE_EMAIL);
+        });
     }
 
     @Transactional

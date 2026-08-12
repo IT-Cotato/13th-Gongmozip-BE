@@ -12,6 +12,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.domains.member.exception.MemberException;
 import org.cotato.gongmozip.global.redis.RedisUtil;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -58,6 +59,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 request.setAttribute(TOKEN_EXPIRED_ATTRIBUTE, true);
             } catch (JwtException | IllegalArgumentException e) {
                 // 위조/무효 토큰은 인증 없이 통과시켜 EntryPoint에서 UNAUTHORIZED 처리
+            } catch (MemberException e) {
+                // 탈퇴했거나 존재하지 않는 회원의 토큰도 인증 없이 통과시켜 UNAUTHORIZED 처리
             }
         }
 

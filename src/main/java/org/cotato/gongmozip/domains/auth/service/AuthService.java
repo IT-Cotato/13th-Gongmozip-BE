@@ -69,6 +69,11 @@ public class AuthService {
                 .findByEmail(request.email())
                 .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
 
+        // 탈퇴한 회원은 로그인 차단
+        if (member.isWithdrawn()) {
+            throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
+        }
+
         String loginFailureKey = LOGIN_FAILURE_PREFIX + member.getMemberId();
         String failureCount = redisUtil.get(loginFailureKey);
         if (failureCount != null && Long.parseLong(failureCount) >= MAX_LOGIN_FAILURES) {

@@ -46,6 +46,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 .findByProviderAndProviderMemberId(provider, providerMemberId)
                 .map(authAccount -> {
                     Member member = authAccount.getMember();
+                    validateNotWithdrawn(member);
                     return new CustomOAuth2User(member, provider, isRequiredInfoMissing(member));
                 })
                 .orElseGet(() -> registerOrLink(email, provider, providerMemberId));
@@ -62,6 +63,9 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                         .emailVerifiedAt(LocalDateTime.now())
                         .build()));
 
+        // 재가입 제한 기간 중인 탈퇴 회원에게 소셜 계정이 재연동되는 것을 차단한다
+        validateNotWithdrawn(member);
+
         // 소셜 인증 계정 저장
         authAccountRepository.save(AuthAccount.builder()
                 .member(member)
@@ -70,6 +74,12 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 .build());
 
         return new CustomOAuth2User(member, provider, isRequiredInfoMissing(member));
+    }
+
+    private void validateNotWithdrawn(Member member) {
+        if (member.isWithdrawn()) {
+            throw new OAuth2AuthenticationException("탈퇴한 회원입니다. 탈퇴 후 14일간 재가입할 수 없습니다.");
+        }
     }
 
     private boolean isRequiredInfoMissing(Member member) {
