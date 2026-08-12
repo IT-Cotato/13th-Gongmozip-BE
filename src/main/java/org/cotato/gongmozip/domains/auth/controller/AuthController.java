@@ -20,6 +20,7 @@ import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
 import org.cotato.gongmozip.global.exception.GlobalErrorCode;
 import org.cotato.gongmozip.global.response.BaseResponse;
 import org.cotato.gongmozip.global.response.BaseResponseFormatter;
+import org.cotato.gongmozip.global.security.jwt.AccessTokenExtractor;
 import org.cotato.gongmozip.global.security.jwt.CustomUserDetails;
 import org.cotato.gongmozip.global.swagger.CustomErrorCodes;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,7 +28,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -61,7 +61,7 @@ public class AuthController {
         ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, result.refreshToken())
                 .httpOnly(true) // XSS 공격 방어
                 .secure(true)
-                .sameSite("None")
+                .sameSite("Lax") // same-site(gongmozip.site)라 CSRF 방어 강화
                 .maxAge(refreshTokenExpiration / 1000) // 쿠키 만료 시간(14일)
                 .path("/api/auth") // 쿠키는 api/auth인 경우에만 전송
                 .build();
@@ -78,17 +78,27 @@ public class AuthController {
             HttpServletResponse response // 쿠키 제거용
             ) {
 
-        String accessToken = extractToken(request);
+        String accessToken = AccessTokenExtractor.extract(request);
         authService.logout(userDetails.getMemberId(), accessToken);
 
-        ResponseCookie deleteCookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, "")
+        ResponseCookie deleteRefreshCookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, "")
                 .httpOnly(true)
                 .secure(true)
-                .sameSite("None")
+                .sameSite("Lax")
                 .maxAge(0) // 쿠키 즉시 만료
                 .path("/api/auth")
                 .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, deleteCookie.toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, deleteRefreshCookie.toString());
+
+        // 소셜 로그인 시 발급되는 HttpOnly accessToken 쿠키는 JS에서 삭제할 수 없으므로 서버에서 만료 처리
+        ResponseCookie deleteAccessCookie = ResponseCookie.from(AccessTokenExtractor.ACCESS_TOKEN_COOKIE, "")
+                .httpOnly(true)
+                .secure(true)
+                .sameSite("Lax")
+                .maxAge(0)
+                .path("/")
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, deleteAccessCookie.toString());
 
         return BaseResponseFormatter.success(AuthSuccessCode.LOGOUT_SUCCESS);
     }
@@ -107,7 +117,7 @@ public class AuthController {
         ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, result.refreshToken())
                 .httpOnly(true)
                 .secure(true)
-                .sameSite("None")
+                .sameSite("Lax")
                 .maxAge(refreshTokenExpiration / 1000)
                 .path("/api/auth")
                 .build();
@@ -146,13 +156,5 @@ public class AuthController {
     public ResponseEntity<BaseResponse<Void>> resetPassword(@RequestBody @Valid PasswordResetRequest request) {
         authService.resetPassword(request);
         return BaseResponseFormatter.success(AuthSuccessCode.PASSWORD_RESET_SUCCESS);
-    }
-
-    private String extractToken(HttpServletRequest request) {
-        String bearerToken = request.getHeader("Authorization");
-        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7);
-        }
-        return null;
     }
 }

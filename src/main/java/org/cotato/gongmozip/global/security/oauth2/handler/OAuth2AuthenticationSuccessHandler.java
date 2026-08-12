@@ -52,11 +52,13 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         // Redis에 리프레시 토큰 저장
         redisUtil.set(REFRESH_TOKEN_PREFIX + memberId, refreshToken, refreshTokenExpiration, TimeUnit.MILLISECONDS);
 
-        // Access Token: JS에서 읽어 Authorization 헤더로 사용하므로 non-HttpOnly
+        // Access Token: XSS 탈취 방지를 위해 HttpOnly. 프론트(gongmozip.site)와 백엔드(api.gongmozip.site)가
+        // same-site라 브라우저가 자동 전송하며, 서버는 쿠키에서 직접 토큰을 읽는다(AccessTokenExtractor).
+        // JS에서 토큰이 필요한 경우(WebSocket CONNECT 등)는 /api/auth/reissue 응답 바디로 받는다.
         ResponseCookie accessCookie = ResponseCookie.from(ACCESS_TOKEN_COOKIE, accessToken)
-                .httpOnly(false)
+                .httpOnly(true)
                 .secure(true)
-                .sameSite("None")
+                .sameSite("Lax")
                 .maxAge(accessTokenExpiration / 1000)
                 .path("/")
                 .build();
@@ -65,7 +67,7 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         ResponseCookie refreshCookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, refreshToken)
                 .httpOnly(true)
                 .secure(true)
-                .sameSite("None")
+                .sameSite("Lax")
                 .maxAge(refreshTokenExpiration / 1000)
                 .path("/api/auth")
                 .build();
