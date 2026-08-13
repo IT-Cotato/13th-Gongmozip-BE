@@ -50,18 +50,18 @@ public class ProjectExperience extends BaseEntity {
     @Builder.Default
     private ProjectCategory category = ProjectCategory.CONTEST;
 
-    @Column(name = "description", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "role", nullable = false, length = 200)
+    @Column(name = "role", length = 200)
     private String role;
 
     @Convert(converter = StringListConverter.class)
-    @Column(name = "tech_stacks", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "tech_stacks", columnDefinition = "TEXT")
     @Builder.Default
     private List<String> techStacks = new ArrayList<>();
 
-    @Column(name = "started_at", nullable = false)
+    @Column(name = "started_at")
     private LocalDate startedAt;
 
     @Column(name = "ended_at")

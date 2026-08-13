@@ -41,12 +41,12 @@ public class ProfileRequest {
     public record CreateProjectRequest(
             @NotBlank @Size(min = 1, max = 200) String projectName,
             @NotNull ProjectCategory category,
-            @NotBlank @Size(max = 3000) String description,
-            @NotBlank @Size(max = 200) String role,
-            @NotNull @Size(min = 1) List<String> techStacks,
-            @NotNull LocalDate startedAt,
+            @Size(max = 3000) String description,
+            @Size(max = 200) String role,
+            List<String> techStacks,
+            LocalDate startedAt,
             LocalDate endedAt,
-            @NotNull Boolean isOngoing) {}
+            Boolean isOngoing) {}
 
     public record UpdateProjectRequest(
             @Size(min = 1, max = 200) String projectName,

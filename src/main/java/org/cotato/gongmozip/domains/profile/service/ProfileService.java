@@ -206,7 +206,8 @@ public class ProfileService {
     @Transactional
     public ProjectResponse createProject(Long profileId, CreateProjectRequest request, Member member) {
         Profile profile = getProfileAndValidateOwner(profileId, member);
-        validateProjectPeriod(request.startedAt(), request.endedAt(), request.isOngoing());
+        validateProjectPeriod(
+                request.startedAt(), request.endedAt(), request.isOngoing() != null ? request.isOngoing() : false);
 
         ProjectExperience project = ProfileConverter.toProjectExperience(request, profile);
         projectExperienceRepository.save(project);
