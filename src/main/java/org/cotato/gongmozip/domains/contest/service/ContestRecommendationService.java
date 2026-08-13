@@ -1,6 +1,8 @@
 package org.cotato.gongmozip.domains.contest.service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,8 +49,26 @@ public class ContestRecommendationService {
         Member member = memberRepository
                 .findById(memberId)
                 .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
-        Profile representProfile = getRepresentProfile(member);
-        return getRecommendationsForProfile(representProfile);
+        List<Profile> profiles = profileRepository.findAllByMemberOrderByUpdatedAtDesc(member);
+        if (profiles.isEmpty()) {
+            return getRecentRandomRecommendations();
+        }
+        return getRecommendationsForProfile(profiles.get(0));
+    }
+
+    private List<ContestSummaryResponse> getRecentRandomRecommendations() {
+        var page = contestRepository.findAllWithFilterAndNewest(
+                null, null, "OPEN", LocalDateTime.now(), PageRequest.of(0, 10));
+        List<Contest> recentContests = page != null ? page.getContent() : Collections.emptyList();
+
+        List<Contest> mutableRecent = new ArrayList<>(recentContests);
+        Collections.shuffle(mutableRecent);
+
+        return mutableRecent.stream()
+                .limit(3)
+                .map(c -> org.cotato.gongmozip.domains.contest.converter.ContestConverter.toContestSummaryResponse(
+                        c, LocalDateTime.now()))
+                .toList();
     }
 
     public List<ContestSummaryResponse> getProfileRecommendations(Long profileId, Long memberId) {
@@ -125,9 +145,25 @@ public class ContestRecommendationService {
         InterestCategory category =
                 profile.getInterestCategories().stream().findFirst().orElse(InterestCategory.IT_AI_TECH);
 
-        List<Contest> openContests = contestRepository
+        List<Contest> openContests = new ArrayList<>(contestRepository
                 .findAllWithFilterAndDeadlineAsc(null, category, "OPEN", LocalDateTime.now(), PageRequest.of(0, 10))
-                .getContent();
+                .getContent());
+
+        if (openContests.size() < 3) {
+            var page = contestRepository.findAllWithFilterAndNewest(
+                    null, null, "OPEN", LocalDateTime.now(), PageRequest.of(0, 10));
+            if (page != null) {
+                List<Contest> fallbackContests = page.getContent();
+                for (Contest fallback : fallbackContests) {
+                    if (openContests.size() >= 10) {
+                        break;
+                    }
+                    if (openContests.stream().noneMatch(c -> c.getContestId().equals(fallback.getContestId()))) {
+                        openContests.add(fallback);
+                    }
+                }
+            }
+        }
 
         List<Long> contestIds = openContests.stream().map(Contest::getContestId).toList();
 
