@@ -286,4 +286,123 @@ class ContestRecommendationServiceTest {
         assertThat(response.reason()).contains("리드러너");
         assertThat(response.reason()).doesNotContain("이전 완주 프로젝트인");
     }
+
+    @DisplayName("유저의 프로필이 없는 경우 최근 등록된 오픈 공모전 중 최대 3개를 추천한다.")
+    @Test
+    void 유저의_프로필이_없는_경우_최근_등록된_공모전을_추천한다() {
+        // given
+        Long memberId = 1L;
+        Member member = Member.builder().memberId(memberId).build();
+        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
+        given(profileRepository.findAllByMemberOrderByUpdatedAtDesc(member)).willReturn(Collections.emptyList());
+
+        Contest contest1 = Contest.builder()
+                .contestId(1L)
+                .status(ContestStatus.OPEN)
+                .applyEndAt(LocalDateTime.now().plusDays(7))
+                .build();
+        Contest contest2 = Contest.builder()
+                .contestId(2L)
+                .status(ContestStatus.OPEN)
+                .applyEndAt(LocalDateTime.now().plusDays(7))
+                .build();
+        Contest contest3 = Contest.builder()
+                .contestId(3L)
+                .status(ContestStatus.OPEN)
+                .applyEndAt(LocalDateTime.now().plusDays(7))
+                .build();
+        Contest contest4 = Contest.builder()
+                .contestId(4L)
+                .status(ContestStatus.OPEN)
+                .applyEndAt(LocalDateTime.now().plusDays(7))
+                .build();
+        List<Contest> mockContests = List.of(contest1, contest2, contest3, contest4);
+
+        given(contestRepository.findAllWithFilterAndNewest(
+                        any(),
+                        any(),
+                        any(),
+                        any(LocalDateTime.class),
+                        any(org.springframework.data.domain.Pageable.class)))
+                .willReturn(new PageImpl<>(mockContests));
+
+        // when
+        List<org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.ContestSummaryResponse> response =
+                contestRecommendationService.getHomeRecommendations(memberId);
+
+        // then
+        assertThat(response).hasSize(3);
+    }
+
+    @DisplayName("선호 카테고리 공모전이 3개 미만인 경우 전체 최신 공모전으로 채워서 추천한다.")
+    @Test
+    void 선호_카테고리_공모전이_부족한_경우_전체_공모전으로_채운다() {
+        // given
+        Long memberId = 1L;
+        Member member = Member.builder().memberId(memberId).build();
+        Profile profile = Profile.builder()
+                .profileId(10L)
+                .member(member)
+                .interestCategories(List.of(InterestCategory.IT_AI_TECH))
+                .build();
+
+        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
+        given(profileRepository.findAllByMemberOrderByUpdatedAtDesc(member))
+                .willReturn(Collections.singletonList(profile));
+
+        Contest contest1 = Contest.builder()
+                .contestId(1L)
+                .title("컨테스트1")
+                .category(InterestCategory.IT_AI_TECH)
+                .status(ContestStatus.OPEN)
+                .applyEndAt(LocalDateTime.now().plusDays(7))
+                .build();
+        Contest contest2 = Contest.builder()
+                .contestId(2L)
+                .title("컨테스트2")
+                .category(InterestCategory.MARKETING_AD_BRANDING)
+                .status(ContestStatus.OPEN)
+                .applyEndAt(LocalDateTime.now().plusDays(7))
+                .build();
+        Contest contest3 = Contest.builder()
+                .contestId(3L)
+                .title("컨테스트3")
+                .category(InterestCategory.ART_DESIGN)
+                .status(ContestStatus.OPEN)
+                .applyEndAt(LocalDateTime.now().plusDays(7))
+                .build();
+
+        // 선호 카테고리는 1개만 조회됨
+        given(contestRepository.findAllWithFilterAndDeadlineAsc(
+                        any(),
+                        eq(InterestCategory.IT_AI_TECH),
+                        any(),
+                        any(LocalDateTime.class),
+                        any(org.springframework.data.domain.Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(contest1)));
+
+        // 폴백 조회를 통해 전체 최신 오픈 공모전들을 조회함
+        given(contestRepository.findAllWithFilterAndNewest(
+                        any(),
+                        any(),
+                        any(),
+                        any(LocalDateTime.class),
+                        any(org.springframework.data.domain.Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(contest1, contest2, contest3)));
+
+        given(teamMemberRepository.findCompletedProjectsAll(any(), any(), any()))
+                .willReturn(List.of());
+
+        // AI client가 1, 2, 3번 공모전을 추천 리스트로 반환함
+        given(aiClient.recommendContests(eq(InterestCategory.IT_AI_TECH), eq(List.of(1L, 2L, 3L)), any()))
+                .willReturn(List.of(1L, 2L, 3L));
+
+        // when
+        List<org.cotato.gongmozip.domains.contest.dto.response.ContestResponse.ContestSummaryResponse> response =
+                contestRecommendationService.getHomeRecommendations(memberId);
+
+        // then
+        assertThat(response).hasSize(3);
+        assertThat(response.stream().map(r -> r.contestId()).toList()).containsExactlyInAnyOrder(1L, 2L, 3L);
+    }
 }
