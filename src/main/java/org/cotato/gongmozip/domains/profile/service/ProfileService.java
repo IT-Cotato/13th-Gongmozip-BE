@@ -664,10 +664,7 @@ public class ProfileService {
                 throw new ProfileException(ProfileErrorCode.INVALID_PROJECT_PERIOD);
             }
         } else {
-            if (ended == null) {
-                throw new ProfileException(ProfileErrorCode.INVALID_PROJECT_PERIOD);
-            }
-            if (ended.isBefore(started)) {
+            if (ended != null && ended.isBefore(started)) {
                 throw new ProfileException(ProfileErrorCode.INVALID_PROJECT_PERIOD);
             }
         }
