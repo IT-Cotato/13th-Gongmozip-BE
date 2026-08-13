@@ -273,6 +273,48 @@ class ProfileServiceTest {
                 .hasMessage(ProfileErrorCode.CANNOT_DELETE_REFERENCED_PROFILE.getMessage());
     }
 
+    @DisplayName("프로젝트명과 카테고리만 입력하고 나머지 필드가 null이어도 정상 등록된다.")
+    @Test
+    void 프로젝트명과_카테고리만_있어도_정상_등록된다() {
+        // given
+        Profile profile =
+                Profile.builder().profileId(10L).member(member).nickname("러너").build();
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
+
+        CreateProjectRequest request =
+                new CreateProjectRequest("프로젝트", ProjectCategory.CONTEST, null, null, null, null, null, null);
+
+        // when
+        ProjectResponse response = profileService.createProject(10L, request, member);
+
+        // then
+        assertThat(response.projectName()).isEqualTo("프로젝트");
+        assertThat(response.isOngoing()).isFalse();
+        assertThat(response.techStacks()).isEmpty();
+        then(projectExperienceRepository).should().save(any(ProjectExperience.class));
+    }
+
+    @DisplayName("시작일만 입력하고 나머지 필드가 null이어도 정상 등록된다.")
+    @Test
+    void 시작일만_있어도_정상_등록된다() {
+        // given
+        Profile profile =
+                Profile.builder().profileId(10L).member(member).nickname("러너").build();
+        given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
+
+        CreateProjectRequest request = new CreateProjectRequest(
+                "프로젝트", ProjectCategory.CONTEST, null, null, null, LocalDate.of(2026, 1, 1), null, null);
+
+        // when
+        ProjectResponse response = profileService.createProject(10L, request, member);
+
+        // then
+        assertThat(response.projectName()).isEqualTo("프로젝트");
+        assertThat(response.startedAt()).isEqualTo(LocalDate.of(2026, 1, 1));
+        assertThat(response.isOngoing()).isFalse();
+        then(projectExperienceRepository).should().save(any(ProjectExperience.class));
+    }
+
     // 프로젝트 경험 CRUD & 날짜 검증 테스트
 
     @DisplayName("진행 중인 프로젝트 경험을 등록하는 경우 종료일(endedAt)이 null이어도 정상 등록된다.")

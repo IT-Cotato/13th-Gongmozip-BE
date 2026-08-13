@@ -373,10 +373,10 @@ public class ProfileConverter {
                 .category(request.category())
                 .description(request.description())
                 .role(request.role())
-                .techStacks(request.techStacks())
+                .techStacks(request.techStacks() != null ? request.techStacks() : List.of())
                 .startedAt(request.startedAt())
                 .endedAt(request.endedAt())
-                .isOngoing(request.isOngoing())
+                .isOngoing(request.isOngoing() != null ? request.isOngoing() : false)
                 .build();
     }
 
