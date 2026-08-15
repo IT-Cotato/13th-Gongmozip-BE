@@ -70,12 +70,19 @@ public class Team extends BaseEntity {
     @Column(name = "contest_candidate_deadline_at")
     private LocalDateTime contestCandidateDeadlineAt;
 
-    // 팀장 여부 투표/팀장 투표 마감 시각. LEADER_SELECTING 진입 시(팀장 여부 투표 카드 또는
-    // 후보 투표 카드 발행 시점) 세팅되며, 스케줄러가 이 시각이 지났는데도 팀이 LEADER_SELECTING
-    // 이면 강제로 결과를 확정한다 (docs/decisions/02-leader-election.md 참고). AUTO_ASSIGNED는
+    // 팀장 "후보 등록"(팀장 여부 투표) 마감 시각. LEADER_SELECTING 진입 시 세팅되며, 스케줄러가
+    // 이 시각이 지났는데도 후보 등록이 안 끝났으면 응답 안 한 사람을 "안 할래요"로 간주하고
+    // 강제로 다음 단계로 넘긴다 (docs/decisions/02-leader-election.md 참고). AUTO_ASSIGNED는
     // 대기 없이 즉시 확정되므로 세팅되지 않는다.
-    @Column(name = "leader_selection_deadline_at")
-    private LocalDateTime leaderSelectionDeadlineAt;
+    @Column(name = "leader_candidacy_deadline_at")
+    private LocalDateTime leaderCandidacyDeadlineAt;
+
+    // 팀장 "투표" 마감 시각. 후보 등록이 끝나 투표 카드가 처음 발행될 때 세팅되고, 동률로 재투표
+    // 카드가 다시 발행될 때마다 새로 세팅된다(라운드마다 독립된 마감, 2026-08-15 갱신 — 후보
+    // 등록 마감과 분리하면서 결정, docs/decisions/02-leader-election.md 참고). 스케줄러가 이
+    // 시각이 지났는데도 팀이 LEADER_SELECTING이면 그 라운드를 강제로 확정한다.
+    @Column(name = "leader_vote_deadline_at")
+    private LocalDateTime leaderVoteDeadlineAt;
 
     // 중간점검/제출확인 카드가 이미 발행되었는지 추적하는 멱등성 플래그(스케줄러 중복 발행 방지).
     @Column(name = "progress_check_notified_at")
@@ -90,7 +97,7 @@ public class Team extends BaseEntity {
     // 제출 여부 확인에 아직 "진행 완료"로 응답하지 않았을 때 다음 재알림을 보낼 시각(Figma
     // "제출 여부 미진행시"). 최초 발송, 팀장의 "미완료" 응답, 재알림 발송 시점마다 now+2시간으로
     // 계속 미뤄지며, "진행 완료"로 상태가 SUBMITTED로 바뀌면 더 이상 조회 대상이 아니게 되어
-    // 자연히 멈춘다(명시적으로 null로 지우지 않음 — leaderSelectionDeadlineAt과 동일한 이유).
+    // 자연히 멈춘다(명시적으로 null로 지우지 않음 — leaderCandidacyDeadlineAt과 동일한 이유).
     @Column(name = "submission_check_reminder_at")
     private LocalDateTime submissionCheckReminderAt;
 
@@ -137,8 +144,12 @@ public class Team extends BaseEntity {
         this.contestCandidateDeadlineAt = contestCandidateDeadlineAt;
     }
 
-    public void scheduleLeaderSelectionDeadline(LocalDateTime leaderSelectionDeadlineAt) {
-        this.leaderSelectionDeadlineAt = leaderSelectionDeadlineAt;
+    public void scheduleLeaderCandidacyDeadline(LocalDateTime leaderCandidacyDeadlineAt) {
+        this.leaderCandidacyDeadlineAt = leaderCandidacyDeadlineAt;
+    }
+
+    public void scheduleLeaderVoteDeadline(LocalDateTime leaderVoteDeadlineAt) {
+        this.leaderVoteDeadlineAt = leaderVoteDeadlineAt;
     }
 
     public void markProgressCheckNotified(LocalDateTime notifiedAt) {

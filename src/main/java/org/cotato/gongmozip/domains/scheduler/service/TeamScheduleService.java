@@ -206,18 +206,33 @@ public class TeamScheduleService {
         chatbotOrchestrationService.forceAdvanceGreetingIfDue(teamId);
     }
 
-    /** 팀장 여부 투표/팀장 투표 마감이 지났는데도 LEADER_SELECTING인 팀 id 목록을 조회한다. */
-    public List<Long> findDueLeaderSelectionDeadlineTeamIds() {
+    /** 팀장 후보 등록(팀장 여부 투표) 마감이 지났는데도 LEADER_SELECTING인 팀 id 목록을 조회한다. */
+    public List<Long> findDueLeaderCandidacyDeadlineTeamIds() {
         return teamRepository
-                .findByStatusAndLeaderSelectionDeadlineAtLessThanEqual(TeamStatus.LEADER_SELECTING, LocalDateTime.now())
+                .findByStatusAndLeaderCandidacyDeadlineAtLessThanEqual(TeamStatus.LEADER_SELECTING, LocalDateTime.now())
                 .stream()
                 .map(Team::getTeamId)
                 .toList();
     }
 
-    /** 한 팀의 팀장 선출 마감을 강제로 확정 처리한다(팀 단위 트랜잭션). */
+    /** 한 팀의 팀장 후보 등록 마감을 강제로 확정 처리한다(팀 단위 트랜잭션). */
     @Transactional
-    public void resolveLeaderSelectionDeadlineForTeam(Long teamId) {
-        leaderElectionService.resolveDeadlineIfDue(teamId);
+    public void resolveLeaderCandidacyDeadlineForTeam(Long teamId) {
+        leaderElectionService.resolveCandidacyDeadlineIfDue(teamId);
+    }
+
+    /** 팀장 투표 마감이 지났는데도 LEADER_SELECTING인 팀 id 목록을 조회한다. */
+    public List<Long> findDueLeaderVoteDeadlineTeamIds() {
+        return teamRepository
+                .findByStatusAndLeaderVoteDeadlineAtLessThanEqual(TeamStatus.LEADER_SELECTING, LocalDateTime.now())
+                .stream()
+                .map(Team::getTeamId)
+                .toList();
+    }
+
+    /** 한 팀의 팀장 투표 마감을 강제로 확정 처리한다(팀 단위 트랜잭션). */
+    @Transactional
+    public void resolveLeaderVoteDeadlineForTeam(Long teamId) {
+        leaderElectionService.resolveVoteDeadlineIfDue(teamId);
     }
 }

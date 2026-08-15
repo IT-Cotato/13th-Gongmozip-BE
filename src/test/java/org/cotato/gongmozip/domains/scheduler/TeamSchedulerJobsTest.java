@@ -132,18 +132,33 @@ class TeamSchedulerJobsTest {
         verify(teamScheduleService).forceAdvanceGreetingForTeam(2L);
     }
 
-    @DisplayName("한 팀의 팀장 선출 마감 처리가 실패해도 나머지 팀은 계속 처리된다.")
+    @DisplayName("한 팀의 팀장 후보 등록 마감 처리가 실패해도 나머지 팀은 계속 처리된다.")
     @Test
-    void 한_팀의_팀장_선출_마감_처리가_실패해도_나머지_팀은_계속_처리된다() {
+    void 한_팀의_팀장_후보_등록_마감_처리가_실패해도_나머지_팀은_계속_처리된다() {
         // given
-        given(teamScheduleService.findDueLeaderSelectionDeadlineTeamIds()).willReturn(List.of(1L, 2L));
-        willThrow(new RuntimeException("boom")).given(teamScheduleService).resolveLeaderSelectionDeadlineForTeam(1L);
+        given(teamScheduleService.findDueLeaderCandidacyDeadlineTeamIds()).willReturn(List.of(1L, 2L));
+        willThrow(new RuntimeException("boom")).given(teamScheduleService).resolveLeaderCandidacyDeadlineForTeam(1L);
 
         // when
-        teamSchedulerJobs.resolveLeaderSelectionDeadlines();
+        teamSchedulerJobs.resolveLeaderCandidacyDeadlines();
 
         // then
-        verify(teamScheduleService).resolveLeaderSelectionDeadlineForTeam(1L);
-        verify(teamScheduleService).resolveLeaderSelectionDeadlineForTeam(2L);
+        verify(teamScheduleService).resolveLeaderCandidacyDeadlineForTeam(1L);
+        verify(teamScheduleService).resolveLeaderCandidacyDeadlineForTeam(2L);
+    }
+
+    @DisplayName("한 팀의 팀장 투표 마감 처리가 실패해도 나머지 팀은 계속 처리된다.")
+    @Test
+    void 한_팀의_팀장_투표_마감_처리가_실패해도_나머지_팀은_계속_처리된다() {
+        // given
+        given(teamScheduleService.findDueLeaderVoteDeadlineTeamIds()).willReturn(List.of(1L, 2L));
+        willThrow(new RuntimeException("boom")).given(teamScheduleService).resolveLeaderVoteDeadlineForTeam(1L);
+
+        // when
+        teamSchedulerJobs.resolveLeaderVoteDeadlines();
+
+        // then
+        verify(teamScheduleService).resolveLeaderVoteDeadlineForTeam(1L);
+        verify(teamScheduleService).resolveLeaderVoteDeadlineForTeam(2L);
     }
 }

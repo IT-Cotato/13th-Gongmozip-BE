@@ -3,6 +3,8 @@ package org.cotato.gongmozip.domains.team.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +45,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class LeaderElectionService {
 
     private static final Random RANDOM = new Random();
+    // 팀장 투표 마감 시간(2026-08-15, 후보 등록 마감과 분리하면서 결정). 후보 등록 마감(3시간,
+    // ChatbotOrchestrationService.LEADER_CANDIDACY_TIMEOUT_HOURS)과 달리, 투표는 라운드(동률
+    // 재투표 포함)가 새로 열릴 때마다 이 시간만큼 마감을 다시 잡는다 — docs/decisions/02-leader-election.md 참고.
+    private static final int LEADER_VOTE_TIMEOUT_HOURS = 8;
 
     private final ChatService chatService;
     private final ChatbotOrchestrationService chatbotOrchestrationService;
@@ -136,6 +142,7 @@ public class LeaderElectionService {
         } else {
             List<Long> candidateIds =
                     candidates.stream().map(TeamMember::getTeamMemberId).toList();
+            team.scheduleLeaderVoteDeadline(LocalDateTime.now().plusHours(LEADER_VOTE_TIMEOUT_HOURS));
             chatService.postChatbotCardMessage(
                     team,
                     MessageType.LEADER_VOTE_CARD,
@@ -212,17 +219,45 @@ public class LeaderElectionService {
     }
 
     /**
-     * 팀장 여부 투표/팀장 투표 마감 시각이 지났는데도 팀이 LEADER_SELECTING이면 스케줄러가
-     * 호출한다. 지금 어느 하위 단계에 머물러 있는지는 활성 팀원의 {@code leaderCandidacy}로
-     * 판정한다 — 한 명이라도 아직 {@code UNDECIDED}면 "팀장 여부 투표" 단계가 안 끝난 것이고,
-     * 전원이 응답을 마쳤다면(0/1명 확정은 이미 이 상태에 도달하기 전에 LEADER_DECIDED로 빠지므로)
-     * 후보 등록은 끝났고 "팀장 투표" 단계에서 멈춰있는 것이다.
-     * ({@code leaderVoteRepository.existsByTeam_TeamId}만으로는 두 단계를 구분할 수 없다 —
-     * 후보가 확정돼 투표 카드가 발행된 직후에도 아직 아무도 투표하지 않았다면 LeaderVote가
-     * 하나도 없는 건 candidacy 단계와 동일하기 때문이다.)
+     * 팀장 후보 등록(팀장 여부 투표) 마감 시각이 지났는데도 팀이 LEADER_SELECTING이고 아직
+     * 후보 등록이 안 끝났으면(활성 팀원 중 {@code UNDECIDED}가 남아있으면) 스케줄러가 호출한다.
+     * 이미 후보 등록이 끝나 투표 단계로 넘어간 팀이면 이 마감은 더 이상 의미가 없으므로(투표
+     * 마감은 {@link #resolveVoteDeadlineIfDue}가 별도로 담당) 아무 것도 하지 않는다
+     * (2026-08-15, 후보 등록/투표 마감 분리 — docs/decisions/02-leader-election.md 참고).
      */
     @Transactional
-    public void resolveDeadlineIfDue(Long teamId) {
+    public void resolveCandidacyDeadlineIfDue(Long teamId) {
+        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        if (team.getStatus() != TeamStatus.LEADER_SELECTING) {
+            return;
+        }
+
+        List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
+        if (activeMembers.isEmpty()) {
+            return;
+        }
+
+        boolean stillAwaitingCandidacy =
+                activeMembers.stream().anyMatch(tm -> tm.getLeaderCandidacy() == LeaderCandidacyStatus.UNDECIDED);
+        if (!stillAwaitingCandidacy) {
+            return;
+        }
+
+        // 마감까지 응답하지 않은 사람은 "팀장 안 할래요"로 간주하고 확정한다.
+        activeMembers.stream()
+                .filter(tm -> tm.getLeaderCandidacy() == LeaderCandidacyStatus.UNDECIDED)
+                .forEach(tm -> tm.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT));
+        resolveCandidacyPhase(team, activeMembers);
+    }
+
+    /**
+     * 팀장 투표 마감 시각이 지났는데도 팀이 LEADER_SELECTING이면 스케줄러가 호출한다. 후보
+     * 등록이 아직 안 끝난 팀이면(이론상 후보 등록 마감이 먼저 지났어야 하는 경우) 이 마감은
+     * 아직 세팅되지 않았거나 무관하므로 아무 것도 하지 않는다 — 그 처리는
+     * {@link #resolveCandidacyDeadlineIfDue}의 몫이다.
+     */
+    @Transactional
+    public void resolveVoteDeadlineIfDue(Long teamId) {
         Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
         if (team.getStatus() != TeamStatus.LEADER_SELECTING) {
             return;
@@ -236,11 +271,6 @@ public class LeaderElectionService {
         boolean stillAwaitingCandidacy =
                 activeMembers.stream().anyMatch(tm -> tm.getLeaderCandidacy() == LeaderCandidacyStatus.UNDECIDED);
         if (stillAwaitingCandidacy) {
-            // 마감까지 응답하지 않은 사람은 "팀장 안 할래요"로 간주하고 확정한다.
-            activeMembers.stream()
-                    .filter(tm -> tm.getLeaderCandidacy() == LeaderCandidacyStatus.UNDECIDED)
-                    .forEach(tm -> tm.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT));
-            resolveCandidacyPhase(team, activeMembers);
             return;
         }
 
@@ -250,13 +280,16 @@ public class LeaderElectionService {
         int round = currentRound(teamId, activeMembers.size());
         List<LeaderVote> votes = leaderVoteRepository.findByTeam_TeamIdAndRound(teamId, round);
         if (votes.isEmpty()) {
-            // 이 분기에 도달했다는 것 자체가 WANTS 후보가 2명 이상 있어 LEADER_VOTE_CARD가 이미
-            // 발행됐다는 뜻이다(0/1명이었다면 resolveCandidacyPhase에서 이미 LEADER_DECIDED로
-            // 빠졌을 것). "팀장 안 할래요"를 명시한 사람까지 무작위 대상에 넣으면 안 되므로,
-            // WANTS 후보로 풀을 제한한다(빈 리스트가 될 이론상 불가능한 경우에만 방어적으로
-            // activeMembers 전체를 대상으로 한다).
+            // 이 분기에 도달했다는 것 자체가 (1라운드면 WANTS 후보 2명 이상, 2라운드 이상이면
+            // 직전 라운드 동률 후보가 있어) LEADER_VOTE_CARD가 이미 발행됐다는 뜻이다(0/1명이었다면
+            // resolveCandidacyPhase에서 이미 LEADER_DECIDED로 빠졌을 것). castVote와 동일하게
+            // eligibleCandidateIds로 이 라운드의 실제 후보 풀만 대상으로 제한한다 — 2라운드
+            // 이상에서 이 제한이 없으면 1라운드에서 이미 탈락한(동률이 아니었던) 사람까지
+            // 무작위 대상에 포함되는 버그가 있었다(2026-08-15 수정). 빈 리스트가 될 이론상
+            // 불가능한 경우에만 방어적으로 activeMembers 전체를 대상으로 한다.
+            Set<Long> eligibleIds = new HashSet<>(eligibleCandidateIds(teamId, round, activeMembers));
             List<TeamMember> candidates = activeMembers.stream()
-                    .filter(tm -> tm.getLeaderCandidacy() == LeaderCandidacyStatus.WANTS)
+                    .filter(tm -> eligibleIds.contains(tm.getTeamMemberId()))
                     .toList();
             List<TeamMember> randomPool = candidates.isEmpty() ? activeMembers : candidates;
             TeamMember randomLeader = randomPool.get(RANDOM.nextInt(randomPool.size()));
@@ -335,6 +368,9 @@ public class LeaderElectionService {
                     : "동률이 발생했어요. AI가 보기엔 " + recommendedName
                             + "님이 팀장으로 잘 어울릴 것 같아요. 추천을 수락하거나, 동률이었던 팀원들끼리 재투표를 진행해주세요.";
 
+            // 재투표 라운드도 독립된 8시간 마감을 새로 받는다(직전 라운드에서 남은 시간을 그대로
+            // 물려받지 않음, 2026-08-15 결정).
+            team.scheduleLeaderVoteDeadline(LocalDateTime.now().plusHours(LEADER_VOTE_TIMEOUT_HOURS));
             chatService.postChatbotCardMessage(
                     team, MessageType.LEADER_VOTE_CARD, content, toTiebreakMetadata(topCandidateIds, aiRecommendedId));
         }
