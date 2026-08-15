@@ -489,12 +489,12 @@ class TeamServiceTest {
     @Test
     void 대화상대를_조회하면_챗봇_활성화_여부와_함께_팀원_목록을_반환한다() {
         // given
-        LocalDateTime leaderSelectionDeadlineAt = LocalDateTime.of(2026, 8, 5, 18, 0);
+        LocalDateTime leaderCandidacyDeadlineAt = LocalDateTime.of(2026, 8, 5, 18, 0);
         Team team = Team.builder()
                 .teamId(100L)
                 .chatbotEnabled(true)
                 .status(TeamStatus.LEADER_SELECTING)
-                .leaderSelectionDeadlineAt(leaderSelectionDeadlineAt)
+                .leaderCandidacyDeadlineAt(leaderCandidacyDeadlineAt)
                 .build();
         TeamMember me = teamMemberOf(team, 1L, "나");
         TeamMember other = teamMemberOf(team, 2L, "김민정");
@@ -512,7 +512,8 @@ class TeamServiceTest {
         // then
         assertThat(response.chatbotEnabled()).isTrue();
         assertThat(response.status()).isEqualTo("LEADER_SELECTING");
-        assertThat(response.leaderSelectionDeadlineAt()).isEqualTo(leaderSelectionDeadlineAt);
+        assertThat(response.leaderCandidacyDeadlineAt()).isEqualTo(leaderCandidacyDeadlineAt);
+        assertThat(response.leaderVoteDeadlineAt()).isNull();
         assertThat(response.contestCandidateDeadlineAt()).isNull();
         assertThat(response.participantCount()).isEqualTo(2);
         assertThat(response.members()).anySatisfy(m -> assertThat(m.isMe()).isTrue());
@@ -548,7 +549,8 @@ class TeamServiceTest {
 
         // then
         assertThat(response.status()).isEqualTo("CONTEST_SELECTING");
-        assertThat(response.leaderSelectionDeadlineAt()).isNull();
+        assertThat(response.leaderCandidacyDeadlineAt()).isNull();
+        assertThat(response.leaderVoteDeadlineAt()).isNull();
         assertThat(response.contestCandidateDeadlineAt()).isEqualTo(contestCandidateDeadlineAt);
     }
 

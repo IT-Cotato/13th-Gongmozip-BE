@@ -33,8 +33,12 @@ public final class TeamResponse {
             boolean chatbotEnabled,
             int participantCount,
             String status,
-            // LEADER_SELECTING(팀장 여부 투표/팀장 투표) 마감 시각. 그 외 상태에서는 null.
-            LocalDateTime leaderSelectionDeadlineAt,
+            // LEADER_SELECTING 중 "팀장 후보 등록(팀장 여부 투표)" 마감 시각. 후보 등록이 끝나기
+            // 전까지만 의미가 있고, 그 외에는 null (2026-08-15 갱신 — 투표 마감과 분리).
+            LocalDateTime leaderCandidacyDeadlineAt,
+            // LEADER_SELECTING 중 "팀장 투표" 마감 시각. 후보 등록이 끝나 투표가 시작된 뒤에만
+            // 세팅되고(동률 재투표 때마다 갱신), 그 외에는 null.
+            LocalDateTime leaderVoteDeadlineAt,
             // CONTEST_SELECTING(공모전 후보/투표) 마감 시각. 그 외 상태에서는 null.
             LocalDateTime contestCandidateDeadlineAt) {}
 }

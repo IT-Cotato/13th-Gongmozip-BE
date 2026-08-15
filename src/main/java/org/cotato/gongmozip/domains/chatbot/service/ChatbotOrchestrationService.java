@@ -44,9 +44,10 @@ public class ChatbotOrchestrationService {
     private static final String CHATBOT_GUIDE_TITLE = "활용 예시";
     private static final List<String> CHATBOT_GUIDE_EXAMPLES = List.of("우리 역할 분담 추천해줘", "우리 타임라인 추천해줘");
     private static final String REVIEW_COMPLETE_PROMPT = "모든 팀원이 서로에게 리뷰를 남겼어요. 수고 많으셨어요! 팀 프로젝트가 여기서 마무리됩니다.";
-    // 팀장 여부 투표/팀장 투표 시작(=LEADER_SELECTING 진입) 후 이 시간 안에 결과가 나지 않으면
-    // 스케줄러가 강제로 확정한다(GREETING 타임아웃과 동일한 정책, docs/decisions/02-leader-election.md).
-    private static final int LEADER_SELECTION_TIMEOUT_HOURS = 2;
+    // 팀장 후보 등록(팀장 여부 투표) 시작(=LEADER_SELECTING 진입) 후 이 시간 안에 전원이 응답하지
+    // 않으면 스케줄러가 강제로 확정한다. 투표 마감은 별도(LeaderElectionService.LEADER_VOTE_TIMEOUT_HOURS,
+    // 8시간)로 분리되어 있다(2026-08-15 갱신, docs/decisions/02-leader-election.md 참고).
+    private static final int LEADER_CANDIDACY_TIMEOUT_HOURS = 3;
     private static final String CHATBOT_MENTION_PREFIX = "@챗봇";
 
     private final ChatService chatService;
@@ -148,7 +149,7 @@ public class ChatbotOrchestrationService {
         }
 
         team.advanceStatus(TeamStatus.LEADER_SELECTING);
-        team.scheduleLeaderSelectionDeadline(LocalDateTime.now().plusHours(LEADER_SELECTION_TIMEOUT_HOURS));
+        team.scheduleLeaderCandidacyDeadline(LocalDateTime.now().plusHours(LEADER_CANDIDACY_TIMEOUT_HOURS));
         if (team.getLeaderSelectionMode() == LeaderSelectionMode.CANDIDATE_VOTE) {
             postCandidateVoteCard(activeMembers, team);
         } else {

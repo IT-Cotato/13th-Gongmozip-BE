@@ -105,16 +105,30 @@ public class TeamSchedulerJobs {
         }
     }
 
-    // 팀장 여부 투표/팀장 투표 마감도 시각 단위(LEADER_SELECTING 진입 후 2시간)라 5분 간격으로
-    // 확인한다.
+    // 팀장 후보 등록(팀장 여부 투표) 마감도 시각 단위(LEADER_SELECTING 진입 후 3시간)라 5분
+    // 간격으로 확인한다.
     @Scheduled(cron = "0 */5 * * * *")
-    @SchedulerLock(name = "team-leader-selection-deadline", lockAtMostFor = "PT10M")
-    public void resolveLeaderSelectionDeadlines() {
-        for (Long teamId : teamScheduleService.findDueLeaderSelectionDeadlineTeamIds()) {
+    @SchedulerLock(name = "team-leader-candidacy-deadline", lockAtMostFor = "PT10M")
+    public void resolveLeaderCandidacyDeadlines() {
+        for (Long teamId : teamScheduleService.findDueLeaderCandidacyDeadlineTeamIds()) {
             try {
-                teamScheduleService.resolveLeaderSelectionDeadlineForTeam(teamId);
+                teamScheduleService.resolveLeaderCandidacyDeadlineForTeam(teamId);
             } catch (Exception e) {
-                log.error("팀장 선출 마감 처리 실패 - teamId: {}", teamId, e);
+                log.error("팀장 후보 등록 마감 처리 실패 - teamId: {}", teamId, e);
+            }
+        }
+    }
+
+    // 팀장 투표 마감은 후보 등록이 끝날 때(또는 동률 재투표가 시작될 때)마다 새로 세팅되므로
+    // (Team.leaderVoteDeadlineAt), 후보 등록 마감과 별도로 5분 간격으로 확인한다.
+    @Scheduled(cron = "0 */5 * * * *")
+    @SchedulerLock(name = "team-leader-vote-deadline", lockAtMostFor = "PT10M")
+    public void resolveLeaderVoteDeadlines() {
+        for (Long teamId : teamScheduleService.findDueLeaderVoteDeadlineTeamIds()) {
+            try {
+                teamScheduleService.resolveLeaderVoteDeadlineForTeam(teamId);
+            } catch (Exception e) {
+                log.error("팀장 투표 마감 처리 실패 - teamId: {}", teamId, e);
             }
         }
     }

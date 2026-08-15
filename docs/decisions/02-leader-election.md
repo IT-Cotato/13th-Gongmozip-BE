@@ -232,38 +232,66 @@ Figma 목업을 다시 확인해보니 팀장이 최종 확정될 때(단독 1�
 Figma 목업의 "투표 마감까지 00:00:00" 카운트다운에 대응하는 백엔드가 없었던 문제(마감
 안 되면 `LEADER_SELECTING`에 무한정 머무를 수 있음)를 해소했다. GREETING의 2시간
 타임아웃, 공모전의 `contestCandidateDeadlineAt` + 스케줄러와 동일한 패턴을 그대로 따랐다.
+최초 구현은 마감 시각을 하나만 두고 "후보 등록"과 "투표" 두 하위 단계가 공유했는데,
+2026-08-15에 두 마감을 완전히 분리했다 — 아래 "후보 등록/투표 마감 분리" 참고.
 
-- `Team.leaderSelectionDeadlineAt`(마이그레이션 V25) — `LEADER_SELECTING` 진입 시(팀장
-  여부 투표 카드 또는 후보 투표 카드 발행 시점) `now + 2시간`으로 세팅한다. `AUTO_ASSIGNED`는
-  대기 자체가 없어 세팅하지 않는다.
-- `LeaderElectionService.resolveDeadlineIfDue(teamId)` — 스케줄러가 5분 간격으로 호출한다.
-  지금 어느 하위 단계인지는 활성 팀원의 `leaderCandidacy`로 판정한다(`existsByTeam_TeamId`만
-  으로는 "후보 확정 직후 아직 아무도 투표 안 한 상태"와 "아직 후보 여부 투표 중"을 구분할 수
-  없기 때문 — 둘 다 `LeaderVote`가 0건이다):
-  - 한 명이라도 `UNDECIDED`면 아직 "팀장 여부 투표" 단계 — 마감까지 응답 안 한 사람은
+- `LeaderElectionService.resolveCandidacyDeadlineIfDue(teamId)` / `resolveVoteDeadlineIfDue(teamId)`
+  — 스케줄러가 각각 5분 간격으로 호출한다. 지금 어느 하위 단계인지는 활성 팀원의
+  `leaderCandidacy`로 판정한다(`existsByTeam_TeamId`만으로는 "후보 확정 직후 아직 아무도
+  투표 안 한 상태"와 "아직 후보 여부 투표 중"을 구분할 수 없기 때문 — 둘 다 `LeaderVote`가
+  0건이다). 각 메서드는 지금이 자기 담당 하위 단계가 아니면 아무 것도 하지 않고 즉시
+  리턴한다(후보 등록 마감 처리가 이미 투표 단계로 넘어간 팀을 건드리지 않도록, 그 반대도
+  마찬가지).
+  - `resolveCandidacyDeadlineIfDue`: 한 명이라도 `UNDECIDED`면 마감까지 응답 안 한 사람을
     `DOES_NOT_WANT`로 간주하고 `resolveCandidacyPhase`를 그대로 재사용해 확정한다(0/1/2명
-    이상 분기 로직 재사용).
-  - 전원 응답을 마쳤다면(=`resolveCandidacyPhase`가 이미 실행돼 후보가 확정된 상태) "팀장
-    투표" 단계 — 현재 라운드에 투표가 있으면 있는 대로 `tally()`로 개표하고, 하나도 없으면
-    무작위로 임시 팀장을 지정한다(`ContestVotingService.resolveDeadlineIfDue`와 동일한 정책).
-- 스케줄러: `TeamScheduleService.findDueLeaderSelectionDeadlineTeamIds`/
-  `resolveLeaderSelectionDeadlineForTeam`, `TeamSchedulerJobs.resolveLeaderSelectionDeadlines`
-  (5분 간격 cron, 팀별 예외 격리는 기존 잡들과 동일).
+    이상 분기 로직 재사용). 이미 후보 등록이 끝난 팀이면 아무 것도 하지 않는다.
+  - `resolveVoteDeadlineIfDue`: 아직 후보 등록이 안 끝났으면 아무 것도 하지 않는다(이론상
+    후보 등록 마감이 먼저 지났어야 하는 상황). 후보 등록이 끝났다면 현재 라운드에 투표가
+    있으면 있는 대로 `tally()`로 개표하고, 하나도 없으면 무작위로 임시 팀장을 지정한다
+    (`ContestVotingService.resolveDeadlineIfDue`와 동일한 정책).
+- 스케줄러: `TeamScheduleService.findDueLeaderCandidacyDeadlineTeamIds`/
+  `resolveLeaderCandidacyDeadlineForTeam` + `findDueLeaderVoteDeadlineTeamIds`/
+  `resolveLeaderVoteDeadlineForTeam`, `TeamSchedulerJobs.resolveLeaderCandidacyDeadlines`/
+  `resolveLeaderVoteDeadlines`(둘 다 5분 간격 cron, 팀별 예외 격리는 기존 잡들과 동일,
+  `@SchedulerLock`로 다중 인스턴스 중복 실행 방지).
 - 테스트: `LeaderElectionServiceTest`(마감 시 미응답자 자동 거절/무투표 무작위 지정/부분
-  투표 개표 신규 케이스), `TeamScheduleServiceTest`, `TeamSchedulerJobsTest`.
-- **`leaderSelectionDeadlineAt` 노출 (2026-08-05)**: `GET /api/teams/{teamId}/members`
-  (`TeamMembersResponse`)에 필드를 추가해 프론트가 실제 카운트다운을 그릴 수 있게 했다.
-  `Team.status` 노출 때와 동일한 자리(2026-08-02, PR #56)에 나란히 추가 — [01-team.md](./01-team.md)
-  참고. 값 자체는 실시간으로 push되지 않는 고정 시각이다 — 프론트가 이 값을 한 번 받아
-  `deadline - 지금시각`을 로컬에서 매초 계산해 카운트다운을 그리면 되고, 마감 이후 처리(팀장
-  확정 등)는 평소처럼 채팅 메시지로 실시간 push된다.
+  투표 개표/후보 등록·투표 마감 분리 신규 케이스), `TeamScheduleServiceTest`, `TeamSchedulerJobsTest`.
+
+### 후보 등록/투표 마감 분리 (2026-08-15, PM 요구사항)
+
+기존에는 `leaderSelectionDeadlineAt` 하나가 "후보 등록"과 "투표" 두 하위 단계를 전부
+커버해서, 후보 등록이 늦게 끝나면(예: 마감 직전까지 응답 안 한 사람이 있어서) 투표에 쓸 수
+있는 실제 시간이 그만큼 줄어드는 문제가 있었다. PM 요구사항으로 두 마감을 완전히 분리했다.
+
+- **후보 등록 마감**: 3시간(`ChatbotOrchestrationService.LEADER_CANDIDACY_TIMEOUT_HOURS`) —
+  `LEADER_SELECTING` 진입 시(`advanceAfterGreeting`) 1회 세팅. `Team.leaderCandidacyDeadlineAt`
+  (마이그레이션 V36, 기존 `leaderSelectionDeadlineAt`을 rename).
+- **투표 마감**: 8시간(`LeaderElectionService.LEADER_VOTE_TIMEOUT_HOURS`) —
+  `Team.leaderVoteDeadlineAt`(마이그레이션 V36, 신규 컬럼)에 세팅. 후보 등록 마감과 달리
+  **투표 라운드가 새로 열릴 때마다 매번 새로 세팅된다** — 동률로 재투표(`tally()`의 동률
+  분기)가 시작될 때도 직전 라운드에서 남은 시간을 물려받지 않고 그 시점부터 다시 8시간을
+  받는다(PM 결정: "재투표마다 8시간 새로 카운트"). 재투표 카드를 다시 보여주기만 하는
+  `requestRevote()`(같은 라운드를 재공지)는 새 라운드를 여는 게 아니므로 마감을 갱신하지
+  않는다.
+- `resolveCandidacyPhase`가 후보 2명 이상이라 `LEADER_VOTE_CARD`를 처음 발행하는 시점,
+  그리고 `tally()`가 동률이라 재투표 카드를 발행하는 시점, 이 두 곳에서만
+  `team.scheduleLeaderVoteDeadline(...)`을 호출한다. 후보 0/1명(즉시 확정)인 경우는 투표
+  자체가 없으므로 건드리지 않는다.
+- `AUTO_ASSIGNED`는 여전히 대기 자체가 없어 둘 다 세팅되지 않는다.
+- **API 노출 갱신**: `GET /api/teams/{teamId}/members`(`TeamMembersResponse`)의
+  `leaderSelectionDeadlineAt` 필드가 `leaderCandidacyDeadlineAt`으로 이름이 바뀌고,
+  `leaderVoteDeadlineAt`이 새로 추가됐다 — **프론트 연동 영향 있음**: 후보 등록 단계에서는
+  `leaderCandidacyDeadlineAt`만 채워지고 `leaderVoteDeadlineAt`은 null, 투표 단계로
+  넘어가면 반대가 된다. 값 자체는 실시간으로 push되지 않는 고정 시각이다 — 프론트가 이
+  값을 한 번 받아 `deadline - 지금시각`을 로컬에서 매초 계산해 카운트다운을 그리면 되고,
+  마감 이후 처리(팀장 확정 등)는 평소처럼 채팅 메시지로 실시간 push된다.
   > ⚠️ **팀장 확정 이후에도 값이 지워지지 않음**: `LEADER_SELECTING`을 벗어나도(팀장 확정 등)
-  > `leaderSelectionDeadlineAt`을 명시적으로 `null`로 지우는 코드가 없어 과거 마감 시각이
-  > DB에 계속 남는다. 의도적으로 고치지 않았다 — 스케줄러 조회 자체가
-  > `status=LEADER_SELECTING AND deadline<=now`로 필터링하고 `resolveDeadlineIfDue`도
-  > 진입 시 상태를 한 번 더 확인해 이중으로 막혀 있어 스케줄러 오동작 위험이 없고,
-  > 프론트도 같이 내려주는 `status`가 `LEADER_SELECTING`일 때만 카운트다운을 그리면 되므로
-  > 남아있는 값이 화면에 노출될 일도 없다. 단순 데이터 정리(hygiene) 문제라 기능상 영향은 없음.
+  > 두 필드를 명시적으로 `null`로 지우는 코드가 없어 과거 마감 시각이 DB에 계속 남는다.
+  > 의도적으로 고치지 않았다 — 스케줄러 조회 자체가 `status=LEADER_SELECTING AND
+  > deadline<=now`로 필터링하고 각 `resolve...DeadlineIfDue`도 진입 시 상태를 한 번 더
+  > 확인해 이중으로 막혀 있어 스케줄러 오동작 위험이 없고, 프론트도 같이 내려주는 `status`가
+  > `LEADER_SELECTING`일 때만 카운트다운을 그리면 되므로 남아있는 값이 화면에 노출될 일도
+  > 없다. 단순 데이터 정리(hygiene) 문제라 기능상 영향은 없음.
 
 ## 관련 화면
 

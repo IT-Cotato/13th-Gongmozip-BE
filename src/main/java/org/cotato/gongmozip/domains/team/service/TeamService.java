@@ -265,7 +265,8 @@ public class TeamService {
                 memberResponses,
                 team.isChatbotEnabled(),
                 team.getStatus(),
-                team.getLeaderSelectionDeadlineAt(),
+                team.getLeaderCandidacyDeadlineAt(),
+                team.getLeaderVoteDeadlineAt(),
                 team.getContestCandidateDeadlineAt());
     }
 }

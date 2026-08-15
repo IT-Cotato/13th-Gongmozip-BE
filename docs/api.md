@@ -134,10 +134,19 @@ id 목록을 내려줍니다 — 실제 이름/아바타 등은 프론트가 팀
 
 ### 마감 타이머
 
-`GET /api/teams/{teamId}/members` 응답(`TeamMembersResponse`)의 `leaderSelectionDeadlineAt`으로
-"투표 마감까지 00:00:00" 카운트다운을 그리면 됨 — 서버가 실시간으로 갱신해서 push하는 값이
-아니라 고정 시각이므로, 받은 값과 현재 시각의 차이를 프론트에서 매초 로컬 계산하면 됨. 마감
-이후 처리(자동 확정 등)는 스케줄러가 처리하고 결과는 평소처럼 채팅 메시지로 온다.
+**(2026-08-15 변경 — 필드명/개수 변경)** `GET /api/teams/{teamId}/members` 응답
+(`TeamMembersResponse`)의 `leaderSelectionDeadlineAt` 필드가 **두 개로 분리됐다**:
+- `leaderCandidacyDeadlineAt` — "팀장 후보 등록(팀장 여부 투표)" 마감(3시간). 후보 등록
+  단계에서만 채워지고, 그 외에는 `null`.
+- `leaderVoteDeadlineAt` — "팀장 투표" 마감(8시간, 동률 재투표가 시작될 때마다 새로
+  갱신됨). 투표 단계로 넘어간 뒤에만 채워지고, 그 외에는 `null`.
+
+두 필드는 항상 배타적으로 하나만 채워진다(후보 등록 중엔 `leaderCandidacyDeadlineAt`만,
+투표 중엔 `leaderVoteDeadlineAt`만) — 프론트는 지금 어느 카운트다운을 그려야 하는지 두
+필드 중 `null`이 아닌 쪽으로 판단하면 된다. 나머지 동작은 기존과 동일 — 서버가 실시간으로
+갱신해서 push하는 값이 아니라 고정 시각이므로, 받은 값과 현재 시각의 차이를 프론트에서
+매초 로컬 계산하면 됨. 마감 이후 처리(자동 확정 등)는 스케줄러가 처리하고 결과는 평소처럼
+채팅 메시지로 온다.
 
 > ⚠️ **알려진 이슈 (확인 필요, 아직 미수정)**: `AUTO_ASSIGNED`(VER.2) 케이스에서 Figma는 인사
 > 유도 메시지와 `LEADER_RESULT_CARD`가 동시에(=아무도 인사하기 전에) 함께 나타나는데, 현재

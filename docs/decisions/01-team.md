@@ -22,7 +22,8 @@
 | progressCheckAt | LocalDateTime, nullable | contest 확정 시 계산. [07-scheduler.md](./07-scheduler.md) |
 | submissionCheckAt | LocalDateTime, nullable | contest 확정 시 계산. [07-scheduler.md](./07-scheduler.md) |
 | submitted | boolean | 팀장의 "진행 완료" 여부 |
-| leaderSelectionDeadlineAt | LocalDateTime, nullable | 팀장 여부 투표/팀장 투표 마감 시각. `GET /api/teams/{teamId}/members`(`TeamMembersResponse.leaderSelectionDeadlineAt`)로 노출 (2026-08-05). [02-leader-election.md](./02-leader-election.md) 참고 |
+| leaderCandidacyDeadlineAt | LocalDateTime, nullable | 팀장 후보 등록(팀장 여부 투표) 마감 시각(3시간). `GET /api/teams/{teamId}/members`(`TeamMembersResponse.leaderCandidacyDeadlineAt`)로 노출. **(2026-08-15 갱신)** 기존 `leaderSelectionDeadlineAt`을 rename하고 투표 마감을 아래 필드로 분리했다. [02-leader-election.md](./02-leader-election.md) 참고 |
+| leaderVoteDeadlineAt | LocalDateTime, nullable | 팀장 투표 마감 시각(8시간, 재투표 라운드마다 새로 세팅). `GET /api/teams/{teamId}/members`(`TeamMembersResponse.leaderVoteDeadlineAt`)로 노출 (2026-08-15 신규). [02-leader-election.md](./02-leader-election.md) 참고 |
 | version | Long | `@Version` 낙관적 잠금(마이그레이션 V28, 2026-08-06). `GREETING` 상태 전이 동시 실행 방지용 — [07-scheduler.md](./07-scheduler.md) 참고 |
 
 ### TeamStatus (상태머신)

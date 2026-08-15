@@ -10,6 +10,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.cotato.gongmozip.domains.chat.entity.Message;
@@ -360,6 +361,8 @@ class LeaderElectionServiceTest {
                                 .round(1)
                                 .build()));
 
+        LocalDateTime beforeRevote = LocalDateTime.now();
+
         // when
         leaderElectionService.castVote(1L, 20L, 20L);
 
@@ -367,6 +370,9 @@ class LeaderElectionServiceTest {
         assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
         assertThat(voter1.getRole()).isEqualTo(TeamRole.MEMBER);
         assertThat(voter2.getRole()).isEqualTo(TeamRole.MEMBER);
+        // 재투표 라운드가 열렸으니 투표 마감이 그 시점부터 새로 8시간 잡혀야 한다(직전 라운드에서
+        // 남은 시간을 물려받지 않음).
+        assertThat(team.getLeaderVoteDeadlineAt()).isAfter(beforeRevote.plusHours(7));
         ArgumentCaptor<String> metadataCaptor = ArgumentCaptor.forClass(String.class);
         verify(chatService)
                 .postChatbotCardMessage(
@@ -747,18 +753,56 @@ class LeaderElectionServiceTest {
         verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
     }
 
-    @DisplayName("LEADER_SELECTING이 아니면 마감 처리를 하지 않는다.")
+    @DisplayName("LEADER_SELECTING이 아니면 후보 등록 마감 처리를 하지 않는다.")
     @Test
-    void LEADER_SELECTING이_아니면_마감_처리를_하지_않는다() {
+    void LEADER_SELECTING이_아니면_후보_등록_마감_처리를_하지_않는다() {
         // given
         Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
         given(teamRepository.findById(1L)).willReturn(Optional.of(team));
 
         // when
-        leaderElectionService.resolveDeadlineIfDue(1L);
+        leaderElectionService.resolveCandidacyDeadlineIfDue(1L);
 
         // then
         verify(teamMemberRepository, never()).findByTeamIdAndStatus(any(), any());
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
+
+    @DisplayName("LEADER_SELECTING이 아니면 투표 마감 처리를 하지 않는다.")
+    @Test
+    void LEADER_SELECTING이_아니면_투표_마감_처리를_하지_않는다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        leaderElectionService.resolveVoteDeadlineIfDue(1L);
+
+        // then
+        verify(teamMemberRepository, never()).findByTeamIdAndStatus(any(), any());
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
+
+    @DisplayName("후보 등록이 이미 끝났으면 후보 등록 마감 처리가 아무 것도 하지 않는다.")
+    @Test
+    void 후보_등록이_이미_끝났으면_후보_등록_마감_처리는_아무것도_하지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember candidate1 = teamMemberOf(team, 10L, "김철수");
+        candidate1.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember candidate2 = teamMemberOf(team, 20L, "이해은");
+        candidate2.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(candidate1, candidate2));
+
+        // when
+        leaderElectionService.resolveCandidacyDeadlineIfDue(1L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
         verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
     }
 
@@ -777,7 +821,7 @@ class LeaderElectionServiceTest {
                 .willReturn(List.of(onlyCandidate, neverResponded));
 
         // when
-        leaderElectionService.resolveDeadlineIfDue(1L);
+        leaderElectionService.resolveCandidacyDeadlineIfDue(1L);
 
         // then
         assertThat(neverResponded.getLeaderCandidacy()).isEqualTo(LeaderCandidacyStatus.DOES_NOT_WANT);
@@ -785,6 +829,57 @@ class LeaderElectionServiceTest {
         assertThat(onlyCandidate.getRole()).isEqualTo(TeamRole.LEADER);
         verify(chatService)
                 .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("후보 등록 마감 시점에 후보가 2명 이상이면 투표 카드를 발행하고 투표 마감을 새로 세팅한다.")
+    @Test
+    void 후보_등록_마감_시점에_후보가_2명_이상이면_투표_마감을_새로_세팅한다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember candidate1 = teamMemberOf(team, 10L, "김철수");
+        candidate1.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember candidate2 = teamMemberOf(team, 20L, "이해은");
+        candidate2.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        // 마감까지 응답하지 않은 팀원 — 마감 처리 중 DOES_NOT_WANT로 간주된다.
+        TeamMember neverResponded = teamMemberOf(team, 30L, "박준수");
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(candidate1, candidate2, neverResponded));
+
+        // when
+        leaderElectionService.resolveCandidacyDeadlineIfDue(1L);
+
+        // then
+        assertThat(candidate1.getLeaderCandidacy()).isEqualTo(LeaderCandidacyStatus.WANTS);
+        assertThat(candidate2.getLeaderCandidacy()).isEqualTo(LeaderCandidacyStatus.WANTS);
+        assertThat(neverResponded.getLeaderCandidacy()).isEqualTo(LeaderCandidacyStatus.DOES_NOT_WANT);
+        assertThat(team.getLeaderVoteDeadlineAt()).isNotNull();
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_VOTE_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("후보 등록이 안 끝났으면 투표 마감 처리는 아무 것도 하지 않는다.")
+    @Test
+    void 후보_등록이_안_끝났으면_투표_마감_처리는_아무것도_하지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember decided = teamMemberOf(team, 10L, "김철수");
+        decided.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember stillUndecided = teamMemberOf(team, 20L, "이해은");
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(decided, stillUndecided));
+
+        // when
+        leaderElectionService.resolveVoteDeadlineIfDue(1L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
     }
 
     @DisplayName("후보 등록은 끝났지만 아무도 투표하지 않은 채 마감되면 무작위로 임시 팀장을 지정한다.")
@@ -805,7 +900,7 @@ class LeaderElectionServiceTest {
         given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1)).willReturn(List.of());
 
         // when
-        leaderElectionService.resolveDeadlineIfDue(1L);
+        leaderElectionService.resolveVoteDeadlineIfDue(1L);
 
         // then
         assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
@@ -834,7 +929,7 @@ class LeaderElectionServiceTest {
         given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1)).willReturn(List.of());
 
         // when
-        leaderElectionService.resolveDeadlineIfDue(1L);
+        leaderElectionService.resolveVoteDeadlineIfDue(1L);
 
         // then
         assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
@@ -869,13 +964,74 @@ class LeaderElectionServiceTest {
                         .build()));
 
         // when
-        leaderElectionService.resolveDeadlineIfDue(1L);
+        leaderElectionService.resolveVoteDeadlineIfDue(1L);
 
         // then
         assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
         assertThat(candidate2.getRole()).isEqualTo(TeamRole.LEADER);
         verify(chatService)
                 .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("2라운드(동률 재투표) 마감까지 투표가 없으면, 1라운드에서 이미 탈락한 후보는 무작위 대상에서 제외된다.")
+    @Test
+    void 재투표_라운드_무투표_마감_시_직전_라운드_탈락자는_무작위_대상에서_제외된다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember tied1 = teamMemberOf(team, 10L, "김철수");
+        tied1.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember tied2 = teamMemberOf(team, 20L, "이해은");
+        tied2.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember eliminated1 = teamMemberOf(team, 30L, "박준수");
+        eliminated1.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember eliminated2 = teamMemberOf(team, 40L, "최영희");
+        eliminated2.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        List<TeamMember> activeMembers = List.of(tied1, tied2, eliminated1, eliminated2);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(activeMembers);
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);
+        // 1라운드: tied1/tied2가 2표씩 동률로 1위, eliminated1/eliminated2는 0표 — 2라운드는
+        // tied1/tied2끼리만 겨뤄야 한다.
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(tied1)
+                                .candidateTeamMember(tied1)
+                                .round(1)
+                                .build(),
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(eliminated1)
+                                .candidateTeamMember(tied1)
+                                .round(1)
+                                .build(),
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(tied2)
+                                .candidateTeamMember(tied2)
+                                .round(1)
+                                .build(),
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(eliminated2)
+                                .candidateTeamMember(tied2)
+                                .round(1)
+                                .build()));
+        // 2라운드: 아무도 투표하지 않은 채 마감.
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 2)).willReturn(List.of());
+
+        // when
+        leaderElectionService.resolveVoteDeadlineIfDue(1L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
+        assertThat(eliminated1.getRole()).isEqualTo(TeamRole.MEMBER);
+        assertThat(eliminated2.getRole()).isEqualTo(TeamRole.MEMBER);
+        assertThat(List.of(tied1.getRole(), tied2.getRole())).contains(TeamRole.LEADER);
     }
 
     private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {

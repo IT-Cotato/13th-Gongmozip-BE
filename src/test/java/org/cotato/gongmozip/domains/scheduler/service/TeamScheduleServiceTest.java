@@ -356,30 +356,56 @@ class TeamScheduleServiceTest {
         verify(chatbotOrchestrationService).forceAdvanceGreetingIfDue(1L);
     }
 
-    @DisplayName("팀장 선출 마감이 지난 팀 id 목록을 조회한다.")
+    @DisplayName("팀장 후보 등록 마감이 지난 팀 id 목록을 조회한다.")
     @Test
-    void 팀장_선출_마감이_지난_팀_id_목록을_조회한다() {
+    void 팀장_후보_등록_마감이_지난_팀_id_목록을_조회한다() {
         // given
         Team team1 =
                 Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
-        given(teamRepository.findByStatusAndLeaderSelectionDeadlineAtLessThanEqual(
+        given(teamRepository.findByStatusAndLeaderCandidacyDeadlineAtLessThanEqual(
                         eq(TeamStatus.LEADER_SELECTING), any()))
                 .willReturn(List.of(team1));
 
         // when
-        List<Long> dueTeamIds = teamScheduleService.findDueLeaderSelectionDeadlineTeamIds();
+        List<Long> dueTeamIds = teamScheduleService.findDueLeaderCandidacyDeadlineTeamIds();
 
         // then
         assertThat(dueTeamIds).containsExactly(1L);
     }
 
-    @DisplayName("팀 1개의 팀장 선출 마감을 처리하면 해당 팀만 마감 처리를 호출한다.")
+    @DisplayName("팀 1개의 팀장 후보 등록 마감을 처리하면 해당 팀만 마감 처리를 호출한다.")
     @Test
-    void 팀_1개의_팀장_선출_마감을_처리하면_해당_팀만_마감_처리를_호출한다() {
+    void 팀_1개의_팀장_후보_등록_마감을_처리하면_해당_팀만_마감_처리를_호출한다() {
         // when
-        teamScheduleService.resolveLeaderSelectionDeadlineForTeam(1L);
+        teamScheduleService.resolveLeaderCandidacyDeadlineForTeam(1L);
 
         // then
-        verify(leaderElectionService).resolveDeadlineIfDue(1L);
+        verify(leaderElectionService).resolveCandidacyDeadlineIfDue(1L);
+    }
+
+    @DisplayName("팀장 투표 마감이 지난 팀 id 목록을 조회한다.")
+    @Test
+    void 팀장_투표_마감이_지난_팀_id_목록을_조회한다() {
+        // given
+        Team team1 =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        given(teamRepository.findByStatusAndLeaderVoteDeadlineAtLessThanEqual(eq(TeamStatus.LEADER_SELECTING), any()))
+                .willReturn(List.of(team1));
+
+        // when
+        List<Long> dueTeamIds = teamScheduleService.findDueLeaderVoteDeadlineTeamIds();
+
+        // then
+        assertThat(dueTeamIds).containsExactly(1L);
+    }
+
+    @DisplayName("팀 1개의 팀장 투표 마감을 처리하면 해당 팀만 마감 처리를 호출한다.")
+    @Test
+    void 팀_1개의_팀장_투표_마감을_처리하면_해당_팀만_마감_처리를_호출한다() {
+        // when
+        teamScheduleService.resolveLeaderVoteDeadlineForTeam(1L);
+
+        // then
+        verify(leaderElectionService).resolveVoteDeadlineIfDue(1L);
     }
 }
