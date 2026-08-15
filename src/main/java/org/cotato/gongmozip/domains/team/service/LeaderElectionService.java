@@ -5,19 +5,18 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.cotato.gongmozip.domains.chat.entity.Message;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
-import org.cotato.gongmozip.domains.team.converter.TeamConverter;
 import org.cotato.gongmozip.domains.team.entity.LeaderVote;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
@@ -29,16 +28,18 @@ import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
 import org.cotato.gongmozip.domains.team.repository.LeaderVoteRepository;
 import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
 import org.cotato.gongmozip.domains.team.repository.TeamRepository;
-import org.cotato.gongmozip.global.ai.AiClient;
-import org.cotato.gongmozip.global.ai.dto.LeaderCandidateSnapshot;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 팀장 선출 플로우 (LeaderVote). 케이스①(AUTO_ASSIGNED)은 TeamService/ChatbotOrchestrationService
  * 선에서 끝나 이 서비스에 도달하지 않고, 케이스②(OPEN_NOMINATION)·③(CANDIDATE_VOTE)의 후보
  * 등록/투표/동률/마감 처리를 담당한다 (docs/decisions/02-leader-election.md).
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -56,7 +57,7 @@ public class LeaderElectionService {
     private final TeamMemberRepository teamMemberRepository;
     private final LeaderVoteRepository leaderVoteRepository;
     private final MessageRepository messageRepository;
-    private final AiClient aiClient;
+    private final LeaderTiebreakAsyncService leaderTiebreakAsyncService;
     // 이 프로젝트에는 Spring이 자동 구성한 ObjectMapper 빈이 없어 직접 생성한다
     // (단순 후보 id 목록 직렬화 용도라 커스텀 설정이 필요 없음).
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -342,37 +343,22 @@ public class LeaderElectionService {
                     .orElseThrow(() -> new TeamException(TeamErrorCode.INVALID_LEADER_CANDIDATE));
             assignLeader(team, winner, "투표 결과, " + winner.getProfile().getNickname() + "님이 팀장으로 선출되었습니다.");
         } else {
-            List<LeaderCandidateSnapshot> snapshots = activeMembers.stream()
-                    .map(TeamConverter::toLeaderCandidateSnapshot)
-                    .toList();
-            Long aiRecommendedId = aiClient.recommendTiebreakLeader(team.getTeamId(), snapshots, topCandidateIds);
-            TeamMember recommended = activeMembers.stream()
-                    .filter(tm -> tm.getTeamMemberId().equals(aiRecommendedId))
-                    .findFirst()
-                    .orElse(null);
-
-            // 재투표(2라운드 이상)도 또 동률이면 더 이상 재투표를 반복하지 않고 AI 추천 후보로
-            // 바로 확정한다 (카톡 스펙: "둘이 또 동률일 경우에는 '추천 수락하기'로 진행한다").
-            if (round >= 2 && recommended != null) {
-                assignLeader(
-                        team,
-                        recommended,
-                        "재투표도 동률이 발생해 AI 추천에 따라 " + recommended.getProfile().getNickname() + "님이 팀장으로 확정되었습니다.");
-                return;
-            }
-
-            String recommendedName =
-                    recommended == null ? null : recommended.getProfile().getNickname();
-            String content = recommendedName == null
-                    ? "동률이 발생했어요. 동률이었던 팀원들끼리 재투표를 진행할게요."
-                    : "동률이 발생했어요. AI가 보기엔 " + recommendedName
-                            + "님이 팀장으로 잘 어울릴 것 같아요. 추천을 수락하거나, 동률이었던 팀원들끼리 재투표를 진행해주세요.";
-
-            // 재투표 라운드도 독립된 8시간 마감을 새로 받는다(직전 라운드에서 남은 시간을 그대로
-            // 물려받지 않음, 2026-08-15 결정).
-            team.scheduleLeaderVoteDeadline(LocalDateTime.now().plusHours(LEADER_VOTE_TIMEOUT_HOURS));
-            chatService.postChatbotCardMessage(
-                    team, MessageType.LEADER_VOTE_CARD, content, toTiebreakMetadata(topCandidateIds, aiRecommendedId));
+            // 동률 시 AI 추천 호출(AiGatewayClient, 최대 20초)은 트랜잭션 밖으로 뺐다 — tally()가
+            // castVote(유저 요청)뿐 아니라 resolveVoteDeadlineIfDue(스케줄러)에서도 호출될 수
+            // 있어, 이 자리에서 동기로 부르면 스레드/커넥션을 오래 붙잡는 문제가 있었다(스레드풀
+            // 점유 이슈 점검, 2026-08-15). 동률 판정까지만 동기로 커밋하고, AI 호출/이후 처리는
+            // 커밋 이후 LeaderTiebreakAsyncService가 이어받는다.
+            Long teamId = team.getTeamId();
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        leaderTiebreakAsyncService.resolveTiebreakAsync(teamId, round, topCandidateIds);
+                    } catch (TaskRejectedException e) {
+                        log.error("팀장 투표 동률 처리 비동기 작업 제출 실패 - teamId: {}", teamId, e);
+                    }
+                }
+            });
         }
     }
 
@@ -481,17 +467,6 @@ public class LeaderElectionService {
     private String toCandidateMetadata(List<Long> candidateTeamMemberIds) {
         try {
             return objectMapper.writeValueAsString(Map.of("candidateTeamMemberIds", candidateTeamMemberIds));
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("팀장 후보 메타데이터 직렬화에 실패했습니다.", e);
-        }
-    }
-
-    private String toTiebreakMetadata(List<Long> candidateTeamMemberIds, Long aiRecommendedTeamMemberId) {
-        try {
-            Map<String, Object> metadata = new LinkedHashMap<>();
-            metadata.put("candidateTeamMemberIds", candidateTeamMemberIds);
-            metadata.put("aiRecommendedTeamMemberId", aiRecommendedTeamMemberId);
-            return objectMapper.writeValueAsString(metadata);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("팀장 후보 메타데이터 직렬화에 실패했습니다.", e);
         }

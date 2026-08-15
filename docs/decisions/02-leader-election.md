@@ -53,7 +53,8 @@ unique(team_id, voter_team_member_id, round)
   2. 응답한 `TeamMember.leaderCandidacy = WANTS`인 사람들이 후보가 되어 `LeaderVote` 진행
   3. 아무도 `WANTS`를 선택하지 않으면 팀원 중 랜덤 1명을 임시 팀장으로 지정하고 시스템 메시지로 안내
 - **동률 처리** (CANDIDATE_VOTE, OPEN_NOMINATION 공통): 챗봇이 AI 판단으로 추천 후보 1명을
-  제시하며 두 가지 선택지 제공
+  제시하며 두 가지 선택지 제공. **(2026-08-15 갱신)** 이 AI 추천 호출(`tally()` 내부)은 이제
+  트랜잭션 밖에서 비동기로 처리된다 — [08-ai.md](./08-ai.md)의 "AI 호출 비동기 분리" 참고.
   - "추천 수락하기" → 해당 후보를 즉시 `TeamRole.LEADER`로 확정
   - "재투표하기" → `LeaderVote.round += 1`, 동률이었던 후보들 대상으로 재투표
   - **(2026-08-05 추가) 라운드 상한**: 재투표(2라운드 이상)도 또 동률이면 더 이상 재투표를
@@ -274,10 +275,18 @@ Figma 목업의 "투표 마감까지 00:00:00" 카운트다운에 대응하는 �
   `requestRevote()`(같은 라운드를 재공지)는 새 라운드를 여는 게 아니므로 마감을 갱신하지
   않는다.
 - `resolveCandidacyPhase`가 후보 2명 이상이라 `LEADER_VOTE_CARD`를 처음 발행하는 시점,
-  그리고 `tally()`가 동률이라 재투표 카드를 발행하는 시점, 이 두 곳에서만
-  `team.scheduleLeaderVoteDeadline(...)`을 호출한다. 후보 0/1명(즉시 확정)인 경우는 투표
-  자체가 없으므로 건드리지 않는다.
+  그리고 `LeaderTiebreakTxService.applyTiebreakResult`가 동률이라 재투표 카드를 발행하는
+  시점, 이 두 곳에서만 `team.scheduleLeaderVoteDeadline(...)`을 호출한다. 후보 0/1명(즉시
+  확정)인 경우는 투표 자체가 없으므로 건드리지 않는다. **(2026-08-15 갱신)** 동률 쪽은
+  원래 `tally()` 안에서 직접 세팅했는데, AI 추천 호출을 비동기로 빼면서
+  `LeaderTiebreakTxService`로 옮겨졌다 — [08-ai.md](./08-ai.md) 참고.
 - `AUTO_ASSIGNED`는 여전히 대기 자체가 없어 둘 다 세팅되지 않는다.
+- `status=LEADER_SELECTING AND leaderCandidacyDeadlineAt/leaderVoteDeadlineAt <= now` 스캔용
+  복합 인덱스(`idx_teams_status_leader_candidacy_deadline_at`,
+  `idx_teams_status_leader_vote_deadline_at`, 마이그레이션 V37)를 같이 추가했다 — 기존
+  `leaderSelectionDeadlineAt`에도 없던 인덱스였는데, 스케줄러 job이 1개에서 2개로 늘면서
+  인덱스 없는 스캔 비용도 같이 늘어 이번에 챙겼다(`submission_check_reminder_at`이 V30에서
+  CodeRabbit 리뷰로 인덱스를 받았던 것과 동일한 이유).
 - **API 노출 갱신**: `GET /api/teams/{teamId}/members`(`TeamMembersResponse`)의
   `leaderSelectionDeadlineAt` 필드가 `leaderCandidacyDeadlineAt`으로 이름이 바뀌고,
   `leaderVoteDeadlineAt`이 새로 추가됐다 — **프론트 연동 영향 있음**: 후보 등록 단계에서는
