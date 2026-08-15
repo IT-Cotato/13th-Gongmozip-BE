@@ -5,13 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
-import org.cotato.gongmozip.domains.team.converter.TeamConverter;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
 import org.cotato.gongmozip.domains.team.enums.LeaderCandidacyStatus;
@@ -23,8 +21,6 @@ import org.cotato.gongmozip.domains.team.exception.TeamException;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
 import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
 import org.cotato.gongmozip.domains.team.repository.TeamRepository;
-import org.cotato.gongmozip.global.ai.AiClient;
-import org.cotato.gongmozip.global.ai.dto.LeaderCandidateSnapshot;
 import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,7 +40,6 @@ public class ChatbotOrchestrationService {
 
     private static final String GREETING_PROMPT =
             "안녕하세요. 저는 팀 운영을 도와주는 AI 챗봇이에요. 팀 매칭이 완료되었어요. 각자 간단한 자기소개와 인사를 나눠볼까요?";
-    private static final String LEADER_SELECTION_PROMPT = "모두 인사를 마쳤네요! 이제 팀장을 선출해볼게요. 팀장이 되고 싶은 분은 투표해주세요.";
     private static final String IN_PROGRESS_PROMPT = "언제든 저의 도움이 필요하면 태그해주세요.";
     private static final String CHATBOT_GUIDE_TITLE = "활용 예시";
     private static final List<String> CHATBOT_GUIDE_EXAMPLES = List.of("우리 역할 분담 추천해줘", "우리 타임라인 추천해줘");
@@ -57,8 +52,8 @@ public class ChatbotOrchestrationService {
     private final ChatService chatService;
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
-    private final AiClient aiClient;
     private final ChatbotContestRecommendationAsyncService contestRecommendationAsyncService;
+    private final ChatbotLeaderNominationAsyncService leaderNominationAsyncService;
     private final ChatbotMentionAsyncService chatbotMentionAsyncService;
     // 이 프로젝트에는 Spring이 자동 구성한 ObjectMapper 빈이 없어 직접 생성한다.
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -157,7 +152,14 @@ public class ChatbotOrchestrationService {
         if (team.getLeaderSelectionMode() == LeaderSelectionMode.CANDIDATE_VOTE) {
             postCandidateVoteCard(activeMembers, team);
         } else {
-            postLeaderNominationCard(team, activeMembers);
+            // AI 팀장 후보 추천 호출(AiGatewayClient, 최대 20초)은 advanceToContestSelecting과
+            // 동일한 이유로 트랜잭션 밖으로 뺐다 — 자세한 내용은 ChatbotLeaderNominationAsyncService
+            // 참고 (스레드풀 점유 이슈 점검, 2026-08-15).
+            Long teamId = team.getTeamId();
+            runAfterCommit(
+                    "팀장 후보 추천 비동기 작업 제출 실패 - teamId: {}",
+                    teamId,
+                    () -> leaderNominationAsyncService.recommendLeaderNomineesAsync(teamId));
         }
     }
 
@@ -178,26 +180,6 @@ public class ChatbotOrchestrationService {
                 toIdsMetadata("candidateTeamMemberIds", candidateIds));
     }
 
-    private void postLeaderNominationCard(Team team, List<TeamMember> activeMembers) {
-        List<LeaderCandidateSnapshot> snapshots = activeMembers.stream()
-                .map(TeamConverter::toLeaderCandidateSnapshot)
-                .toList();
-        List<Long> recommendedIds = aiClient.recommendLeaderCandidates(team.getTeamId(), snapshots);
-        String recommendedNames = activeMembers.stream()
-                .filter(member -> recommendedIds.contains(member.getTeamMemberId()))
-                .map(member -> member.getProfile().getNickname())
-                .collect(Collectors.joining(", "));
-        String content = recommendedNames.isBlank()
-                ? LEADER_SELECTION_PROMPT
-                : LEADER_SELECTION_PROMPT + "\n\nAI 추천: " + recommendedNames + "님이 팀장으로 잘 어울릴 것 같아요!";
-
-        chatService.postChatbotCardMessage(
-                team,
-                MessageType.LEADER_NOMINATION_CARD,
-                content,
-                toIdsMetadata("aiRecommendedTeamMemberIds", recommendedIds));
-    }
-
     /**
      * 팀장이 확정된 직후(LeaderElectionService) 호출되어 공모전 선정 단계를 시작한다.
      * 공모전 후보/투표 마감을 오늘 오후 11시로 세팅한다 (docs/decisions/04-contest-voting.md).
@@ -215,13 +197,24 @@ public class ChatbotOrchestrationService {
 
         Long teamId = team.getTeamId();
         InterestCategory preferredCategory = team.getPreferredCategory();
+        runAfterCommit(
+                "공모전 추천 비동기 작업 제출 실패 - teamId: {}",
+                teamId,
+                () -> contestRecommendationAsyncService.recommendContestsAsync(teamId, preferredCategory));
+    }
+
+    // 상태 전이 트랜잭션이 실제로 커밋된 뒤에만 비동기 AI 호출을 트리거한다 — 커밋 전에 실행되면
+    // 아직 반영 안 된 상태 전이를 다른 트랜잭션(비동기 작업이 새로 여는 트랜잭션)이 못 볼 수 있다.
+    // 스레드풀 포화 등으로 작업 제출 자체가 실패(TaskRejectedException)해도 이 트랜잭션은 이미
+    // 커밋된 뒤라 롤백할 수 없으므로 로그만 남기고 넘어간다.
+    private void runAfterCommit(String failureLogMessage, Long teamId, Runnable asyncTrigger) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
                 try {
-                    contestRecommendationAsyncService.recommendContestsAsync(teamId, preferredCategory);
+                    asyncTrigger.run();
                 } catch (TaskRejectedException e) {
-                    log.error("공모전 추천 비동기 작업 제출 실패 - teamId: {}", teamId, e);
+                    log.error(failureLogMessage, teamId, e);
                 }
             }
         });

@@ -186,7 +186,10 @@ unique(team_id, voter_team_member_id, round)
       `leaderCandidacy=WANTS`, 나머지는 `DOES_NOT_WANT`로 즉시 확정하고 바로
       `LEADER_VOTE_CARD` 발행("팀장 여부 투표" 단계 생략). 이렇게 해야
       `LeaderElectionService.castVote()`의 "전원 응답 완료" 선행조건을 만족한다.
-    - `OPEN_NOMINATION`: 기존 `postLeaderNominationCard()`(AI 추천 2명) 그대로.
+    - `OPEN_NOMINATION`: AI 추천 2명을 담은 `LEADER_NOMINATION_CARD` 발행(추천 2명).
+      **(2026-08-15 갱신)** AI 호출(`AiClient.recommendLeaderCandidates`)은 커밋 후
+      `ChatbotLeaderNominationAsyncService`가 비동기로 처리 — 자세한 내용은
+      [08-ai.md](./08-ai.md)의 "AI 호출 비동기 분리" 참고.
   - `ChatbotOrchestrationService`는 `LeaderElectionService`에 의존하지 않는다(반대 방향
     의존은 이미 존재 — `assignLeader()`가 `advanceToContestSelecting()`을 호출) —
     순환 의존을 피하려고 `CANDIDATE_VOTE` 카드 발행 로직을 `LeaderElectionService`에 위임하지
