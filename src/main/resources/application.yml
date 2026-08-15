@@ -78,6 +78,15 @@ spring:
           timeout: 5000
           writetimeout: 5000
 
+  # 7. 스케줄러 스레드풀 설정 — 기본값(1)이면 서로 무관한 @Scheduled job들이 스레드 하나를
+  # 순서대로 나눠 써서, 한 job이 오래 걸리면 나머지 전부가 밀린다(스레드풀 점유 이슈 점검,
+  # 2026-08-15). TeamSchedulerJobs/MatchingSchedulerJobs 등 서로 다른 도메인의 job이 동시에
+  # 실행될 수 있도록 여유 있게 잡는다.
+  task:
+    scheduling:
+      pool:
+        size: 5
+
 # Nginx 리버스 프록시의 X-Forwarded-* 헤더를 반영
 server:
   forward-headers-strategy: framework

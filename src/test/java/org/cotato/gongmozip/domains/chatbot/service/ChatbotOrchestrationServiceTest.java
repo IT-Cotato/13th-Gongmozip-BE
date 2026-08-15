@@ -13,10 +13,6 @@ import java.util.List;
 import java.util.Optional;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
-import org.cotato.gongmozip.domains.contest.entity.Contest;
-import org.cotato.gongmozip.domains.contest.entity.ContestCandidate;
-import org.cotato.gongmozip.domains.contest.repository.ContestCandidateRepository;
-import org.cotato.gongmozip.domains.contest.repository.ContestRepository;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
@@ -31,6 +27,8 @@ import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
 import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
 import org.cotato.gongmozip.domains.team.repository.TeamRepository;
 import org.cotato.gongmozip.global.ai.AiClient;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,7 +36,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.PageImpl;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class ChatbotOrchestrationServiceTest {
@@ -53,16 +52,32 @@ class ChatbotOrchestrationServiceTest {
     private TeamMemberRepository teamMemberRepository;
 
     @Mock
-    private ContestRepository contestRepository;
-
-    @Mock
-    private ContestCandidateRepository contestCandidateRepository;
-
-    @Mock
     private AiClient aiClient;
+
+    @Mock
+    private ChatbotContestRecommendationAsyncService contestRecommendationAsyncService;
+
+    @Mock
+    private ChatbotMentionAsyncService chatbotMentionAsyncService;
 
     @InjectMocks
     private ChatbotOrchestrationService chatbotOrchestrationService;
+
+    // advanceToContestSelecting이 커밋 이후에만 비동기 추천 호출을 트리거하도록
+    // TransactionSynchronizationManager.registerSynchronization을 쓰기 때문에, 실제 트랜잭션
+    // 없이 서비스 메서드를 직접 호출하는 단위 테스트에서도 등록이 되게 동기화 컨텍스트를 열어준다
+    // (ProfileServiceTest와 동일한 패턴).
+    @BeforeEach
+    void setUpTransactionSynchronization() {
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDownTransactionSynchronization() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clear();
+        }
+    }
 
     @DisplayName("팀 생성 직후 인사 유도를 시작하면 상태가 GREETING이 되고 챗봇 메시지가 발행된다.")
     @Test
@@ -206,9 +221,6 @@ class ChatbotOrchestrationServiceTest {
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(lastToGreet));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(leader, lastToGreet));
-        given(contestRepository.findAllWithFilterAndDeadlineDesc(any(), any(), any(), any(), any()))
-                .willReturn(new PageImpl<>(List.of()));
-        given(aiClient.recommendContests(any(), any())).willReturn(List.of());
 
         // when
         chatbotOrchestrationService.recordGreetingAndAdvance(1L, 20L);
@@ -223,6 +235,9 @@ class ChatbotOrchestrationServiceTest {
         verify(chatService, never())
                 .postChatbotCardMessage(any(), eq(MessageType.LEADER_NOMINATION_CARD), anyString(), anyString());
         verify(aiClient, never()).recommendLeaderCandidates(any(), any());
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+        verify(contestRecommendationAsyncService).recommendContestsAsync(1L, InterestCategory.IT_AI_TECH);
     }
 
     @DisplayName("CANDIDATE_VOTE 팀은 팀장 여부 투표 없이 사전 후보 전원을 바로 투표 카드로 발행한다.")
@@ -309,29 +324,15 @@ class ChatbotOrchestrationServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.TEAM_NOT_FOUND);
     }
 
-    @DisplayName("공모전 선정 단계 진입 시 추천 공모전이 있으면 추천 카드가 발행되고 후보로도 자동 등록된다.")
+    @DisplayName("공모전 선정 단계 진입 시 상태/마감을 커밋한 뒤에만 AI 추천 호출을 비동기로 위임한다.")
     @Test
-    void 공모전_선정_단계_진입_시_추천_공모전이_있으면_추천_카드가_발행된다() {
+    void 공모전_선정_단계_진입_시_AI_추천_호출을_비동기로_위임한다() {
         // given
         Team team = Team.builder()
                 .teamId(1L)
                 .status(TeamStatus.LEADER_DECIDED)
                 .preferredCategory(InterestCategory.IT_AI_TECH)
                 .build();
-        TeamMember leader = teamMemberOf(team, 10L, "김민정");
-        leader.assignAsLeader();
-        Contest contest = Contest.builder()
-                .contestId(100L)
-                .title("공모전")
-                .category(InterestCategory.IT_AI_TECH)
-                .build();
-        given(contestRepository.findAllWithFilterAndDeadlineDesc(any(), any(), any(), any(), any()))
-                .willReturn(new PageImpl<>(List.of(contest)));
-        given(aiClient.recommendContests(any(), any())).willReturn(List.of(100L));
-        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
-                .willReturn(List.of(leader));
-        given(contestCandidateRepository.existsByTeam_TeamIdAndContest_ContestId(1L, 100L))
-                .willReturn(false);
 
         // when
         chatbotOrchestrationService.advanceToContestSelecting(team);
@@ -339,63 +340,12 @@ class ChatbotOrchestrationServiceTest {
         // then
         assertThat(team.getStatus()).isEqualTo(TeamStatus.CONTEST_SELECTING);
         assertThat(team.getContestCandidateDeadlineAt()).isNotNull();
-        verify(chatService)
-                .postChatbotCardMessage(eq(team), eq(MessageType.CONTEST_RECOMMEND_CARD), anyString(), anyString());
-        verify(contestCandidateRepository).save(any(ContestCandidate.class));
-    }
+        // 커밋(afterCommit) 전에는 아직 AI 추천을 호출하지 않는다 — 상태 전이만 동기로 반영된다.
+        verify(contestRecommendationAsyncService, never()).recommendContestsAsync(any(), any());
 
-    @DisplayName("이미 후보로 등록된 추천 공모전은 중복 등록하지 않는다.")
-    @Test
-    void 이미_후보로_등록된_추천_공모전은_중복_등록하지_않는다() {
-        // given
-        Team team = Team.builder()
-                .teamId(1L)
-                .status(TeamStatus.LEADER_DECIDED)
-                .preferredCategory(InterestCategory.IT_AI_TECH)
-                .build();
-        TeamMember leader = teamMemberOf(team, 10L, "김민정");
-        leader.assignAsLeader();
-        Contest contest = Contest.builder()
-                .contestId(100L)
-                .title("공모전")
-                .category(InterestCategory.IT_AI_TECH)
-                .build();
-        given(contestRepository.findAllWithFilterAndDeadlineDesc(any(), any(), any(), any(), any()))
-                .willReturn(new PageImpl<>(List.of(contest)));
-        given(aiClient.recommendContests(any(), any())).willReturn(List.of(100L));
-        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
-                .willReturn(List.of(leader));
-        given(contestCandidateRepository.existsByTeam_TeamIdAndContest_ContestId(1L, 100L))
-                .willReturn(true);
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
 
-        // when
-        chatbotOrchestrationService.advanceToContestSelecting(team);
-
-        // then
-        verify(contestCandidateRepository, never()).save(any());
-    }
-
-    @DisplayName("추천할 공모전이 없으면 일반 안내 메시지만 발행된다.")
-    @Test
-    void 추천할_공모전이_없으면_일반_안내_메시지만_발행된다() {
-        // given
-        Team team = Team.builder()
-                .teamId(1L)
-                .status(TeamStatus.LEADER_DECIDED)
-                .preferredCategory(InterestCategory.IT_AI_TECH)
-                .build();
-        given(contestRepository.findAllWithFilterAndDeadlineDesc(any(), any(), any(), any(), any()))
-                .willReturn(new PageImpl<>(List.of()));
-        given(aiClient.recommendContests(any(), any())).willReturn(List.of());
-
-        // when
-        chatbotOrchestrationService.advanceToContestSelecting(team);
-
-        // then
-        assertThat(team.getStatus()).isEqualTo(TeamStatus.CONTEST_SELECTING);
-        verify(chatService).postChatbotMessage(eq(team), anyString());
-        verify(chatService, never())
-                .postChatbotCardMessage(any(), eq(MessageType.CONTEST_RECOMMEND_CARD), anyString(), anyString());
+        verify(contestRecommendationAsyncService).recommendContestsAsync(1L, InterestCategory.IT_AI_TECH);
     }
 
     @DisplayName("공모전이 확정되면 팀이 IN_PROGRESS로 전이되고 활용 안내 카드도 함께 발행된다.")
@@ -428,20 +378,20 @@ class ChatbotOrchestrationServiceTest {
         verify(chatService).postChatbotMessage(eq(team), anyString());
     }
 
-    @DisplayName("@챗봇으로 말을 걸면 AI 답변이 챗봇 메시지로 발행된다.")
+    @DisplayName("@챗봇으로 말을 걸면 AI 호출이 비동기로 위임된다.")
     @Test
-    void 챗봇으로_말을_걸면_AI_답변이_챗봇_메시지로_발행된다() {
+    void 챗봇으로_말을_걸면_AI_호출이_비동기로_위임된다() {
         // given
         Team team = Team.builder().teamId(1L).status(TeamStatus.IN_PROGRESS).build();
         team.setChatbotEnabled(true);
         given(teamRepository.findById(1L)).willReturn(Optional.of(team));
-        given(aiClient.answerTeamQuestion("우리 역할 분담 추천해줘")).willReturn("역할 분담 추천이에요.");
 
         // when
         chatbotOrchestrationService.respondToMentionIfAny(1L, "@챗봇 우리 역할 분담 추천해줘");
 
         // then
-        verify(chatService).postChatbotMessage(team, "역할 분담 추천이에요.");
+        verify(chatbotMentionAsyncService).answerMentionAsync(1L, "우리 역할 분담 추천해줘");
+        verify(chatService, never()).postChatbotMessage(any(), anyString());
     }
 
     @DisplayName("@챗봇으로 시작하지 않는 메시지는 무시한다.")
@@ -452,7 +402,7 @@ class ChatbotOrchestrationServiceTest {
 
         // then
         verify(teamRepository, never()).findById(any());
-        verify(chatService, never()).postChatbotMessage(any(), anyString());
+        verify(chatbotMentionAsyncService, never()).answerMentionAsync(any(), any());
     }
 
     @DisplayName("챗봇이 꺼져있으면 @챗봇 멘션에 응답하지 않는다.")
@@ -467,8 +417,7 @@ class ChatbotOrchestrationServiceTest {
         chatbotOrchestrationService.respondToMentionIfAny(1L, "@챗봇 타임라인 추천해줘");
 
         // then
-        verify(chatService, never()).postChatbotMessage(any(), anyString());
-        verify(aiClient, never()).answerTeamQuestion(any());
+        verify(chatbotMentionAsyncService, never()).answerMentionAsync(any(), any());
     }
 
     private TeamMember teamMemberOf(Team team, Long memberId, String nickname) {
