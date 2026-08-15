@@ -122,6 +122,30 @@ Figma 목업에 "제출 여부 미진행시" 화면이 관련 화면으로 명�
 >    으로 스캔하는데 `teams`에 해당 인덱스가 없었다 — V30에 복합 인덱스
 >    (`idx_teams_status_submission_check_reminder_at`)를 추가했다.
 
+## 스케줄러 스레드풀/분산 락 보강 (2026-08-15, 스레드풀 점유 이슈 점검)
+
+팀 수가 늘어날 때 스케줄러 쪽에서 생길 수 있는 문제 두 가지를 미리 보강했다.
+
+- **스케줄러 스레드풀 확장**: Spring Boot는 `@Scheduled`에 기본으로 스레드 1개짜리
+  `TaskScheduler`를 쓴다. `TeamSchedulerJobs`의 7개 job과
+  `MatchingSchedulerJobs`/`MatchingResponseDeadlineJobs`/`MemberWithdrawalSchedulerJobs`가
+  전부 이 스레드 하나를 순서대로 나눠 쓰고 있어서, 한 job이 오래 걸리면(예: 마감 지난 팀이
+  많아 순차 처리가 길어짐) 서로 무관한 다른 job들까지 밀리는 구조였다. `application.yml`에
+  `spring.task.scheduling.pool.size: 5`를 추가해 해결.
+- **`TeamSchedulerJobs`에 `@SchedulerLock` 추가**: `MatchingSchedulerJobs` 등 다른
+  스케줄러들은 이미 ShedLock(`SchedulingConfig`의 `LockProvider`)을 쓰는데 `TeamSchedulerJobs`
+  의 7개 job만 빠져 있었다. 서버가 1대인 지금은 기능적으로 아무 효과가 없다(경쟁할 다른
+  인스턴스가 없음) — "스케줄러 job에는 ShedLock을 붙인다"는 이 프로젝트의 기존 정책
+  ([10-matching-algorithm-detail.md](./10-matching-algorithm-detail.md) 12.2절 참고)에
+  다른 스케줄러들과 동일하게 맞춘 것으로, 서버를 여러 대로 늘리는 시점부터 같은 job이
+  인스턴스마다 중복 실행되는 걸 막아준다. `lockAtMostFor`는 5분 간격 job엔 `PT10M`, 일 1회
+  job엔 `PT30M`(다른 스케줄러들과 동일한 기준).
+- `resolveLeaderSelectionDeadlines`가 호출하는 `LeaderElectionService.resolveDeadlineIfDue`는
+  (정상 개표든 무작위 지정이든) 팀장이 정해지면 항상 `assignLeader` → `advanceToContestSelecting`
+  으로 이어져 AI 공모전 추천 호출까지 같은 흐름에서 트리거된다 — 이 AI 호출을 트랜잭션 밖으로
+  빼는 리팩터링도 같이 진행했다. 자세한 내용은 [08-ai.md](./08-ai.md)의 "AI 호출 비동기 분리"
+  참고.
+
 ## 미정 / 추후 확인 필요
 
 - ~~`Team.status = SUBMITTED` 이후 "팀원 리뷰 단계로 이동"~~ → Phase 9에서 연결 완료.

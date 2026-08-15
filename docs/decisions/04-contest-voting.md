@@ -150,8 +150,11 @@ Figma의 "공모전 투표" 바텀시트("N명 참여중..")와 "투표 결과" 
   고쳤다. `addedByTeamMember`가 `nullable=false`라 이 시점에 이미 확정된 팀장을 등록자로
   채운다(이 메서드는 항상 팀장 확정 직후에만 호출되므로 팀장 부재 케이스는 이론상 없음).
   순환 의존(`ContestVotingService` → `ChatbotOrchestrationService`) 때문에
-  `ContestVotingService.addCandidate`를 호출하는 대신 `ChatbotOrchestrationService`가
-  `ContestCandidateRepository`를 직접 주입받아 처리한다.
+  `ContestVotingService.addCandidate`를 호출하는 대신 `ContestCandidateRepository`를 직접
+  주입받아 처리한다. **(2026-08-15 갱신)** 이 등록 로직은 AI 호출을 트랜잭션 밖으로 빼내는
+  리팩터링으로 `ChatbotOrchestrationService`에서 `ChatbotContestRecommendationTxService`로
+  옮겨졌다 — `ContestCandidateRepository` 직접 주입 방식은 그대로 유지. 자세한 내용은
+  [08-ai.md](./08-ai.md)의 "AI 호출 비동기 분리" 참고.
 
 ## 공모전 공유 (2026-08-05, 기능명세서 3.4.2/5.1.4)
 

@@ -7,12 +7,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
-import org.cotato.gongmozip.domains.contest.entity.Contest;
-import org.cotato.gongmozip.domains.contest.entity.ContestCandidate;
-import org.cotato.gongmozip.domains.contest.repository.ContestCandidateRepository;
-import org.cotato.gongmozip.domains.contest.repository.ContestRepository;
+import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.team.converter.TeamConverter;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
@@ -27,9 +25,11 @@ import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
 import org.cotato.gongmozip.domains.team.repository.TeamRepository;
 import org.cotato.gongmozip.global.ai.AiClient;
 import org.cotato.gongmozip.global.ai.dto.LeaderCandidateSnapshot;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Team.status 상태머신을 전이시키는 챗봇 오케스트레이션 엔진 (docs/decisions/01-team.md).
@@ -37,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
  * LEADER_DECIDED -> CONTEST_SELECTING, CONTEST_DECIDED -> IN_PROGRESS 전이를 추가했다.
  * Phase 8에서 팀장 후보/공모전 AI 추천을 카드 메시지에 연결했다 (docs/decisions/08-ai.md).
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChatbotOrchestrationService {
@@ -44,7 +45,6 @@ public class ChatbotOrchestrationService {
     private static final String GREETING_PROMPT =
             "안녕하세요. 저는 팀 운영을 도와주는 AI 챗봇이에요. 팀 매칭이 완료되었어요. 각자 간단한 자기소개와 인사를 나눠볼까요?";
     private static final String LEADER_SELECTION_PROMPT = "모두 인사를 마쳤네요! 이제 팀장을 선출해볼게요. 팀장이 되고 싶은 분은 투표해주세요.";
-    private static final String CONTEST_SELECTION_PROMPT = "팀장 선출까지 마쳤으면, 팀원들과 함께 나갈 공모전을 후보로 추가하고 투표해보세요!";
     private static final String IN_PROGRESS_PROMPT = "언제든 저의 도움이 필요하면 태그해주세요.";
     private static final String CHATBOT_GUIDE_TITLE = "활용 예시";
     private static final List<String> CHATBOT_GUIDE_EXAMPLES = List.of("우리 역할 분담 추천해줘", "우리 타임라인 추천해줘");
@@ -52,15 +52,14 @@ public class ChatbotOrchestrationService {
     // 팀장 여부 투표/팀장 투표 시작(=LEADER_SELECTING 진입) 후 이 시간 안에 결과가 나지 않으면
     // 스케줄러가 강제로 확정한다(GREETING 타임아웃과 동일한 정책, docs/decisions/02-leader-election.md).
     private static final int LEADER_SELECTION_TIMEOUT_HOURS = 2;
-    private static final int CONTEST_RECOMMENDATION_POOL_SIZE = 10;
     private static final String CHATBOT_MENTION_PREFIX = "@챗봇";
 
     private final ChatService chatService;
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
-    private final ContestRepository contestRepository;
-    private final ContestCandidateRepository contestCandidateRepository;
     private final AiClient aiClient;
+    private final ChatbotContestRecommendationAsyncService contestRecommendationAsyncService;
+    private final ChatbotMentionAsyncService chatbotMentionAsyncService;
     // 이 프로젝트에는 Spring이 자동 구성한 ObjectMapper 빈이 없어 직접 생성한다.
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -202,69 +201,30 @@ public class ChatbotOrchestrationService {
     /**
      * 팀장이 확정된 직후(LeaderElectionService) 호출되어 공모전 선정 단계를 시작한다.
      * 공모전 후보/투표 마감을 오늘 오후 11시로 세팅한다 (docs/decisions/04-contest-voting.md).
+     *
+     * <p>AI 공모전 추천 호출(AiGatewayClient, 최대 20초)은 이 트랜잭션 밖으로 뺐다 — 원래는 이
+     * 메서드 안에서 동기로 호출해서, 팀장 선출 마감 스케줄러가 여러 팀을 순차 처리하다 그중 한
+     * 팀에서 AI 응답을 기다리는 동안 DB 커넥션과 스케줄러 스레드를 계속 붙잡고 있었다(스레드풀
+     * 점유 이슈 점검, 2026-08-15). 상태 전이만 여기서 동기로 커밋하고, 실제 추천 호출은 커밋
+     * 이후 {@link ChatbotContestRecommendationAsyncService}가 비동기로 이어받는다.
      */
     @Transactional
     public void advanceToContestSelecting(Team team) {
         team.advanceStatus(TeamStatus.CONTEST_SELECTING);
         team.scheduleContestCandidateDeadline(LocalDateTime.now().toLocalDate().atTime(23, 0));
 
-        // 마감이 가장 많이 남은 순서대로 추천한다(팀이 막 꾸려진 시점이라 준비 기간이 넉넉한
-        // 공모전을 우선 보여주는 편이 낫다는 판단, 2026-08-05).
-        List<Contest> openContests = contestRepository
-                .findAllWithFilterAndDeadlineDesc(
-                        null,
-                        team.getPreferredCategory(),
-                        "OPEN",
-                        LocalDateTime.now(),
-                        PageRequest.of(0, CONTEST_RECOMMENDATION_POOL_SIZE))
-                .getContent();
-        List<Long> recommendedContestIds = aiClient.recommendContests(
-                team.getPreferredCategory(),
-                openContests.stream().map(Contest::getContestId).toList());
-
-        if (recommendedContestIds.isEmpty()) {
-            chatService.postChatbotMessage(team, CONTEST_SELECTION_PROMPT);
-        } else {
-            registerRecommendedCandidates(team, openContests, recommendedContestIds);
-            chatService.postChatbotCardMessage(
-                    team,
-                    MessageType.CONTEST_RECOMMEND_CARD,
-                    CONTEST_SELECTION_PROMPT,
-                    toIdsMetadata("contestIds", recommendedContestIds));
-        }
-    }
-
-    // AI가 추천한 공모전은 정보성 표시로 끝나지 않고 바로 투표 가능한 후보로 등록돼야 한다
-    // (Figma "공모전 후보 리스트" 화면이 추천 목록을 이미 후보로 전제하고 있음, 2026-08-05
-    // 커버리지 점검 중 발견). 후보를 등록한 사람(addedByTeamMember)은 nullable=false라
-    // 이 시점에 이미 확정된 팀장으로 채운다 — advanceToContestSelecting은 항상 팀장 확정
-    // 직후에만 호출되므로 팀장이 없는 경우는 이론상 없다.
-    private void registerRecommendedCandidates(
-            Team team, List<Contest> openContests, List<Long> recommendedContestIds) {
-        TeamMember leader =
-                teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE).stream()
-                        .filter(teamMember -> teamMember.getRole() == TeamRole.LEADER)
-                        .findFirst()
-                        .orElse(null);
-        if (leader == null) {
-            return;
-        }
-
-        Map<Long, Contest> contestById =
-                openContests.stream().collect(Collectors.toMap(Contest::getContestId, contest -> contest));
-        for (Long contestId : recommendedContestIds) {
-            Contest contest = contestById.get(contestId);
-            if (contest == null
-                    || contestCandidateRepository.existsByTeam_TeamIdAndContest_ContestId(
-                            team.getTeamId(), contestId)) {
-                continue;
+        Long teamId = team.getTeamId();
+        InterestCategory preferredCategory = team.getPreferredCategory();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    contestRecommendationAsyncService.recommendContestsAsync(teamId, preferredCategory);
+                } catch (TaskRejectedException e) {
+                    log.error("공모전 추천 비동기 작업 제출 실패 - teamId: {}", teamId, e);
+                }
             }
-            contestCandidateRepository.save(ContestCandidate.builder()
-                    .team(team)
-                    .contest(contest)
-                    .addedByTeamMember(leader)
-                    .build());
-        }
+        });
     }
 
     /** 공모전이 확정된 직후(ContestVotingService) 호출되어 진행 단계로 전이시킨다. */
@@ -284,10 +244,15 @@ public class ChatbotOrchestrationService {
     }
 
     /**
-     * 팀원이 메시지를 보낼 때마다 호출된다. 메시지가 "@챗봇"으로 시작하면 자유 질의로 간주해
-     * AI 답변을 채팅에 남긴다. 챗봇이 꺼져있으면(Team.chatbotEnabled=false) 응답하지 않는다.
+     * 팀원이 메시지를 보낼 때마다 호출된다(ChatWebSocketController, STOMP inbound 스레드에서 직접
+     * 실행됨). 메시지가 "@챗봇"으로 시작하면 자유 질의로 간주해 AI 답변을 채팅에 남긴다. 챗봇이
+     * 꺼져있으면(Team.chatbotEnabled=false) 응답하지 않는다.
+     *
+     * <p>여기서는 멘션 여부/챗봇 on-off 같은 빠른 확인만 하고, AI 호출(AiGatewayClient, 최대
+     * 20초)은 {@link ChatbotMentionAsyncService}로 넘겨 비동기로 처리한다 — 그렇지 않으면 웹소켓
+     * 메시지 처리 스레드가 AI 응답을 기다리는 동안 막혀서, 같은 시간대 다른 채팅방의 메시지 전송까지
+     * 지연될 수 있다(스레드풀 점유 이슈 점검, 2026-08-15). 쓰기가 없는 조회라 트랜잭션이 필요 없다.
      */
-    @Transactional
     public void respondToMentionIfAny(Long teamId, String content) {
         if (content == null || !content.trim().startsWith(CHATBOT_MENTION_PREFIX)) {
             return;
@@ -300,8 +265,11 @@ public class ChatbotOrchestrationService {
 
         String question =
                 content.trim().substring(CHATBOT_MENTION_PREFIX.length()).trim();
-        String answer = aiClient.answerTeamQuestion(question);
-        chatService.postChatbotMessage(team, answer);
+        try {
+            chatbotMentionAsyncService.answerMentionAsync(teamId, question);
+        } catch (TaskRejectedException e) {
+            log.error("챗봇 자유질의 비동기 작업 제출 실패 - teamId: {}", teamId, e);
+        }
     }
 
     private String toIdsMetadata(String key, List<Long> ids) {

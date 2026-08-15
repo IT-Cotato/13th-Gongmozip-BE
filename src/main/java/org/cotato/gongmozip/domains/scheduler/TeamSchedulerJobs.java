@@ -2,6 +2,7 @@ package org.cotato.gongmozip.domains.scheduler;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.cotato.gongmozip.domains.scheduler.service.TeamScheduleService;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -10,6 +11,10 @@ import org.springframework.stereotype.Component;
 /**
  * 실제 cron 트리거. 로직 자체는 {@link TeamScheduleService}에 있다. 대상 팀을 팀 단위 트랜잭션으로
  * 하나씩 처리한다 — 한 팀에서 예외가 나도 나머지 팀 처리는 계속되도록 팀마다 try-catch로 격리한다.
+ *
+ * <p>{@code @SchedulerLock}(ShedLock)으로 서버를 여러 대로 늘려도 같은 job이 인스턴스마다 중복
+ * 실행되지 않게 한다 — 서버가 1대인 지금은 효과가 없지만, MatchingSchedulerJobs 등 다른
+ * 스케줄러는 이미 붙어있던 걸 이 클래스만 빠뜨리고 있었다(스레드풀 점유 이슈 점검, 2026-08-15).
  */
 @Slf4j
 @Component
@@ -20,6 +25,7 @@ public class TeamSchedulerJobs {
 
     // 공모전 후보/투표 마감은 시각 단위(오늘 23시)라 5분 간격으로 확인한다.
     @Scheduled(cron = "0 */5 * * * *")
+    @SchedulerLock(name = "team-contest-voting-deadline", lockAtMostFor = "PT10M")
     public void resolveContestVotingDeadlines() {
         for (Long teamId : teamScheduleService.findDueContestVotingDeadlineTeamIds()) {
             try {
@@ -32,6 +38,7 @@ public class TeamSchedulerJobs {
 
     // 공모전 투표 마감 10분 전 리마인더도 같은 5분 간격으로 확인한다.
     @Scheduled(cron = "0 */5 * * * *")
+    @SchedulerLock(name = "team-contest-vote-reminder", lockAtMostFor = "PT10M")
     public void sendContestVoteReminders() {
         for (Long teamId : teamScheduleService.findDueContestVoteReminderTeamIds()) {
             try {
@@ -44,6 +51,7 @@ public class TeamSchedulerJobs {
 
     // 중간점검/제출확인은 날짜 단위 비교라 하루 한 번이면 충분하다.
     @Scheduled(cron = "0 0 9 * * *")
+    @SchedulerLock(name = "team-progress-check", lockAtMostFor = "PT30M")
     public void sendProgressChecks() {
         for (Long teamId : teamScheduleService.findDueProgressCheckTeamIds()) {
             try {
@@ -55,6 +63,7 @@ public class TeamSchedulerJobs {
     }
 
     @Scheduled(cron = "0 0 9 * * *")
+    @SchedulerLock(name = "team-submission-check", lockAtMostFor = "PT30M")
     public void sendSubmissionChecks() {
         for (Long teamId : teamScheduleService.findDueSubmissionCheckTeamIds()) {
             try {
@@ -67,6 +76,7 @@ public class TeamSchedulerJobs {
 
     // "진행 완료"로 응답하지 않은 팀에게 2시간 간격으로 재알림하므로 5분 간격으로 마감을 확인한다.
     @Scheduled(cron = "0 */5 * * * *")
+    @SchedulerLock(name = "team-submission-check-reminder", lockAtMostFor = "PT10M")
     public void sendSubmissionCheckReminders() {
         for (Long teamId : teamScheduleService.findDueSubmissionCheckReminderTeamIds()) {
             try {
@@ -79,6 +89,7 @@ public class TeamSchedulerJobs {
 
     // 인사 유도 타임아웃도 시각 단위(팀 생성 후 2시간)라 5분 간격으로 확인한다.
     @Scheduled(cron = "0 */5 * * * *")
+    @SchedulerLock(name = "team-greeting-timeout", lockAtMostFor = "PT10M")
     public void forceAdvanceGreetings() {
         for (Long teamId : teamScheduleService.findDueGreetingTimeoutTeamIds()) {
             try {
@@ -97,6 +108,7 @@ public class TeamSchedulerJobs {
     // 팀장 여부 투표/팀장 투표 마감도 시각 단위(LEADER_SELECTING 진입 후 2시간)라 5분 간격으로
     // 확인한다.
     @Scheduled(cron = "0 */5 * * * *")
+    @SchedulerLock(name = "team-leader-selection-deadline", lockAtMostFor = "PT10M")
     public void resolveLeaderSelectionDeadlines() {
         for (Long teamId : teamScheduleService.findDueLeaderSelectionDeadlineTeamIds()) {
             try {
