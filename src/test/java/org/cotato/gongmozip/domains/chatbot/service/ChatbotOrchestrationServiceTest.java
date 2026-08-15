@@ -26,7 +26,6 @@ import org.cotato.gongmozip.domains.team.exception.TeamException;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
 import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
 import org.cotato.gongmozip.domains.team.repository.TeamRepository;
-import org.cotato.gongmozip.global.ai.AiClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -52,10 +51,10 @@ class ChatbotOrchestrationServiceTest {
     private TeamMemberRepository teamMemberRepository;
 
     @Mock
-    private AiClient aiClient;
+    private ChatbotContestRecommendationAsyncService contestRecommendationAsyncService;
 
     @Mock
-    private ChatbotContestRecommendationAsyncService contestRecommendationAsyncService;
+    private ChatbotLeaderNominationAsyncService leaderNominationAsyncService;
 
     @Mock
     private ChatbotMentionAsyncService chatbotMentionAsyncService;
@@ -131,9 +130,9 @@ class ChatbotOrchestrationServiceTest {
         verify(chatService, never()).postChatbotMessage(any(), anyString());
     }
 
-    @DisplayName("전원이 인사를 마치면 팀장 선출 단계로 전이하고 챗봇 메시지가 발행된다.")
+    @DisplayName("전원이 인사를 마치면 팀장 선출 단계로 전이하고, 커밋 후 팀장 추천 호출이 비동기로 위임된다.")
     @Test
-    void 전원이_인사를_마치면_팀장_선출_단계로_전이하고_챗봇_메시지가_발행된다() {
+    void 전원이_인사를_마치면_팀장_선출_단계로_전이하고_팀장_추천_호출을_비동기로_위임한다() {
         // given
         Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
         TeamMember alreadyGreeted = teamMemberOf(team, 20L, "이해은");
@@ -144,7 +143,6 @@ class ChatbotOrchestrationServiceTest {
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(lastToGreet));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(alreadyGreeted, lastToGreet));
-        given(aiClient.recommendLeaderCandidates(any(), any())).willReturn(List.of(20L));
 
         // when
         chatbotOrchestrationService.recordGreetingAndAdvance(1L, 10L);
@@ -152,11 +150,14 @@ class ChatbotOrchestrationServiceTest {
         // then
         assertThat(lastToGreet.getGreetedAt()).isNotNull();
         assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
-        verify(chatService)
-                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_NOMINATION_CARD), anyString(), anyString());
+        verify(leaderNominationAsyncService, never()).recommendLeaderNomineesAsync(any());
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+        verify(leaderNominationAsyncService).recommendLeaderNomineesAsync(1L);
     }
 
-    @DisplayName("타임아웃이 지나면 일부만 인사했어도 강제로 팀장 선출 단계로 전이한다.")
+    @DisplayName("타임아웃이 지나면 일부만 인사했어도 강제로 팀장 선출 단계로 전이하고, 커밋 후 팀장 추천 호출이 비동기로 위임된다.")
     @Test
     void 타임아웃이_지나면_일부만_인사했어도_강제로_팀장_선출_단계로_전이한다() {
         // given
@@ -168,15 +169,16 @@ class ChatbotOrchestrationServiceTest {
         given(teamRepository.findById(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(greeted, neverGreeted));
-        given(aiClient.recommendLeaderCandidates(any(), any())).willReturn(List.of());
 
         // when
         chatbotOrchestrationService.forceAdvanceGreetingIfDue(1L);
 
         // then
         assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
-        verify(chatService)
-                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_NOMINATION_CARD), anyString(), anyString());
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+        verify(leaderNominationAsyncService).recommendLeaderNomineesAsync(1L);
     }
 
     @DisplayName("AUTO_ASSIGNED 팀은 인사 메시지 자체에 팀장 안내가 포함된다.")
@@ -234,10 +236,11 @@ class ChatbotOrchestrationServiceTest {
         assertThat(metadataCaptor.getValue()).contains("leaderTeamMemberId").contains("10");
         verify(chatService, never())
                 .postChatbotCardMessage(any(), eq(MessageType.LEADER_NOMINATION_CARD), anyString(), anyString());
-        verify(aiClient, never()).recommendLeaderCandidates(any(), any());
+        verify(leaderNominationAsyncService, never()).recommendLeaderNomineesAsync(any());
 
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
         verify(contestRecommendationAsyncService).recommendContestsAsync(1L, InterestCategory.IT_AI_TECH);
+        verify(leaderNominationAsyncService, never()).recommendLeaderNomineesAsync(any());
     }
 
     @DisplayName("CANDIDATE_VOTE 팀은 팀장 여부 투표 없이 사전 후보 전원을 바로 투표 카드로 발행한다.")
@@ -275,6 +278,9 @@ class ChatbotOrchestrationServiceTest {
         assertThat(metadataCaptor.getValue()).contains("10").contains("20").doesNotContain("30");
         verify(chatService, never())
                 .postChatbotCardMessage(any(), eq(MessageType.LEADER_NOMINATION_CARD), anyString(), anyString());
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+        verify(leaderNominationAsyncService, never()).recommendLeaderNomineesAsync(any());
     }
 
     @DisplayName("이미 GREETING을 지나 다음 단계로 넘어간 팀이면 타임아웃 강제 전이를 하지 않는다.")
