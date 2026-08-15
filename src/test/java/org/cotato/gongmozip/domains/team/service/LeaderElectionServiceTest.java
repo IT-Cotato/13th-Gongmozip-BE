@@ -10,7 +10,6 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.cotato.gongmozip.domains.chat.entity.Message;
@@ -32,7 +31,8 @@ import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
 import org.cotato.gongmozip.domains.team.repository.LeaderVoteRepository;
 import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
 import org.cotato.gongmozip.domains.team.repository.TeamRepository;
-import org.cotato.gongmozip.global.ai.AiClient;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +40,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class LeaderElectionServiceTest {
@@ -63,10 +65,26 @@ class LeaderElectionServiceTest {
     private MessageRepository messageRepository;
 
     @Mock
-    private AiClient aiClient;
+    private LeaderTiebreakAsyncService leaderTiebreakAsyncService;
 
     @InjectMocks
     private LeaderElectionService leaderElectionService;
+
+    // tally()가 커밋 이후에만 동률 처리 비동기 호출을 트리거하도록
+    // TransactionSynchronizationManager.registerSynchronization을 쓰기 때문에, 실제 트랜잭션
+    // 없이 서비스 메서드를 직접 호출하는 단위 테스트에서도 등록이 되게 동기화 컨텍스트를 열어준다
+    // (ChatbotOrchestrationServiceTest/ProfileServiceTest와 동일한 패턴).
+    @BeforeEach
+    void setUpTransactionSynchronization() {
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDownTransactionSynchronization() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clear();
+        }
+    }
 
     @DisplayName("LEADER_SELECTING 상태가 아니면 팀장 여부 투표에 실패한다.")
     @Test
@@ -327,9 +345,9 @@ class LeaderElectionServiceTest {
                 .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
     }
 
-    @DisplayName("전원이 투표했는데 동률이면 재투표 안내 카드가 발행되고 팀장은 정해지지 않는다.")
+    @DisplayName("전원이 투표했는데 동률이면, 커밋 이후 동률 처리(AI 추천)가 비동기로 위임되고 팀장은 아직 정해지지 않는다.")
     @Test
-    void 전원이_투표했는데_동률이면_재투표_안내_카드가_발행되고_팀장은_정해지지_않는다() {
+    void 전원이_투표했는데_동률이면_동률_처리를_비동기로_위임한다() {
         // given
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
@@ -343,7 +361,6 @@ class LeaderElectionServiceTest {
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter1, voter2));
         given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
-        given(aiClient.recommendTiebreakLeader(any(), any(), any())).willReturn(10L);
 
         LeaderVote existing = LeaderVote.builder()
                 .team(team)
@@ -361,8 +378,6 @@ class LeaderElectionServiceTest {
                                 .round(1)
                                 .build()));
 
-        LocalDateTime beforeRevote = LocalDateTime.now();
-
         // when
         leaderElectionService.castVote(1L, 20L, 20L);
 
@@ -370,20 +385,20 @@ class LeaderElectionServiceTest {
         assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
         assertThat(voter1.getRole()).isEqualTo(TeamRole.MEMBER);
         assertThat(voter2.getRole()).isEqualTo(TeamRole.MEMBER);
-        // 재투표 라운드가 열렸으니 투표 마감이 그 시점부터 새로 8시간 잡혀야 한다(직전 라운드에서
-        // 남은 시간을 물려받지 않음).
-        assertThat(team.getLeaderVoteDeadlineAt()).isAfter(beforeRevote.plusHours(7));
-        ArgumentCaptor<String> metadataCaptor = ArgumentCaptor.forClass(String.class);
-        verify(chatService)
-                .postChatbotCardMessage(
-                        eq(team), eq(MessageType.LEADER_VOTE_CARD), anyString(), metadataCaptor.capture());
-        assertThat(metadataCaptor.getValue()).contains("10").contains("20");
-        assertThat(metadataCaptor.getValue()).contains("aiRecommendedTeamMemberId");
+        // 커밋 전에는 아직 비동기 동률 처리가 호출되지 않는다 — 동률 판정만 동기로 끝난다.
+        verify(leaderTiebreakAsyncService, never()).resolveTiebreakAsync(any(), anyInt(), any());
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+        ArgumentCaptor<List<Long>> candidateIdsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(leaderTiebreakAsyncService).resolveTiebreakAsync(eq(1L), eq(1), candidateIdsCaptor.capture());
+        assertThat(candidateIdsCaptor.getValue()).containsExactlyInAnyOrder(10L, 20L);
     }
 
-    @DisplayName("재투표(2라운드)도 동률이면 더 재투표하지 않고 AI 추천 후보로 바로 확정된다.")
+    @DisplayName("재투표(2라운드)도 동률이면, 커밋 이후 라운드 번호(2)와 함께 동률 처리가 비동기로 위임된다.")
     @Test
-    void 재투표도_동률이면_AI_추천으로_바로_확정된다() {
+    void 재투표도_동률이면_라운드_2로_동률_처리를_비동기로_위임한다() {
         // given
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
@@ -397,7 +412,6 @@ class LeaderElectionServiceTest {
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter1, voter2));
         given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);
-        given(aiClient.recommendTiebreakLeader(any(), any(), any())).willReturn(10L);
         given(leaderVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(1L, 20L, 2))
                 .willReturn(false);
 
@@ -434,15 +448,14 @@ class LeaderElectionServiceTest {
 
         // when
         leaderElectionService.castVote(1L, 20L, 20L);
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
 
-        // then
-        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_DECIDED);
-        assertThat(voter1.getRole()).isEqualTo(TeamRole.LEADER);
-        verify(chatService)
-                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
-        verify(chatService, never())
-                .postChatbotCardMessage(any(), eq(MessageType.LEADER_VOTE_CARD), anyString(), anyString());
-        verify(chatbotOrchestrationService).advanceToContestSelecting(team);
+        // then — round>=2 동률 시 AI 추천으로 바로 확정하는 실제 동작은
+        // LeaderTiebreakTxServiceTest에서 검증한다. 여기서는 올바른 라운드(2)로 위임되는지만 본다.
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
+        ArgumentCaptor<List<Long>> candidateIdsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(leaderTiebreakAsyncService).resolveTiebreakAsync(eq(1L), eq(2), candidateIdsCaptor.capture());
+        assertThat(candidateIdsCaptor.getValue()).containsExactlyInAnyOrder(10L, 20L);
     }
 
     @DisplayName("LEADER_SELECTING 상태가 아니면 AI 추천 수락에 실패한다.")
