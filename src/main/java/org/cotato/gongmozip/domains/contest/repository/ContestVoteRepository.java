@@ -15,6 +15,10 @@ public interface ContestVoteRepository extends JpaRepository<ContestVote, Long> 
 
     boolean existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(Long teamId, Long voterTeamMemberId, int round);
 
+    // 마감 전 투표 변경(재투표) 지원 — submitVote가 새 선택을 저장하기 전에 같은 라운드의
+    // 기존 표를 지운다.
+    void deleteByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(Long teamId, Long voterTeamMemberId, int round);
+
     @Query("SELECT MAX(cv.round) FROM ContestVote cv WHERE cv.team.teamId = :teamId")
     Integer findMaxRoundByTeamId(@Param("teamId") Long teamId);
 

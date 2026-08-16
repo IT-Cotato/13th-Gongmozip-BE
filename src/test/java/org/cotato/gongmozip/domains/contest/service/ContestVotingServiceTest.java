@@ -495,39 +495,54 @@ class ContestVotingServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", ContestErrorCode.CONTEST_CANDIDATE_NOT_FOUND);
     }
 
-    @DisplayName("이미 이번 라운드에 투표했으면 다시 투표할 수 없다.")
+    @DisplayName("마감 전이면 같은 라운드 안에서 다시 투표해 선택을 바꿀 수 있다.")
     @Test
-    void 이미_이번_라운드에_투표했으면_다시_투표할_수_없다() {
+    void 마감_전이면_다시_투표해서_선택을_바꿀_수_있다() {
         // given
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
         TeamMember voter = teamMemberOf(team, 10L, "김철수");
-        Contest contest = Contest.builder()
+        TeamMember other = teamMemberOf(team, 20L, "이해은");
+        Contest contestA = Contest.builder()
                 .contestId(100L)
-                .title("공모전")
+                .title("A공모전")
                 .status(org.cotato.gongmozip.domains.contest.enums.ContestStatus.OPEN)
                 .applyEndAt(java.time.LocalDateTime.now().plusDays(7))
                 .build();
-        ContestCandidate candidate = ContestCandidate.builder()
+        Contest contestB = Contest.builder()
+                .contestId(200L)
+                .title("B공모전")
+                .status(org.cotato.gongmozip.domains.contest.enums.ContestStatus.OPEN)
+                .applyEndAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+        ContestCandidate candidateA = ContestCandidate.builder()
                 .contestCandidateId(1L)
                 .team(team)
-                .contest(contest)
+                .contest(contestA)
+                .addedByTeamMember(voter)
+                .build();
+        ContestCandidate candidateB = ContestCandidate.builder()
+                .contestCandidateId(2L)
+                .team(team)
+                .contest(contestB)
                 .addedByTeamMember(voter)
                 .build();
 
         given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(voter));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
-                .willReturn(List.of(voter));
+                .willReturn(List.of(voter, other));
         given(contestVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
-        given(contestCandidateRepository.findByTeamId(1L)).willReturn(List.of(candidate));
-        given(contestVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(1L, 10L, 1))
-                .willReturn(true);
+        given(contestCandidateRepository.findByTeamId(1L)).willReturn(List.of(candidateA, candidateB));
+        given(contestVoteRepository.countDistinctVotersByTeamIdAndRound(1L, 1)).willReturn(1L);
 
-        // when & then
-        assertThatThrownBy(() -> contestVotingService.submitVote(1L, 10L, List.of(1L)))
-                .isInstanceOf(ContestException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ContestErrorCode.ALREADY_VOTED_CONTEST);
+        // when: A에 투표했다가 마음이 바뀌어 B로 다시 투표
+        contestVotingService.submitVote(1L, 10L, List.of(2L));
+
+        // then
+        verify(contestVoteRepository).deleteByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(1L, 10L, 1);
+        verify(contestVoteRepository).save(any(ContestVote.class));
+        verify(chatbotOrchestrationService, never()).advanceToInProgress(any());
     }
 
     @DisplayName("전원이 투표하고 단독 1위가 있으면 공모전이 확정되고 IN_PROGRESS로 전이한다.")
@@ -565,8 +580,6 @@ class ContestVotingServiceTest {
                 .willReturn(List.of(voter1, voter2));
         given(contestVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
         given(contestCandidateRepository.findByTeamId(1L)).willReturn(List.of(candidateA, candidateB));
-        given(contestVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(1L, 20L, 1))
-                .willReturn(false);
         given(contestVoteRepository.countDistinctVotersByTeamIdAndRound(1L, 1)).willReturn(2L);
         given(contestVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
                 .willReturn(List.of(

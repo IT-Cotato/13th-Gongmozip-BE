@@ -164,6 +164,41 @@ Figma의 "공모전 투표" 바텀시트("N명 참여중..")와 "투표 결과" 
 `submitCandidacy` 등 기존 메서드는 이번 변경 범위 밖" 메모 참고) — 이번엔 실제로 증상이
 보고된 공모전 투표만 고쳤다.
 
+## 후보 등록/투표 마감 24시간 고정 + 재투표 허용 (2026-08-16, Figma "5.1.3.3 팀 공모전 추천 및
+투표" ver.2 개편 반영)
+
+기존엔 후보/투표 마감을 "진입 당일 23시"로 계산했다(추천이 시작되는 시각에 따라 남는 시간이
+들쭉날쭉함). 개편된 Figma는 카드에 "투표 마감까지 01:24:30" 같은 고정 카운트다운을 보여주고,
+동률 재투표도 매 라운드 새로 카운트다운이 도는 걸 전제한다.
+
+- `ChatbotOrchestrationService.CONTEST_CANDIDATE_TIMEOUT_HOURS`(24) — `advanceToContestSelecting`이
+  `LocalDateTime.now().toLocalDate().atTime(23, 0)` 대신 `LocalDateTime.now().plusHours(24)`로
+  마감을 세팅하도록 변경(팀장 후보 마감 3시간/투표 마감 8시간을 나눴던 것과 동일한 이유).
+- `ContestVotingService`도 같은 이름/값의 상수를 별도로 둔다(리더 투표의
+  `LEADER_CANDIDACY_TIMEOUT_HOURS`↔`LEADER_VOTE_TIMEOUT_HOURS`가 각 클래스에 따로 있는 것과
+  동일한 컨벤션). `tally()`의 동률 분기에서 재투표 라운드로 넘어갈 때마다
+  `team.scheduleContestCandidateDeadline(...)`로 24시간을 새로 세팅한다 — 남은 시간을 그대로
+  물려받으면 재투표가 원래 마감보다 훨씬 일찍 끝나버릴 수 있어서다.
+
+또한 목업에 새로 생긴 "다시 투표하기" 버튼은 **마감 전이면 같은 라운드 안에서 투표를 몇 번이든
+바꿀 수 있다**는 뜻으로 확인했다(팀원 확인 완료). 기존엔 한 라운드에 한 번만 투표할 수 있고
+재투표 시 `ALREADY_VOTED_CONTEST`로 거부했는데, 이 제약을 없앴다.
+
+- `ContestVoteRepository.deleteByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound` 신규
+  추가 — `submitVote`가 새 선택을 저장하기 전에 같은 투표자의 이번 라운드 기존 표를 먼저
+  지운다(선택이 겹치면 `unique(contest_candidate_id, voter_team_member_id, round)` 제약에
+  걸리므로 지우고 다시 쌓는 방식으로 처리).
+- 투표 변경은 "전원이 처음 투표를 마치는 순간" 자동 개표(`tally`)되는 기존 규칙과는 무관하다
+  — 개표 후에는 팀 상태가 더 이상 `CONTEST_SELECTING`이 아니라 `requireTeamInContestSelectingWithLock`이
+  막아준다.
+- "후보 추가" 버튼(목업의 두 번째 `+`)은 투표 화면 → 공모전 리스트로 이동하는 프론트 전용
+  네비게이션이라 백엔드 변경이 필요 없다 — `addCandidate`가 이미 `CONTEST_SELECTING` 상태인
+  동안 제한 없이 계속 호출 가능한 상태였다(투표 여부와 무관하게 마감 전까지 언제든 추가
+  가능). "투표 현황 보기"도 기존 `GET .../contest-candidates/votes`(`getVoteStatus`)를 그대로
+  재사용한다 — 새 API 불필요.
+- `ContestErrorCode.ALREADY_VOTED_CONTEST`는 더 이상 던지지 않지만, 외부 계약 변경 범위를
+  최소화하기 위해 enum 값 자체는 남겨뒀다.
+
 ## 미정 / 추후 확인 필요
 
 - ~~CONTEST_SELECTING/CONTEST_VOTING 상태 분리 및 후보 마감 처리~~ → Phase 7에서 해결.
