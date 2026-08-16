@@ -37,7 +37,7 @@ class MatchingAlgorithmBenchmarkTest {
      * Brute Force 상한을 초과해 실제 서비스에서 Greedy가 담당하는 크기 구간의 손실률만 품질 게이트로 검증한다.
      *
      * <p>상한 이하 크기는 운영에서 항상 Brute Force가 처리하므로 Greedy 손실률은 참고 로그로만 남기고,
-     * 상한 초과 구간에서만 손실률 p95·최대값 assertion을 적용한다. 참고 구간에서도 배정 인원수와 재배정 대상자 배정
+     * 상한 초과 구간에서만 손실률 최악값 assertion을 적용한다. 참고 구간에서도 배정 인원수와 재배정 대상자 배정
      * 수는 알고리즘과 무관하게 항상 일치해야 하므로 assertion을 유지한다.
      *
      * <p>Brute Force가 감당 가능한 최대 크기(18명 약 62초)까지만 비교하며, 그 이상 크기는 아래 Greedy 전용
