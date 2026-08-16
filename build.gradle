@@ -68,6 +68,7 @@ dependencies {
 }
 
 tasks.named('test') {
+    systemProperty 'user.timezone', 'Asia/Seoul'
     useJUnitPlatform {
         excludeTags 'matching-benchmark'
     }
@@ -81,6 +82,7 @@ tasks.register('matchingBenchmark', Test) {
     useJUnitPlatform {
         includeTags 'matching-benchmark'
     }
+    systemProperty 'user.timezone', 'Asia/Seoul'
     shouldRunAfter tasks.named('test')
 }
 
