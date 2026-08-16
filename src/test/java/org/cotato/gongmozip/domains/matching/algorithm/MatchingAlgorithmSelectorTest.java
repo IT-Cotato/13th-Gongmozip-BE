@@ -13,6 +13,7 @@ import org.cotato.gongmozip.domains.matching.algorithm.model.pool.MatchingCandid
 import org.cotato.gongmozip.domains.matching.algorithm.model.pool.MatchingPoolInput;
 import org.cotato.gongmozip.domains.matching.config.MatchingAlgorithmProperties;
 import org.cotato.gongmozip.domains.matching.enums.MatchingAlgorithmType;
+import org.cotato.gongmozip.domains.matching.score.SimilarityScorer;
 import org.cotato.gongmozip.domains.matching.score.TeamCompatibilityCalculator;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +30,7 @@ class MatchingAlgorithmSelectorTest {
     void setUp() {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         MatchingPlanComparator comparator = new MatchingPlanComparator();
-        TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator();
+        TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator(new SimilarityScorer());
         MatchingAlgorithmProperties properties = new MatchingAlgorithmProperties();
         properties.setGreedyRestartCount(2);
         var bruteForce = new BruteForceMatchingAlgorithm(calculator, comparator, clock);

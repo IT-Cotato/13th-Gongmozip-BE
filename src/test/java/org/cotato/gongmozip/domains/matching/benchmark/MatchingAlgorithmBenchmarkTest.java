@@ -21,6 +21,7 @@ import org.cotato.gongmozip.domains.matching.algorithm.model.pool.MatchingPoolIn
 import org.cotato.gongmozip.domains.matching.algorithm.model.result.MatchingPlan;
 import org.cotato.gongmozip.domains.matching.config.MatchingAlgorithmProperties;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
+import org.cotato.gongmozip.domains.matching.score.SimilarityScorer;
 import org.cotato.gongmozip.domains.matching.score.TeamCompatibilityCalculator;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
@@ -47,7 +48,7 @@ class MatchingAlgorithmBenchmarkTest {
         // DB 조회/저장, 네트워크, 외부 AI 호출 시간은 이 벤치마크에 포함되지 않는다.
         Clock clock = Clock.systemUTC();
         MatchingPlanComparator comparator = new MatchingPlanComparator();
-        TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator();
+        TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator(new SimilarityScorer());
         MatchingAlgorithmProperties properties = new MatchingAlgorithmProperties();
 
         // 무작위 앵커 순서를 50회 생성해 Greedy를 반복한다.
@@ -121,7 +122,7 @@ class MatchingAlgorithmBenchmarkTest {
     void measureTwentyFourEffectivePools() {
         Clock clock = Clock.systemUTC();
         MatchingPlanComparator comparator = new MatchingPlanComparator();
-        TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator();
+        TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator(new SimilarityScorer());
         BruteForceMatchingAlgorithm bruteForce = new BruteForceMatchingAlgorithm(calculator, comparator, clock);
 
         long startedAt = System.nanoTime();

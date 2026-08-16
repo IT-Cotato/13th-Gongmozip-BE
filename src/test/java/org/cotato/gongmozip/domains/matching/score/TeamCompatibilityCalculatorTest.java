@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 
 class TeamCompatibilityCalculatorTest {
 
-    private final TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator();
+    private final TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator(new SimilarityScorer());
 
     @Test
     @DisplayName("4인 이상적 조합은 총점 100점을 받는다")
