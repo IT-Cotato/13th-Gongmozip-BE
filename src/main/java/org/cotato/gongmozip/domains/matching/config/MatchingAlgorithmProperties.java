@@ -23,7 +23,7 @@ public class MatchingAlgorithmProperties {
 
     // 이 인원까지는 정확한 결과를 얻기 위해 완전탐색을 우선 사용한다.
     @Min(3)
-    private int bruteforceMaxPoolSize = 12;
+    private int bruteforceMaxPoolSize = 16;
 
     // Greedy의 결정적 기본 순서 외에 추가로 생성할 시드 기반 셔플 횟수다.
     @Min(1)

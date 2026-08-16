@@ -1,12 +1,12 @@
 package org.cotato.gongmozip.domains.matching.score;
 
 import java.math.BigDecimal;
-import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
+import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.matching.algorithm.model.pool.MatchingCandidate;
 import org.cotato.gongmozip.domains.matching.algorithm.model.result.TeamCompatibilityScore;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
@@ -18,12 +18,10 @@ import org.springframework.stereotype.Component;
  * 리더 구성, 성향 유사도, 외향성 보완 점수를 세부 항목별로 계산해 결과 설명에 필요한 근거도 함께 반환한다.
  */
 @Component
+@RequiredArgsConstructor
 public class TeamCompatibilityCalculator {
 
-    private static final BigDecimal SCALE_MIN = BigDecimal.ONE;
-    private static final BigDecimal SCALE_MAX = new BigDecimal("5");
-    private static final BigDecimal MAX_VARIANCE = new BigDecimal("4");
-    private static final MathContext MATH_CONTEXT = MathContext.DECIMAL128;
+    private final SimilarityScorer similarityScorer;
 
     public TeamCompatibilityScore calculate(List<MatchingCandidate> team) {
         validateTeam(team);
@@ -107,23 +105,7 @@ public class TeamCompatibilityCalculator {
 
     private BigDecimal similarity(
             List<MatchingCandidate> team, Function<MatchingCandidate, BigDecimal> extractor, int maximumScore) {
-        List<BigDecimal> values = team.stream().map(extractor).toList();
-        values.forEach(this::validateLikertScore);
-
-        // 1~5 척도의 최대 분산 4를 기준으로 실제 분산을 정규화해, 응답이 가까울수록 높은 점수를 준다.
-        BigDecimal mean = values.stream()
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .divide(BigDecimal.valueOf(team.size()), MATH_CONTEXT);
-        BigDecimal variance = values.stream()
-                .map(value -> value.subtract(mean, MATH_CONTEXT))
-                .map(value -> value.multiply(value, MATH_CONTEXT))
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .divide(BigDecimal.valueOf(team.size()), MATH_CONTEXT);
-        BigDecimal normalized = variance.divide(MAX_VARIANCE, MATH_CONTEXT).min(BigDecimal.ONE);
-        BigDecimal score = BigDecimal.ONE
-                .subtract(normalized, MATH_CONTEXT)
-                .multiply(BigDecimal.valueOf(maximumScore), MATH_CONTEXT);
-        return score.max(BigDecimal.ZERO).min(BigDecimal.valueOf(maximumScore)).setScale(2, RoundingMode.HALF_UP);
+        return similarityScorer.score(team.stream().map(extractor).toList(), maximumScore);
     }
 
     private BigDecimal extroversionComplement(List<MatchingCandidate> team) {
@@ -183,12 +165,6 @@ public class TeamCompatibilityCalculator {
             if (candidate == null || !ids.add(candidate.applicationId())) {
                 throw new IllegalArgumentException("팀에 null 또는 중복 후보를 포함할 수 없습니다.");
             }
-        }
-    }
-
-    private void validateLikertScore(BigDecimal value) {
-        if (value == null || value.compareTo(SCALE_MIN) < 0 || value.compareTo(SCALE_MAX) > 0) {
-            throw new IllegalArgumentException("유사도 계산값은 1에서 5 사이여야 합니다.");
         }
     }
 }

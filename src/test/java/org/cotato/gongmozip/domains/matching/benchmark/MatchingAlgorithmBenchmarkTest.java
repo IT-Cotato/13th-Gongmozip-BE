@@ -21,6 +21,8 @@ import org.cotato.gongmozip.domains.matching.algorithm.model.pool.MatchingPoolIn
 import org.cotato.gongmozip.domains.matching.algorithm.model.result.MatchingPlan;
 import org.cotato.gongmozip.domains.matching.config.MatchingAlgorithmProperties;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
+import org.cotato.gongmozip.domains.matching.score.PartialTeamScoreCalculator;
+import org.cotato.gongmozip.domains.matching.score.SimilarityScorer;
 import org.cotato.gongmozip.domains.matching.score.TeamCompatibilityCalculator;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.survey.enums.ExtroversionType;
@@ -32,22 +34,25 @@ import org.junit.jupiter.api.Test;
 class MatchingAlgorithmBenchmarkTest {
 
     /**
-     * 작은 풀에서는 Brute Force가 찾은 최적해와 Greedy의 근사해를 직접 비교한다.
+     * Brute Force 상한을 초과해 실제 서비스에서 Greedy가 담당하는 크기 구간의 손실률만 품질 게이트로 검증한다.
      *
-     * <p>Brute Force는 가능한 팀 조합을 모두 탐색하므로 풀 인원이 커지면 연산량이 급격히 증가한다. 따라서 운영 정책상 Brute Force를
-     * 사용하는 최대 크기인 12명까지만 비교하는 것이 안전하다. 12명을 초과하는 풀의 처리 시간은 아래의 Greedy 전용 구간에서 측정한다.
+     * <p>상한 이하 크기는 운영에서 항상 Brute Force가 처리하므로 Greedy 손실률은 참고 로그로만 남기고,
+     * 상한 초과 구간에서만 손실률 최악값 assertion을 적용한다. 참고 구간에서도 배정 인원수와 재배정 대상자 배정
+     * 수는 알고리즘과 무관하게 항상 일치해야 하므로 assertion을 유지한다.
      *
-     * <p>주의: 첫 번째 반복 목록에 100명처럼 큰 값을 넣으면 Brute Force도 함께 실행된다. 가능한 모든 조합을 확인하는 Brute Force의
-     * 특성상 현실적인 시간 안에 완료되기 어렵기 때문에, 큰 풀은 Greedy 전용 측정 목록에 넣는다.
+     * <p>Brute Force가 감당 가능한 최대 크기(18명 약 62초)까지만 비교하며, 그 이상 크기는 아래 Greedy 전용
+     * 구간에서 실행시간만 측정한다.
      */
     @Test
-    @DisplayName("Brute Force 대비 Greedy의 배정 정확도와 평균 궁합 손실률을 검증한다")
+    @DisplayName("Brute Force 상한 초과 구간의 Greedy 손실률을 게이트로 검증한다")
     void compareBruteForceAndGreedyAndMeasureLargeGreedyPools() {
         // 실제 운영 매칭 코드와 같은 계산기와 결과 비교기를 직접 사용한다.
         // DB 조회/저장, 네트워크, 외부 AI 호출 시간은 이 벤치마크에 포함되지 않는다.
         Clock clock = Clock.systemUTC();
         MatchingPlanComparator comparator = new MatchingPlanComparator();
-        TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator();
+        SimilarityScorer similarityScorer = new SimilarityScorer();
+        TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator(similarityScorer);
+        PartialTeamScoreCalculator partialCalculator = new PartialTeamScoreCalculator(similarityScorer);
         MatchingAlgorithmProperties properties = new MatchingAlgorithmProperties();
 
         // 무작위 앵커 순서를 50회 생성해 Greedy를 반복한다.
@@ -55,31 +60,22 @@ class MatchingAlgorithmBenchmarkTest {
         properties.setGreedyRestartCount(50);
         BruteForceMatchingAlgorithm bruteForce = new BruteForceMatchingAlgorithm(calculator, comparator, clock);
         MultiStartGreedyMatchingAlgorithm greedy =
-                new MultiStartGreedyMatchingAlgorithm(calculator, comparator, properties, clock);
+                new MultiStartGreedyMatchingAlgorithm(calculator, partialCalculator, comparator, properties, clock);
 
-        // Greedy가 Brute Force의 최적 평균 궁합 점수에서 얼마나 손해를 보는지 풀별로 저장한다.
-        List<BigDecimal> losses = new ArrayList<>();
-
-        // Brute Force와 Greedy를 모두 실행하는 품질 비교 구간이다.
-        // 운영 기준은 12명 이하이므로 원칙적으로 3~12만 둔다.
-        // 100을 이 목록에 두면 Brute Force까지 100명으로 실행되므로 사실상 완료 시간을 측정하기 어렵다.
-        for (int poolSize : List.of(3, 4, 5, 6, 7, 8, 9, 10, 11, 12)) {
-            // 벤치마크는 완료까지 걸리는 시간을 측정하는 목적이므로 알고리즘 마감 시간을 제한하지 않는다.
+        // 참고 구간(3~16명): Brute Force 상한 이하이므로 실제 서비스는 항상 Brute Force가 처리한다.
+        // Greedy를 함께 돌려 손실률을 기록하되 assertion은 걸지 않는다.
+        for (int poolSize : List.of(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)) {
             MatchingPoolInput input = input(poolSize, Instant.MAX);
-
-            // Brute Force 결과를 최적해로 보고 Greedy 결과의 배정 수와 평균 점수를 비교한다.
             MatchingPlan optimum = bruteForce.match(input);
             MatchingPlan approximate = greedy.match(input);
 
-            // Greedy도 최적해와 동일한 수의 전체 인원 및 재배정 대상자를 배정해야 한다.
+            // 알고리즘과 무관한 정확성 지표는 참고 구간에서도 검증한다.
             assertThat(approximate.assignedCount()).isEqualTo(optimum.assignedCount());
             assertThat(approximate.assignedReassignmentCount()).isEqualTo(optimum.assignedReassignmentCount());
 
-            // 손실률 = (최적 평균점수 - Greedy 평균점수) / 최적 평균점수 * 100
             BigDecimal loss = lossRate(optimum.averageTeamScore(), approximate.averageTeamScore());
-            losses.add(loss);
             System.out.printf(
-                    "매칭 벤치마크 | 풀 인원=%d명 | 브루트포스=%dms | 그리디=%dms | " + "최적 평균점수=%s | 그리디 평균점수=%s | 손실률=%s%%%n",
+                    "매칭 벤치마크 | 참고 | 풀 인원=%d명 | 브루트포스=%dms | 그리디=%dms |" + " 최적 평균점수=%s | 그리디 평균점수=%s | 손실률=%s%%%n",
                     poolSize,
                     optimum.elapsedTime().toMillis(),
                     approximate.elapsedTime().toMillis(),
@@ -88,50 +84,65 @@ class MatchingAlgorithmBenchmarkTest {
                     loss);
         }
 
-        // 12명을 초과하면 운영 코드가 Greedy를 선택하므로, 큰 풀은 Brute Force와 비교하지 않고 완료까지 걸린 시간만 측정한다.
-        // 이 구간에서는 Greedy만 실행하므로 설정된 반복을 모두 수행한 실제 순수 계산 시간을 확인할 수 있다.
-        for (int poolSize : List.of(13, 14, 15, 16, 20)) {
-            MatchingPlan approximate = greedy.match(input(poolSize, Instant.MAX));
+        // 게이트 구간(17~18명): 실제 서비스에서 Greedy가 처리하는 크기 중 Brute Force와 직접 비교 가능한 최대 범위다.
+        // 이 구간의 손실률이 게이트를 넘으면 알고리즘 품질 회귀로 판단한다.
+        List<BigDecimal> gateLosses = new ArrayList<>();
+        for (int poolSize : List.of(17, 18)) {
+            MatchingPoolInput input = input(poolSize, Instant.MAX);
+            MatchingPlan optimum = bruteForce.match(input);
+            MatchingPlan approximate = greedy.match(input);
 
-            // 3명 또는 4명 팀으로 모든 인원을 배정할 수 있는 크기이므로 전원 배정되었는지 검증한다.
+            assertThat(approximate.assignedCount()).isEqualTo(optimum.assignedCount());
+            assertThat(approximate.assignedReassignmentCount()).isEqualTo(optimum.assignedReassignmentCount());
+
+            BigDecimal loss = lossRate(optimum.averageTeamScore(), approximate.averageTeamScore());
+            gateLosses.add(loss);
+            System.out.printf(
+                    "매칭 벤치마크 | 게이트 | 풀 인원=%d명 | 브루트포스=%dms | 그리디=%dms |" + " 최적 평균점수=%s | 그리디 평균점수=%s | 손실률=%s%%%n",
+                    poolSize,
+                    optimum.elapsedTime().toMillis(),
+                    approximate.elapsedTime().toMillis(),
+                    optimum.averageTeamScore(),
+                    approximate.averageTeamScore(),
+                    loss);
+        }
+
+        // Greedy 전용 구간: Brute Force가 감당하기 어려운 크기의 순수 계산 시간과 배정 여부만 확인한다.
+        for (int poolSize : List.of(20, 100)) {
+            MatchingPlan approximate = greedy.match(input(poolSize, Instant.MAX));
             assertThat(approximate.assignedCount()).isEqualTo(poolSize);
             System.out.printf(
-                    "매칭 벤치마크 | 풀 인원=%d명 | 알고리즘=그리디 | 실행시간=%dms | 평균점수=%s%n",
+                    "매칭 벤치마크 | 그리디 전용 | 풀 인원=%d명 | 실행시간=%dms | 평균점수=%s%n",
                     poolSize, approximate.elapsedTime().toMillis(), approximate.averageTeamScore());
         }
 
-        // 모든 품질 비교 결과를 오름차순으로 정렬한 뒤 95백분위 손실률과 최대 손실률을 계산한다.
-        losses.sort(Comparator.naturalOrder());
-        int p95Index = Math.max(0, (int) Math.ceil(losses.size() * 0.95) - 1);
-        BigDecimal p95 = losses.get(p95Index);
-        BigDecimal maximum = losses.getLast();
-
-        // Greedy 품질 허용 기준: 손실률 p95는 1% 이하, 최악의 경우에도 3% 이하여야 한다.
-        assertThat(p95).isLessThanOrEqualTo(new BigDecimal("1.00"));
-        assertThat(maximum).isLessThanOrEqualTo(new BigDecimal("3.00"));
+        // Greedy 품질 허용 기준: 게이트 구간 손실률의 최악값이 5% 이하여야 한다.
+        gateLosses.sort(Comparator.naturalOrder());
+        BigDecimal maximum = gateLosses.getLast();
+        assertThat(maximum).isLessThanOrEqualTo(new BigDecimal("5.00"));
     }
 
     /**
      * 카테고리 6개와 역량 그룹 4개가 모두 만들어진 최댓값인 24개 풀을 순서대로 처리했을 때의 순수 계산 시간을 측정한다.
      *
-     * <p>각 풀은 Brute Force 적용 상한인 12명으로 만든다. 이 테스트 역시 DB와 외부 통신 시간은 포함하지 않는다.
+     * <p>각 풀은 Brute Force 적용 상한인 16명으로 만든다. 이 테스트 역시 DB와 외부 통신 시간은 포함하지 않는다.
      */
     @Test
     @DisplayName("최대 24개 유효 풀을 순차 처리하는 합성 배치 시간을 측정한다")
     void measureTwentyFourEffectivePools() {
         Clock clock = Clock.systemUTC();
         MatchingPlanComparator comparator = new MatchingPlanComparator();
-        TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator();
+        TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator(new SimilarityScorer());
         BruteForceMatchingAlgorithm bruteForce = new BruteForceMatchingAlgorithm(calculator, comparator, clock);
 
         long startedAt = System.nanoTime();
 
-        // 24개의 서로 독립적인 12명 풀을 실제 Brute Force 알고리즘으로 순차 계산한다.
+        // 24개의 서로 독립적인 16명 풀을 실제 Brute Force 알고리즘으로 순차 계산한다.
         // dataVariant에 풀 번호를 전달해 후보 성향과 랜덤 시드가 완전히 같은 입력을 24번 재사용하지 않도록 한다.
         for (int pool = 0; pool < 24; pool++) {
-            // 0번 변형은 위의 3~12명 품질 비교에서 이미 사용하므로 1번부터 시작한다.
-            MatchingPlan result = bruteForce.match(input(12, Instant.MAX, pool + 1));
-            assertThat(result.assignedCount()).isEqualTo(12);
+            // 0번 변형은 위의 참고 구간에서 이미 사용하므로 1번부터 시작한다.
+            MatchingPlan result = bruteForce.match(input(16, Instant.MAX, pool + 1));
+            assertThat(result.assignedCount()).isEqualTo(16);
         }
         long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
 

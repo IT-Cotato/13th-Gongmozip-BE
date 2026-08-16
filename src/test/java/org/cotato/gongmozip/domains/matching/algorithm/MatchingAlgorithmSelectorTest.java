@@ -13,6 +13,8 @@ import org.cotato.gongmozip.domains.matching.algorithm.model.pool.MatchingCandid
 import org.cotato.gongmozip.domains.matching.algorithm.model.pool.MatchingPoolInput;
 import org.cotato.gongmozip.domains.matching.config.MatchingAlgorithmProperties;
 import org.cotato.gongmozip.domains.matching.enums.MatchingAlgorithmType;
+import org.cotato.gongmozip.domains.matching.score.PartialTeamScoreCalculator;
+import org.cotato.gongmozip.domains.matching.score.SimilarityScorer;
 import org.cotato.gongmozip.domains.matching.score.TeamCompatibilityCalculator;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,21 +31,24 @@ class MatchingAlgorithmSelectorTest {
     void setUp() {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         MatchingPlanComparator comparator = new MatchingPlanComparator();
-        TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator();
+        SimilarityScorer similarityScorer = new SimilarityScorer();
+        TeamCompatibilityCalculator calculator = new TeamCompatibilityCalculator(similarityScorer);
+        PartialTeamScoreCalculator partialCalculator = new PartialTeamScoreCalculator(similarityScorer);
         MatchingAlgorithmProperties properties = new MatchingAlgorithmProperties();
         properties.setGreedyRestartCount(2);
         var bruteForce = new BruteForceMatchingAlgorithm(calculator, comparator, clock);
-        var greedy = new MultiStartGreedyMatchingAlgorithm(calculator, comparator, properties, clock);
+        var greedy =
+                new MultiStartGreedyMatchingAlgorithm(calculator, partialCalculator, comparator, properties, clock);
         selector = new MatchingAlgorithmSelector(bruteForce, greedy, properties, clock);
     }
 
     @Test
-    @DisplayName("병합 완료 후 유효 풀 인원이 12명 이하면 Brute Force를 선택한다")
+    @DisplayName("병합 완료 후 유효 풀 인원이 16명 이하면 Brute Force를 선택한다")
     void selectsAlgorithmByEffectivePoolSize() {
         assertThat(selector.initiallySelectedAlgorithm(2)).isEqualTo(MatchingAlgorithmType.NONE);
         assertThat(selector.initiallySelectedAlgorithm(3)).isEqualTo(MatchingAlgorithmType.BRUTE_FORCE);
-        assertThat(selector.initiallySelectedAlgorithm(12)).isEqualTo(MatchingAlgorithmType.BRUTE_FORCE);
-        assertThat(selector.initiallySelectedAlgorithm(13)).isEqualTo(MatchingAlgorithmType.MULTI_START_GREEDY);
+        assertThat(selector.initiallySelectedAlgorithm(16)).isEqualTo(MatchingAlgorithmType.BRUTE_FORCE);
+        assertThat(selector.initiallySelectedAlgorithm(17)).isEqualTo(MatchingAlgorithmType.MULTI_START_GREEDY);
     }
 
     @Test
