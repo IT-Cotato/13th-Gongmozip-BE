@@ -167,7 +167,11 @@ public class ContestVotingService {
         return new ContestVoteStatusResponse(round, activeMembers.size(), participatedVoterCount, myVoted, results);
     }
 
-    /** 원하는 공모전을 최대 2개까지 선택해 투표한다. 활성 팀원 전원이 투표하면 자동 개표한다. */
+    /**
+     * 원하는 공모전을 최대 2개까지 선택해 투표한다. 활성 팀원 전원이 투표하면 자동 개표한다.
+     * 마감 전이면 같은 라운드 안에서 몇 번이든 다시 투표해 선택을 바꿀 수 있다 — 기존 표는
+     * 지우고 새 선택으로 덮어쓴다.
+     */
     @Transactional
     public void submitVote(Long teamId, Long voterMemberId, List<Long> contestCandidateIds) {
         Team team = requireTeamInContestSelectingWithLock(teamId);
@@ -198,10 +202,14 @@ public class ContestVotingService {
                 throw new ContestException(ContestErrorCode.CONTEST_CANDIDATE_NOT_FOUND);
             }
         }
-        if (contestVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(
-                teamId, voter.getTeamMemberId(), round)) {
-            throw new ContestException(ContestErrorCode.ALREADY_VOTED_CONTEST);
-        }
+        // 마감 전이면 재투표를 허용한다 — 새로 저장하기 전에 이번 라운드의 기존 표를 지운다.
+        // ContestVote는 IDENTITY 채번이라 뒤이은 save()가 즉시 INSERT를 실행하므로, 삭제를
+        // flush로 먼저 DB에 반영해두지 않으면 겹치는 후보(예: {A,B}→{A,C})에서 unique 제약
+        // (uq_contest_votes_candidate_voter_round)을 위반한다 — SurveyService.submitSurvey의
+        // 동일 패턴과 같은 이유로 flush 필요.
+        contestVoteRepository.deleteByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(
+                teamId, voter.getTeamMemberId(), round);
+        contestVoteRepository.flush();
 
         for (Long candidateId : contestCandidateIds) {
             contestVoteRepository.save(ContestVote.builder()
@@ -285,7 +293,14 @@ public class ContestVotingService {
                     .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_CANDIDATE_NOT_FOUND));
             decideContest(team, winner, "투표 결과, \"" + winner.getContest().getTitle() + "\"이(가) 팀 공모전으로 확정되었습니다!");
         } else {
-            // 동률: 동률 후보들만 대상으로 다음 라운드 재투표를 안내한다.
+            // 동률: 동률 후보들만 대상으로 다음 라운드 재투표를 안내한다. 남은 시간을 그대로
+            // 물려받지 않고 새 라운드에도 24시간을 새로 준다. 직전 라운드에서 마감 리마인더가
+            // 이미 발행됐을 수 있으므로(findDueContestVoteReminderTeamIds가
+            // contestVoteReminderNotifiedAt IS NULL로 조회), 새 라운드에서 다시 리마인더가
+            // 나갈 수 있도록 플래그도 같이 초기화한다.
+            team.scheduleContestCandidateDeadline(
+                    LocalDateTime.now().plusHours(ChatbotOrchestrationService.CONTEST_CANDIDATE_TIMEOUT_HOURS));
+            team.markContestVoteReminderNotified(null);
             chatService.postChatbotCardMessage(
                     team,
                     MessageType.CONTEST_VOTE_CARD,

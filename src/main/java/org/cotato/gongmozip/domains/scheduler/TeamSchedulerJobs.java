@@ -23,7 +23,7 @@ public class TeamSchedulerJobs {
 
     private final TeamScheduleService teamScheduleService;
 
-    // 공모전 후보/투표 마감은 시각 단위(오늘 23시)라 5분 간격으로 확인한다.
+    // 공모전 후보/투표 마감은 절대 시각(진입 시점 +24시간)이라 5분 간격으로 확인한다.
     @Scheduled(cron = "0 */5 * * * *")
     @SchedulerLock(name = "team-contest-voting-deadline", lockAtMostFor = "PT10M")
     public void resolveContestVotingDeadlines() {

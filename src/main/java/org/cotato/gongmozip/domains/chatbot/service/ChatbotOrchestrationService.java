@@ -48,6 +48,11 @@ public class ChatbotOrchestrationService {
     // 않으면 스케줄러가 강제로 확정한다. 투표 마감은 별도(LeaderElectionService.LEADER_VOTE_TIMEOUT_HOURS,
     // 8시간)로 분리되어 있다(2026-08-15 갱신, docs/decisions/02-leader-election.md 참고).
     private static final int LEADER_CANDIDACY_TIMEOUT_HOURS = 3;
+    // 공모전 후보 등록/투표 공통 마감(2026-08-16 갱신 — 원래는 "진입 당일 23시" 고정이었는데
+    // Figma 개편으로 "24시간" 고정으로 바뀌었다). ContestVotingService.tally()의 동률 재투표
+    // 분기도 이 상수를 그대로 참조해 라운드마다 새로 카운트한다 — 값이 하나뿐이라 두 클래스가
+    // 서로 다른 마감을 갖게 될 걱정이 없다.
+    public static final int CONTEST_CANDIDATE_TIMEOUT_HOURS = 24;
     private static final String CHATBOT_MENTION_PREFIX = "@챗봇";
 
     private final ChatService chatService;
@@ -183,7 +188,7 @@ public class ChatbotOrchestrationService {
 
     /**
      * 팀장이 확정된 직후(LeaderElectionService) 호출되어 공모전 선정 단계를 시작한다.
-     * 공모전 후보/투표 마감을 오늘 오후 11시로 세팅한다 (docs/decisions/04-contest-voting.md).
+     * 공모전 후보/투표 마감을 호출 시점 기준 24시간 뒤로 세팅한다 (docs/decisions/04-contest-voting.md).
      *
      * <p>AI 공모전 추천 호출(AiGatewayClient, 최대 20초)은 이 트랜잭션 밖으로 뺐다 — 원래는 이
      * 메서드 안에서 동기로 호출해서, 팀장 선출 마감 스케줄러가 여러 팀을 순차 처리하다 그중 한
@@ -194,7 +199,7 @@ public class ChatbotOrchestrationService {
     @Transactional
     public void advanceToContestSelecting(Team team) {
         team.advanceStatus(TeamStatus.CONTEST_SELECTING);
-        team.scheduleContestCandidateDeadline(LocalDateTime.now().toLocalDate().atTime(23, 0));
+        team.scheduleContestCandidateDeadline(LocalDateTime.now().plusHours(CONTEST_CANDIDATE_TIMEOUT_HOURS));
 
         Long teamId = team.getTeamId();
         InterestCategory preferredCategory = team.getPreferredCategory();

@@ -164,7 +164,7 @@ id 목록을 내려줍니다 — 실제 이름/아바타 등은 프론트가 팀
 | POST | `/api/teams/{teamId}/contest-candidates` | 후보 공모전 추가 — body `{ "contestId": number }` |
 | GET | `/api/teams/{teamId}/contest-candidates` | 후보 공모전 리스트 조회 |
 | DELETE | `/api/teams/{teamId}/contest-candidates/{contestCandidateId}` | 후보 공모전 삭제 |
-| POST | `/api/teams/{teamId}/contest-candidates/votes` | 공모전 투표 (최대 2개) — body `{ "contestCandidateIds": number[] }` |
+| POST | `/api/teams/{teamId}/contest-candidates/votes` | 공모전 투표 (최대 2개) — body `{ "contestCandidateIds": number[] }`. 마감 전이면 이미 투표한 사람이 다시 호출해도 거부되지 않고 이전 선택을 덮어씀(재투표, 2026-08-16 변경) |
 | GET | `/api/teams/{teamId}/contest-candidates/votes` | 현재 라운드 투표 진행 상황(참여 인원, 후보별 득표수) 조회 — 신규 |
 | POST | `/api/teams/{teamId}/contest-shares` | 공모전을 채팅방에 공유 — body `{ "contestId": number }`, 후보 등록과 별개 액션 |
 
@@ -180,6 +180,8 @@ id 목록을 내려줍니다 — 실제 이름/아바타 등은 프론트가 팀
 
 - **"N명 참여중.."** / **"투표 결과"의 후보별 득표 막대그래프**: `GET .../contest-candidates/votes`로 조회. 응답의 `requiredVoterCount`가 분모, `participatedVoterCount`가 "N명 참여", `results[].voteCount`가 후보별 득표 막대 — **전원이 투표를 마치기 전에도** 호출 가능(개표를 확정하지 않는 순수 조회용). `round`가 바뀌면(동률 재투표 진입) 이 API도 자동으로 새 라운드 기준 값을 반환함.
 - **투표 여부에 따른 버튼 분기**: `myVoted`가 `false`면 "투표하기"(바텀시트 열어 `POST .../votes`), `true`면 "결과 보기"(바로 위 조회 결과를 보여주기만 함).
+- **재투표("다시 투표하기")**: `myVoted`가 `true`여도 마감 전이면 같은 `POST .../votes`를 다시 호출해 선택을 바꿀 수 있음(더 이상 `ALREADY_VOTED_CONTEST`로 거부되지 않음) — "결과 보기" 화면에 재투표 진입 버튼을 둬도 됨. 마감이 지난 뒤 호출하면 `CONTEST_VOTE_DEADLINE_PASSED`로 거부됨(기존과 동일).
+- **마감 시간**: 후보 등록/투표 마감은 공모전 추천 시작 시점부터 24시간 고정(기존 "당일 23시" 고정에서 변경, 2026-08-16). 동률 재투표로 넘어갈 때도 새 라운드가 24시간을 새로 받음 — 팀장 투표의 `leaderVoteDeadlineAt`과 동일한 패턴.
 - **동률/최종 확정 여부**: 이 조회 API는 그 자체로 알려주지 않음 — 개표 완료(승자 확정 또는 재투표 카드 발행)는 항상 채팅 메시지(`CONTEST_VOTE_CARD`/`CONTEST_RESULT_CARD`)로 옴. 폴링 대신 웹소켓 구독으로 감지하는 걸 권장.
 - **투표 참여자 0명**: 마감 시각에 서버가 후보 중 하나를 무작위로 대신 확정하고 `CONTEST_RESULT_CARD`로 안내함 — 별도 "참여자 없음" 화면 없이 같은 카드로 처리하면 됨.
 
