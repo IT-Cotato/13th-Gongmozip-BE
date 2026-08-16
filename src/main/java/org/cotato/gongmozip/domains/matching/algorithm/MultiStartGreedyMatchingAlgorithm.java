@@ -20,20 +20,25 @@ import org.cotato.gongmozip.domains.matching.algorithm.model.result.TeamCompatib
 import org.cotato.gongmozip.domains.matching.config.MatchingAlgorithmProperties;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.matching.enums.MatchingAlgorithmType;
+import org.cotato.gongmozip.domains.matching.score.PartialTeamScoreCalculator;
+import org.cotato.gongmozip.domains.matching.score.PartialTeamScoreCalculator.PartialScore;
 import org.cotato.gongmozip.domains.matching.score.TeamCompatibilityCalculator;
 import org.springframework.stereotype.Component;
 
 /**
  * 완전탐색이 현실적인 시간 안에 끝나지 않는 큰 풀을 처리하기 위해 만든 휴리스틱 알고리즘이다.
  *
- * <p>재배정 우선순위를 유지한 여러 신청자 순서에서 Greedy 해를 만들고, 미배정자와 팀원의 교환으로 해를 개선한 뒤 가장 좋은
- * 계획을 선택한다. 고정 시드를 사용해 같은 입력의 결과를 재현할 수 있다.
+ * <p>재배정 우선순위를 유지한 여러 신청자 순서에서 팀 자리를 한 명씩 순차 선택해 Greedy 해를 만들고,
+ * 미배정자와 팀원의 교환으로 해를 개선한 뒤 가장 좋은 계획을 선택한다. 고정 시드를 사용해 같은
+ * 입력의 결과를 재현할 수 있다. 팀 하나를 뽑을 때 조합을 전수검사하지 않으므로 큰 풀에서도
+ * 시작점당 계산량이 인원 수의 제곱 수준으로 제한된다.
  */
 @Component
 @RequiredArgsConstructor
 public class MultiStartGreedyMatchingAlgorithm implements TeamMatchingAlgorithm {
 
     private final TeamCompatibilityCalculator compatibilityCalculator;
+    private final PartialTeamScoreCalculator partialTeamScoreCalculator;
     private final MatchingPlanComparator planComparator;
     private final MatchingAlgorithmProperties properties;
     private final Clock clock;
@@ -86,15 +91,21 @@ public class MultiStartGreedyMatchingAlgorithm implements TeamMatchingAlgorithm 
         List<MatchingCandidate> remaining = new ArrayList<>(start.candidateOrder());
         List<MatchedTeam> teams = new ArrayList<>();
 
-        // 현재 순서의 첫 신청자를 기준점으로 삼아, 함께할 때 점수가 가장 높은 팀원을 탐욕적으로 고른다.
+        // 현재 순서의 첫 신청자를 앵커로 삼아 팀 자리를 한 명씩 순차적으로 채운다.
         for (int teamSize : start.teamSizeOrder()) {
-            MatchingCandidate anchor = remaining.getFirst();
-            TeamChoice bestChoice = findBestTeam(anchor, remaining, teamSize, context);
-            if (bestChoice == null) {
-                throw new IllegalStateException("탐욕 알고리즘이 확정된 팀 크기 계획을 생성하지 못했습니다.");
+            MatchingCandidate anchor = remaining.removeFirst();
+            List<MatchingCandidate> current = new ArrayList<>(teamSize);
+            current.add(anchor);
+
+            while (current.size() < teamSize) {
+                MatchingCandidate next = pickNextTeammate(current, remaining, context);
+                if (next == null) {
+                    throw new IllegalStateException("탐욕 알고리즘이 확정된 팀 크기 계획을 생성하지 못했습니다.");
+                }
+                current.add(next);
+                remaining.remove(next);
             }
-            teams.add(bestChoice.team());
-            remaining.removeAll(bestChoice.team().candidates());
+            teams.add(new MatchedTeam(current, score(current, context)));
         }
         return MatchingPlan.create(
                 teams,
@@ -108,39 +119,21 @@ public class MultiStartGreedyMatchingAlgorithm implements TeamMatchingAlgorithm 
                 false);
     }
 
-    private TeamChoice findBestTeam(
-            MatchingCandidate anchor, List<MatchingCandidate> remaining, int teamSize, GreedyContext context) {
-        TeamChoice[] best = new TeamChoice[1];
-        chooseTeammates(remaining, 1, teamSize - 1, new ArrayList<>(), indexes -> {
-            List<MatchingCandidate> candidates = new ArrayList<>(teamSize);
-            candidates.add(anchor);
-            indexes.forEach(index -> candidates.add(remaining.get(index)));
-            MatchedTeam team = new MatchedTeam(candidates, score(candidates, context));
-            TeamChoice choice = new TeamChoice(team);
+    private MatchingCandidate pickNextTeammate(
+            List<MatchingCandidate> current, List<MatchingCandidate> remaining, GreedyContext context) {
+        // 남은 후보를 한 번씩 순회해 현재 팀과 가장 잘 맞는 한 명을 고른다. 조합을 전수검사하지 않으므로
+        // 시작점당 계산량이 팀 수 × 팀 크기 × 남은 인원 수준으로 제한된다.
+        MatchingCandidate best = null;
+        PartialScore bestScore = null;
+        for (MatchingCandidate candidate : remaining) {
+            PartialScore partialScore = partialTeamScoreCalculator.evaluateWithCandidate(current, candidate);
             context.exploredCandidateCount++;
-            if (best[0] == null || compareTeam(choice.team(), best[0].team()) > 0) {
-                best[0] = choice;
+            if (bestScore == null || partialScore.compareTo(bestScore) > 0) {
+                best = candidate;
+                bestScore = partialScore;
             }
-        });
-        return best[0];
-    }
-
-    private void chooseTeammates(
-            List<MatchingCandidate> candidates,
-            int fromIndex,
-            int count,
-            List<Integer> selected,
-            Consumer<List<Integer>> consumer) {
-        // 기준점과 결합할 팀원 후보를 순열 중복 없이 조합으로 생성한다.
-        if (count == 0) {
-            consumer.accept(List.copyOf(selected));
-            return;
         }
-        for (int index = fromIndex; index <= candidates.size() - count; index++) {
-            selected.add(index);
-            chooseTeammates(candidates, index + 1, count - 1, selected, consumer);
-            selected.removeLast();
-        }
+        return best;
     }
 
     private MatchingPlan improve(MatchingPlan initial, MatchingPoolInput input, GreedyContext context) {
@@ -277,22 +270,7 @@ public class MultiStartGreedyMatchingAlgorithm implements TeamMatchingAlgorithm 
         return calculated;
     }
 
-    private int compareTeam(MatchedTeam left, MatchedTeam right) {
-        int scoreCompared = left.score().totalScore().compareTo(right.score().totalScore());
-        if (scoreCompared != 0) return scoreCompared;
-        // 동점일 때 작은 신청 ID 조합을 택해 실행 순서와 무관한 결과를 만든다.
-        List<Long> leftIds = left.canonicalApplicationIds();
-        List<Long> rightIds = right.canonicalApplicationIds();
-        for (int index = 0; index < Math.min(leftIds.size(), rightIds.size()); index++) {
-            int compared = leftIds.get(index).compareTo(rightIds.get(index));
-            if (compared != 0) return -compared;
-        }
-        return -Integer.compare(leftIds.size(), rightIds.size());
-    }
-
     private record Start(List<MatchingCandidate> candidateOrder, List<Integer> teamSizeOrder) {}
-
-    private record TeamChoice(MatchedTeam team) {}
 
     private static final class GreedyContext {
         // 모든 시작점이 점수 캐시와 탐색 지표를 공유해 중복 계산을 줄인다.

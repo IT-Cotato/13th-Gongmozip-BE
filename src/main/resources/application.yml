@@ -124,7 +124,7 @@ test:
 matching:
   algorithm:
     # 운영값은 matchingBenchmark 결과로 조정한다.
-    bruteforce-max-pool-size: ${MATCHING_BRUTEFORCE_MAX_POOL_SIZE:12}
+    bruteforce-max-pool-size: ${MATCHING_BRUTEFORCE_MAX_POOL_SIZE:16}
     greedy-restart-count: ${MATCHING_GREEDY_RESTART_COUNT:50}
     fallback-reserve: ${MATCHING_FALLBACK_RESERVE:PT10M}
     batch-deadline: ${MATCHING_BATCH_DEADLINE:15:30}
