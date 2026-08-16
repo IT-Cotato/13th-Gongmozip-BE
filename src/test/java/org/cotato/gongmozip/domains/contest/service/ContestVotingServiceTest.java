@@ -449,7 +449,7 @@ class ContestVotingServiceTest {
                 .status(TeamStatus.CONTEST_SELECTING)
                 .contestCandidateDeadlineAt(java.time.LocalDateTime.now().minusMinutes(1))
                 .build();
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L))
                 .willReturn(Optional.of(teamMemberOf(team, 10L, "김철수")));
 
@@ -465,7 +465,7 @@ class ContestVotingServiceTest {
         // given
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L))
                 .willReturn(Optional.of(teamMemberOf(team, 10L, "김철수")));
 
@@ -482,7 +482,7 @@ class ContestVotingServiceTest {
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
         TeamMember voter = teamMemberOf(team, 10L, "김철수");
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(voter));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter));
@@ -515,7 +515,7 @@ class ContestVotingServiceTest {
                 .addedByTeamMember(voter)
                 .build();
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(voter));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter));
@@ -559,7 +559,7 @@ class ContestVotingServiceTest {
                 .addedByTeamMember(voter1)
                 .build();
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(voter2));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter1, voter2));
@@ -622,7 +622,7 @@ class ContestVotingServiceTest {
                 .addedByTeamMember(voter1)
                 .build();
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(voter1));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter1));
@@ -688,6 +688,7 @@ class ContestVotingServiceTest {
                 .addedByTeamMember(voter1)
                 .build();
 
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter1));
         given(contestVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);
@@ -718,6 +719,7 @@ class ContestVotingServiceTest {
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
 
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(teamMemberOf(team, 10L, "김철수")));
         given(contestVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);
@@ -738,6 +740,7 @@ class ContestVotingServiceTest {
         // given
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(teamMemberOf(team, 10L, "김철수")));
         given(contestVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);

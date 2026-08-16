@@ -131,6 +131,39 @@ Figma의 "공모전 투표" 바텀시트("N명 참여중..")와 "투표 결과" 
 > 실제 표가 쌓인 마지막 라운드(`lastVotedRound`, `findMaxRoundByTeamId`)를 그대로 조회하도록
 > 수정했다. 단독 1위 확정과 동률 재투표 끝 확정 두 케이스 모두 회귀 테스트를 추가했다.
 
+## 개표 경합 방지 락 (2026-08-16, 유저 리포트로 발견)
+
+`decideContest`(개표 확정)로 이어지는 진입점이 `submitVote`(마지막 투표 제출)/
+`recheckAfterMemberLeft`(팀원 이탈)/`resolveDeadlineIfDue`(마감 스케줄러) 셋인데, 셋 다
+잠금 없이 `Team.findById`로만 상태를 읽고 있었다 — 마지막 투표 제출과 마감 스케줄러가 거의
+동시에 같은 팀을 건드리면 둘 다 "개표 조건 충족"을 각자 판단해 `tally`/`decideContest`를
+중복 실행할 수 있었다.
+
+실제로 유저가 "`CHATBOT_GUIDE_CARD`(활용 예시 안내 카드)가 두 번 뜬다"고 리포트하면서
+발견됐다. 두 트랜잭션 중 나중에 커밋하는 쪽은 `Team.version` 낙관적 락 충돌로 결국
+롤백되지만, `ChatService.postChatbotMessage`/`postChatbotCardMessage`는 저장 직후 커밋을
+기다리지 않고 곧바로 웹소켓으로 브로드캐스트하는 구조라, 롤백될 트랜잭션의 메시지도 이미
+화면에 나갔다가 새로고침하면 사라지는 "유령 중복 메시지"로 보였다. 더 심각하게는, 진 쪽이
+`submitVote`(투표자 본인의 마지막 표)였다면 그 투표 INSERT까지 같은 트랜잭션에서 함께
+롤백돼 투표가 조용히 유실될 수 있었다.
+
+`TeamRepository.findByIdWithLock`(`PESSIMISTIC_WRITE`, [02-leader-election.md](./02-leader-election.md)의
+`requestRevote`↔`acceptAiRecommendation` 락과 동일한 패턴)을 재사용해 세 진입점 모두 팀
+행을 잠그도록 고쳤다:
+
+- `submitVote`: 전용 `requireTeamInContestSelectingWithLock` 신설(개표와 무관한
+  `addCandidate`/`removeCandidate`까지 잠글 필요는 없어 기존 `requireTeamInContestSelecting`과
+  분리).
+- `recheckAfterMemberLeft`: 호출자(`TeamService.leaveTeam`)가 잠금 이전에 로드해둔 `Team`을
+  신뢰하지 않고, 진입 시 팀 id로 다시 잠가 얻은 최신 상태로 이후 로직을 진행.
+- `resolveDeadlineIfDue`: `findById` → `findByIdWithLock`.
+
+뒤에 잠금을 얻는 트랜잭션은 앞선 트랜잭션이 커밋한 최신 상태(`CONTEST_DECIDED`)를 보고
+안전하게 종료(또는 `INVALID_TEAM_STATUS`)된다. `LeaderElectionService`에도 구조적으로
+동일한 미해결 레이스가 있다([02-leader-election.md](./02-leader-election.md)의 "`castVote`/
+`submitCandidacy` 등 기존 메서드는 이번 변경 범위 밖" 메모 참고) — 이번엔 실제로 증상이
+보고된 공모전 투표만 고쳤다.
+
 ## 미정 / 추후 확인 필요
 
 - ~~CONTEST_SELECTING/CONTEST_VOTING 상태 분리 및 후보 마감 처리~~ → Phase 7에서 해결.

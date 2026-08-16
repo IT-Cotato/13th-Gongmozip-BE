@@ -170,7 +170,7 @@ public class ContestVotingService {
     /** 원하는 공모전을 최대 2개까지 선택해 투표한다. 활성 팀원 전원이 투표하면 자동 개표한다. */
     @Transactional
     public void submitVote(Long teamId, Long voterMemberId, List<Long> contestCandidateIds) {
-        Team team = requireTeamInContestSelecting(teamId);
+        Team team = requireTeamInContestSelectingWithLock(teamId);
         TeamMember voter = requireActiveMember(teamId, voterMemberId);
 
         // 마감 확정 스케줄러(resolveDeadlineIfDue)가 아직 안 돌아 팀이 여전히 CONTEST_SELECTING
@@ -231,25 +231,36 @@ public class ContestVotingService {
             return;
         }
 
+        // submitVote(마지막 투표 제출)/resolveDeadlineIfDue(마감 스케줄러)와 거의 동시에
+        // 팀원이 나가면 셋 다 "개표 조건 충족"을 각자 판단해 tally()를 중복 실행할 수 있다 —
+        // 잠금으로 세 경로를 직렬화하고, 호출자가 넘겨준 team은 잠금 이전 스냅샷이라 신뢰하지
+        // 않고 잠금 획득 직후 상태를 다시 확인한다.
+        Team locked = teamRepository
+                .findByIdWithLock(team.getTeamId())
+                .orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        if (locked.getStatus() != TeamStatus.CONTEST_SELECTING) {
+            return;
+        }
+
         List<TeamMember> activeMembers =
-                teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE);
+                teamMemberRepository.findByTeamIdAndStatus(locked.getTeamId(), TeamMemberStatus.ACTIVE);
         if (activeMembers.isEmpty()) {
             return;
         }
 
-        Integer maxRound = contestVoteRepository.findMaxRoundByTeamId(team.getTeamId());
+        Integer maxRound = contestVoteRepository.findMaxRoundByTeamId(locked.getTeamId());
         if (maxRound == null) {
             return;
         }
         boolean leaverAlreadyVoted = contestVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(
-                team.getTeamId(), leftTeamMemberId, maxRound);
+                locked.getTeamId(), leftTeamMemberId, maxRound);
         if (leaverAlreadyVoted) {
             return;
         }
 
-        long distinctVoters = contestVoteRepository.countDistinctVotersByTeamIdAndRound(team.getTeamId(), maxRound);
+        long distinctVoters = contestVoteRepository.countDistinctVotersByTeamIdAndRound(locked.getTeamId(), maxRound);
         if (distinctVoters >= activeMembers.size()) {
-            tally(team, maxRound);
+            tally(locked, maxRound);
         }
     }
 
@@ -290,7 +301,10 @@ public class ContestVotingService {
      */
     @Transactional
     public void resolveDeadlineIfDue(Long teamId) {
-        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        // submitVote/recheckAfterMemberLeft와 동시에 실행될 수 있으므로 잠금으로 직렬화한다.
+        Team team = teamRepository
+                .findByIdWithLock(teamId)
+                .orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
         if (team.getStatus() != TeamStatus.CONTEST_SELECTING) {
             return;
         }
@@ -392,6 +406,21 @@ public class ContestVotingService {
 
     private Team requireTeamInContestSelecting(Long teamId) {
         Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        if (team.getStatus() != TeamStatus.CONTEST_SELECTING) {
+            throw new TeamException(TeamErrorCode.INVALID_TEAM_STATUS);
+        }
+        return team;
+    }
+
+    // submitVote가 개표(tally → decideContest)로 이어질 수 있는 유일한 사용자 요청 경로라,
+    // recheckAfterMemberLeft/resolveDeadlineIfDue와 팀 행을 잠가 직렬화한다. 뒤에 잠금을 얻는
+    // 트랜잭션은 앞선 트랜잭션이 커밋한 최신 상태(CONTEST_DECIDED)를 보고 INVALID_TEAM_STATUS로
+    // 안전하게 실패한다 — addCandidate/removeCandidate처럼 개표와 무관한 조작까지 잠글 필요는
+    // 없어 requireTeamInContestSelecting과 별도로 둔다.
+    private Team requireTeamInContestSelectingWithLock(Long teamId) {
+        Team team = teamRepository
+                .findByIdWithLock(teamId)
+                .orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
         if (team.getStatus() != TeamStatus.CONTEST_SELECTING) {
             throw new TeamException(TeamErrorCode.INVALID_TEAM_STATUS);
         }
