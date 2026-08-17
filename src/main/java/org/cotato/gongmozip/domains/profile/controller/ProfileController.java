@@ -43,8 +43,9 @@ public class ProfileController {
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @GetMapping("/profiles/check-nickname")
     public ResponseEntity<BaseResponse<NicknameCheckResponse>> checkNickname(
-            @RequestParam("nickname") String nickname) {
-        boolean isDuplicated = profileService.isNicknameDuplicated(nickname);
+            @RequestParam("nickname") String nickname, @AuthenticationPrincipal CustomUserDetails userDetails) {
+        Member member = getAuthenticatedMember(userDetails);
+        boolean isDuplicated = profileService.isNicknameDuplicated(nickname, member);
         return BaseResponseFormatter.success(
                 ProfileSuccessCode.NICKNAME_CHECK_SUCCESS, new NicknameCheckResponse(isDuplicated));
     }
