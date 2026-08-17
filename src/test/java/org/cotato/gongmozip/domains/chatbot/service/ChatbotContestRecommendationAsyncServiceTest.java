@@ -73,6 +73,38 @@ class ChatbotContestRecommendationAsyncServiceTest {
         verify(txService, never()).registerCandidatesAndAnnounce(any(), any(), any());
     }
 
+    @DisplayName("선호 카테고리 추천이 최소 개수(2개)에 못 미치면 다른 카테고리에서 보충한다.")
+    @Test
+    void 선호_카테고리에서_부족하면_다른_카테고리에서_보충한다() {
+        // given
+        Contest contestA = Contest.builder()
+                .contestId(100L)
+                .title("A")
+                .category(InterestCategory.IT_AI_TECH)
+                .build();
+        Contest contestB = Contest.builder()
+                .contestId(200L)
+                .title("B")
+                .category(InterestCategory.ART_DESIGN)
+                .build();
+
+        given(contestRepository.findAllWithFilterAndDeadlineDesc(
+                        eq(null), eq(InterestCategory.IT_AI_TECH), eq("OPEN"), any(), any()))
+                .willReturn(new PageImpl<>(List.of(contestA)));
+        given(aiClient.recommendContests(InterestCategory.IT_AI_TECH, List.of(100L)))
+                .willReturn(List.of(100L));
+        given(contestRepository.findAllWithFilterAndDeadlineDesc(eq(null), eq(null), eq("OPEN"), any(), any()))
+                .willReturn(new PageImpl<>(List.of(contestA, contestB)));
+
+        // when
+        service.recommendContestsAsync(1L, InterestCategory.IT_AI_TECH);
+
+        // then
+        verify(txService)
+                .registerCandidatesAndAnnounce(eq(1L), eq(List.of(contestA, contestB)), eq(List.of(100L, 200L)));
+        verify(txService, never()).announcePlainPrompt(any());
+    }
+
     @DisplayName("AI 호출이 실패하면 예외를 삼키고 일반 안내로 폴백한다.")
     @Test
     void AI_호출이_실패하면_일반_안내로_폴백한다() {
