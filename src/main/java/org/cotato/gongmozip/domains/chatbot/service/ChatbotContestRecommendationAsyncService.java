@@ -1,7 +1,10 @@
 package org.cotato.gongmozip.domains.chatbot.service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.cotato.gongmozip.domains.contest.entity.Contest;
@@ -25,6 +28,10 @@ import org.springframework.stereotype.Service;
 public class ChatbotContestRecommendationAsyncService {
 
     private static final int CONTEST_RECOMMENDATION_POOL_SIZE = 10;
+    // 선호 카테고리 안에 열린 공모전이 적어(카테고리 자체가 희소한 경우) 추천이 0~1개로 끝나는
+    // 팀이 실제로 있었다(2026-08-18 확인). 후보 리스트가 아예 텅 비거나 1개뿐이면 팀원 입장에서
+    // "투표할 게 없다"는 인상을 주므로, 부족하면 다른 카테고리에서라도 채워 최소 2개를 보장한다.
+    private static final int MIN_CONTEST_RECOMMENDATIONS = 2;
 
     private final ContestRepository contestRepository;
     private final AiClient aiClient;
@@ -45,19 +52,65 @@ public class ChatbotContestRecommendationAsyncService {
 
         List<Long> recommendedContestIds;
         try {
-            recommendedContestIds = aiClient.recommendContests(
+            recommendedContestIds = new ArrayList<>(aiClient.recommendContests(
                     preferredCategory,
-                    openContests.stream().map(Contest::getContestId).toList());
+                    openContests.stream().map(Contest::getContestId).toList()));
         } catch (Exception e) {
             log.error("공모전 추천 AI 호출 실패 - teamId: {}", teamId, e);
             txService.announcePlainPrompt(teamId);
             return;
         }
 
+        List<Contest> candidatePool = openContests;
+        if (recommendedContestIds.size() < MIN_CONTEST_RECOMMENDATIONS) {
+            candidatePool = topUpAcrossCategories(teamId, preferredCategory, openContests, recommendedContestIds);
+        }
+
         if (recommendedContestIds.isEmpty()) {
             txService.announcePlainPrompt(teamId);
         } else {
-            txService.registerCandidatesAndAnnounce(teamId, openContests, recommendedContestIds);
+            txService.registerCandidatesAndAnnounce(teamId, candidatePool, recommendedContestIds);
         }
+    }
+
+    // 선호 카테고리 풀만으로 MIN_CONTEST_RECOMMENDATIONS를 못 채우면, 카테고리 제한 없이(null)
+    // 마감 임박 안 된 순으로 같은 풀 사이즈만큼 다시 조회해서 아직 안 뽑힌 공모전으로 부족분을
+    // 채운다. 그래도 전체 공모전 자체가 부족하면(이론상 드묾) 채울 수 있는 만큼만 채운다.
+    //
+    // 반환하는 풀은 contestId 기준으로 중복 제거해야 한다 — 카테고리 제한 없이 다시 조회한
+    // fallbackPool엔 openContests와 같은 공모전(id)이 다른 객체 인스턴스로 다시 담겨 올 수 있고,
+    // Contest는 equals/hashCode를 재정의하지 않아 인스턴스 기준으로는 중복이 안 걸러진다 — 이
+    // 상태로 registerCandidatesAndAnnounce에 넘기면 그쪽의 Collectors.toMap(contestId 키)이
+    // "Duplicate key" 예외를 던진다.
+    private List<Contest> topUpAcrossCategories(
+            Long teamId,
+            InterestCategory preferredCategory,
+            List<Contest> openContests,
+            List<Long> recommendedContestIds) {
+        List<Contest> fallbackPool = contestRepository
+                .findAllWithFilterAndDeadlineDesc(
+                        null, null, "OPEN", LocalDateTime.now(), PageRequest.of(0, CONTEST_RECOMMENDATION_POOL_SIZE))
+                .getContent();
+
+        Map<Long, Contest> poolById = new LinkedHashMap<>();
+        openContests.forEach(contest -> poolById.put(contest.getContestId(), contest));
+
+        boolean usedFallback = false;
+        for (Contest contest : fallbackPool) {
+            if (recommendedContestIds.size() >= MIN_CONTEST_RECOMMENDATIONS) {
+                break;
+            }
+            if (recommendedContestIds.contains(contest.getContestId())) {
+                continue;
+            }
+            recommendedContestIds.add(contest.getContestId());
+            poolById.put(contest.getContestId(), contest);
+            usedFallback = true;
+        }
+
+        if (usedFallback) {
+            log.info("선호 카테고리({}) 풀만으로 최소 추천 수를 못 채워 다른 카테고리에서 보충함 - teamId: {}", preferredCategory, teamId);
+        }
+        return List.copyOf(poolById.values());
     }
 }
