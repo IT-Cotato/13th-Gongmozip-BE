@@ -66,6 +66,12 @@ public class ContestVotingService {
     @Transactional
     public ContestCandidateItemResponse addCandidate(Long teamId, Long memberId, Long contestId) {
         Team team = requireTeamInContestSelecting(teamId);
+        // 마감 확정 스케줄러(resolveDeadlineIfDue)가 아직 안 돌아 팀이 여전히 CONTEST_SELECTING
+        // 이더라도, 마감 시각이 지난 뒤의 후보 추가는 막는다 — submitVote의 동일 체크와 같은 이유.
+        LocalDateTime deadline = team.getContestCandidateDeadlineAt();
+        if (deadline != null && !LocalDateTime.now().isBefore(deadline)) {
+            throw new ContestException(ContestErrorCode.CONTEST_CANDIDATE_NOT_SELECTING_STAGE);
+        }
         TeamMember member = requireActiveMember(teamId, memberId);
         Contest contest = contestRepository
                 .findById(contestId)
