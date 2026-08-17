@@ -35,4 +35,10 @@ public class GoogleOAuth2Response implements OAuth2Response {
         }
         return email.toString();
     }
+
+    @Override
+    public String getName() {
+        Object name = attributes.get("name");
+        return name == null ? null : name.toString();
+    }
 }
