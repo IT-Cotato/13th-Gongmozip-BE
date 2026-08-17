@@ -84,6 +84,23 @@ class ContestVotingServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.INVALID_TEAM_STATUS);
     }
 
+    @DisplayName("마감 시각이 지난 뒤에는 후보 추가에 실패한다.")
+    @Test
+    void 마감_시각이_지난_뒤에는_후보_추가에_실패한다() {
+        // given
+        Team team = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.CONTEST_SELECTING)
+                .contestCandidateDeadlineAt(java.time.LocalDateTime.now().minusMinutes(1))
+                .build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when & then
+        assertThatThrownBy(() -> contestVotingService.addCandidate(1L, 10L, 100L))
+                .isInstanceOf(ContestException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ContestErrorCode.CONTEST_CANDIDATE_NOT_SELECTING_STAGE);
+    }
+
     @DisplayName("이미 후보로 추가된 공모전이면 실패한다.")
     @Test
     void 이미_후보로_추가된_공모전이면_실패한다() {
