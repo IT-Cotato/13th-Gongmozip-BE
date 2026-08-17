@@ -75,6 +75,15 @@ public class ProfileService {
         return ProfileConverter.toCreateProfileResponse(profile);
     }
 
+    @Transactional(readOnly = true)
+    public boolean isNicknameDuplicated(String nickname) {
+        String trimmedNickname = nickname != null ? nickname.trim() : "";
+        if (trimmedNickname.isEmpty()) {
+            return false;
+        }
+        return profileRepository.existsByNickname(trimmedNickname);
+    }
+
     public ProfileListResponse getMyProfiles(Member member) {
         List<Profile> profiles = profileRepository.findAllByMemberOrderByUpdatedAtDesc(member);
         return ProfileConverter.toProfileListResponse(profiles);
