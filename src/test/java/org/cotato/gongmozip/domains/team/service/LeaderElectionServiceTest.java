@@ -91,7 +91,7 @@ class LeaderElectionServiceTest {
     void LEADER_SELECTING_상태가_아니면_팀장_여부_투표에_실패한다() {
         // given
         Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
 
         // when & then
         assertThatThrownBy(() -> leaderElectionService.submitCandidacy(1L, 10L, true))
@@ -105,7 +105,7 @@ class LeaderElectionServiceTest {
         // given
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(true);
 
         // when & then
@@ -123,7 +123,7 @@ class LeaderElectionServiceTest {
         TeamMember responder = teamMemberOf(team, 10L, "김철수");
         TeamMember notYet = teamMemberOf(team, 20L, "이해은");
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(false);
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(responder));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
@@ -149,7 +149,7 @@ class LeaderElectionServiceTest {
         a.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
         TeamMember b = teamMemberOf(team, 20L, "이해은");
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(false);
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(b));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
@@ -175,7 +175,7 @@ class LeaderElectionServiceTest {
         TeamMember other = teamMemberOf(team, 20L, "이해은");
         other.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(false);
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(onlyCandidate));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
@@ -203,7 +203,7 @@ class LeaderElectionServiceTest {
         a.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
         TeamMember b = teamMemberOf(team, 20L, "이해은");
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(false);
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(b));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
@@ -229,7 +229,7 @@ class LeaderElectionServiceTest {
         TeamMember voter = teamMemberOf(team, 10L, "김철수");
         TeamMember pending = teamMemberOf(team, 20L, "이해은");
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(voter));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter, pending));
@@ -253,7 +253,7 @@ class LeaderElectionServiceTest {
         TeamMember alsoCandidate = teamMemberOf(team, 30L, "박준수");
         alsoCandidate.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(voter));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter, notACandidate, alsoCandidate));
@@ -276,7 +276,7 @@ class LeaderElectionServiceTest {
         TeamMember candidate = teamMemberOf(team, 20L, "이해은");
         candidate.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(voter));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter, candidate));
@@ -303,7 +303,7 @@ class LeaderElectionServiceTest {
         TeamMember voter3 = teamMemberOf(team, 30L, "박준수");
         voter3.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 30L)).willReturn(Optional.of(voter3));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter1, voter2, voter3));
@@ -356,7 +356,7 @@ class LeaderElectionServiceTest {
         TeamMember voter2 = teamMemberOf(team, 20L, "이해은");
         voter2.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(voter2));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter1, voter2));
@@ -407,7 +407,7 @@ class LeaderElectionServiceTest {
         TeamMember voter2 = teamMemberOf(team, 20L, "이해은");
         voter2.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(voter2));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter1, voter2));
@@ -609,7 +609,7 @@ class LeaderElectionServiceTest {
     @Test
     void 존재하지_않는_팀이면_예외가_발생한다() {
         // given
-        given(teamRepository.findById(999L)).willReturn(Optional.empty());
+        given(teamRepository.findByIdWithLock(999L)).willReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> leaderElectionService.submitCandidacy(999L, 1L, true))
@@ -626,6 +626,7 @@ class LeaderElectionServiceTest {
         TeamMember voter1 = teamMemberOf(team, 10L, "김철수");
         TeamMember voter2 = teamMemberOf(team, 20L, "이해은");
 
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(true);
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(voter1, voter2));
@@ -665,6 +666,7 @@ class LeaderElectionServiceTest {
         TeamMember b = teamMemberOf(team, 20L, "이해은");
         TeamMember leavingCandidate = teamMemberOf(team, 30L, "박준수"); // 득표 1위였지만 나간 사람
 
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(true);
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(a, b));
@@ -701,6 +703,7 @@ class LeaderElectionServiceTest {
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
 
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(true);
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(teamMemberOf(team, 10L, "김철수")));
@@ -728,6 +731,7 @@ class LeaderElectionServiceTest {
         b.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
         TeamMember leavingMember = teamMemberOf(team, 30L, "박준수"); // 기본값 UNDECIDED, 즉 응답 전
 
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(false);
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(a, b));
@@ -752,6 +756,7 @@ class LeaderElectionServiceTest {
         TeamMember leavingMember = teamMemberOf(team, 30L, "박준수");
         leavingMember.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
 
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(leaderVoteRepository.existsByTeam_TeamId(1L)).willReturn(false);
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(stillUndecided));
@@ -771,7 +776,7 @@ class LeaderElectionServiceTest {
     void LEADER_SELECTING이_아니면_후보_등록_마감_처리를_하지_않는다() {
         // given
         Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
 
         // when
         leaderElectionService.resolveCandidacyDeadlineIfDue(1L);
@@ -786,7 +791,7 @@ class LeaderElectionServiceTest {
     void LEADER_SELECTING이_아니면_투표_마감_처리를_하지_않는다() {
         // given
         Team team = Team.builder().teamId(1L).status(TeamStatus.GREETING).build();
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
 
         // when
         leaderElectionService.resolveVoteDeadlineIfDue(1L);
@@ -807,7 +812,7 @@ class LeaderElectionServiceTest {
         TeamMember candidate2 = teamMemberOf(team, 20L, "이해은");
         candidate2.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(candidate1, candidate2));
 
@@ -829,7 +834,7 @@ class LeaderElectionServiceTest {
         onlyCandidate.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
         TeamMember neverResponded = teamMemberOf(team, 20L, "이해은");
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(onlyCandidate, neverResponded));
 
@@ -857,7 +862,7 @@ class LeaderElectionServiceTest {
         // 마감까지 응답하지 않은 팀원 — 마감 처리 중 DOES_NOT_WANT로 간주된다.
         TeamMember neverResponded = teamMemberOf(team, 30L, "박준수");
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(candidate1, candidate2, neverResponded));
 
@@ -883,7 +888,7 @@ class LeaderElectionServiceTest {
         decided.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
         TeamMember stillUndecided = teamMemberOf(team, 20L, "이해은");
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(decided, stillUndecided));
 
@@ -906,7 +911,7 @@ class LeaderElectionServiceTest {
         TeamMember candidate2 = teamMemberOf(team, 20L, "이해은");
         candidate2.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(candidate1, candidate2));
         given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
@@ -935,7 +940,7 @@ class LeaderElectionServiceTest {
         TeamMember declined2 = teamMemberOf(team, 30L, "박준수");
         declined2.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(onlyCandidate, declined1, declined2));
         given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
@@ -964,7 +969,7 @@ class LeaderElectionServiceTest {
         TeamMember candidate3 = teamMemberOf(team, 30L, "박준수");
         candidate3.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(candidate1, candidate2, candidate3));
         given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
@@ -1002,7 +1007,7 @@ class LeaderElectionServiceTest {
         eliminated2.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
         List<TeamMember> activeMembers = List.of(tied1, tied2, eliminated1, eliminated2);
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(activeMembers);
         given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);

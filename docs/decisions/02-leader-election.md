@@ -81,7 +81,34 @@ unique(team_id, voter_team_member_id, round)
     > 모두 팀 행을 잠그도록 바꿨다 — 나중에 잠금을 얻는 트랜잭션은 앞선 트랜잭션이 커밋한
     > 최신 상태(`LEADER_DECIDED`)를 보고 `INVALID_TEAM_STATUS`로 안전하게 실패한다. `castVote`/
     > `submitCandidacy` 등 기존 메서드는 이번 변경 범위 밖이라 잠금을 추가하지 않았다 — 필요성이
-    > 확인되면 별도로 다뤄야 한다.
+    > 확인되면 별도로 다뤄야 한다. **(2026-08-17 해결 — 아래 "개표 경합 방지 락" 참고.)**
+
+## 개표 경합 방지 락 (2026-08-17, 실사용 중 재현된 유령 카드로 발견)
+
+바로 위에서 "범위 밖"으로 남겨뒀던 `castVote`/`submitCandidacy`가 실제로 문제를 냈다. QA
+테스트 중 팀원 2명만 투표한 상태(4명 중 2명)인데 "테스터1 님이 팀장으로 확정되었습니다!"
+카드가 화면에 떴다 — DB를 확인해보니 `teams.status`는 여전히 `LEADER_SELECTING`이었고
+`LEADER_RESULT_CARD` 메시지 자체가 저장돼 있지도 않았다. [04-contest-voting.md](./04-contest-voting.md)의
+"개표 경합 방지 락"과 정확히 같은 메커니즘 — `ChatService.postChatbotMessage`가 커밋 전에
+곧바로 브로드캐스트하는데, 그 트랜잭션이 (아마 클라이언트의 중복 요청 전송으로) 경합 끝에
+롤백되면서 화면엔 잠깐 보였다가 DB엔 안 남는 "유령 카드"가 발생했다.
+
+`resolveCandidacyPhase`(팀장 여부 투표 완료 후)와 `tally`(실제 투표 완료 후) 둘 다 여러
+진입점이 수렴하는 구조라, `ContestVotingService`에 적용했던 것과 동일한 패턴을 이 서비스
+전체로 확장했다:
+
+- `submitCandidacy`/`castVote`: 기존 `requireTeamInLeaderSelecting`(무잠금) 대신 이미 있던
+  `requireTeamInLeaderSelectingWithLock`(원래는 `requestRevote`/`acceptAiRecommendation`
+  전용)을 재사용.
+- `recheckAfterMemberLeft`: 호출자(`TeamService.leaveTeam`)가 잠금 이전에 로드해둔 `Team`을
+  신뢰하지 않고, 진입 시 팀 id로 다시 잠가 얻은 최신 상태로 후보 등록/투표 재확인 로직 둘 다
+  처리.
+- `resolveCandidacyDeadlineIfDue`/`resolveVoteDeadlineIfDue`(스케줄러): `findById` →
+  `findByIdWithLock`.
+
+이제 `requireTeamInLeaderSelecting`(무잠금 버전)을 쓰는 곳이 없어져서 그 메서드는 제거했다.
+`ContestVotingService`와 마찬가지로, 브로드캐스트를 커밋 이후로 미루는 범용 안전장치는 이번
+스코프에서 다루지 않았다 — 필요하면 별도로 챙겨야 한다.
 
 ## 팀장 추천 규칙기반 알고리즘 (2026-08-05, PM 스펙 반영)
 

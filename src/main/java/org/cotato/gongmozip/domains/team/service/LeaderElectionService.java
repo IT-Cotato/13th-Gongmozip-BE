@@ -65,7 +65,7 @@ public class LeaderElectionService {
     /** "팀장 여부 투표" 응답을 저장한다. 활성 팀원 전원이 응답을 마치면 다음 단계로 넘어간다. */
     @Transactional
     public void submitCandidacy(Long teamId, Long memberId, boolean wants) {
-        Team team = requireTeamInLeaderSelecting(teamId);
+        Team team = requireTeamInLeaderSelectingWithLock(teamId);
         if (leaderVoteRepository.existsByTeam_TeamId(teamId)) {
             // 이미 팀장 투표가 시작된 뒤에는 여부 투표를 되돌릴 수 없다.
             throw new TeamException(TeamErrorCode.INVALID_TEAM_STATUS);
@@ -85,7 +85,7 @@ public class LeaderElectionService {
     /** 팀장 후보에게 투표한다. 활성 팀원 전원이 투표를 마치면 개표한다. */
     @Transactional
     public void castVote(Long teamId, Long voterMemberId, Long candidateTeamMemberId) {
-        Team team = requireTeamInLeaderSelecting(teamId);
+        Team team = requireTeamInLeaderSelectingWithLock(teamId);
         TeamMember voter = requireActiveMember(teamId, voterMemberId);
 
         List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
@@ -165,32 +165,43 @@ public class LeaderElectionService {
             return;
         }
 
+        // submitCandidacy/castVote(팀원 요청)나 resolveCandidacyDeadlineIfDue/resolveVoteDeadlineIfDue
+        // (스케줄러)와 거의 동시에 팀원이 나가면 여러 경로가 "확정 조건 충족"을 각자 판단해
+        // resolveCandidacyPhase/tally를 중복 실행할 수 있다 — 잠금으로 직렬화하고, 호출자가
+        // 넘겨준 team은 잠금 이전 스냅샷이라 신뢰하지 않고 잠금 획득 직후 상태를 다시 확인한다.
+        Team locked = teamRepository
+                .findByIdWithLock(team.getTeamId())
+                .orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        if (locked.getStatus() != TeamStatus.LEADER_SELECTING) {
+            return;
+        }
+
         List<TeamMember> activeMembers =
-                teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE);
+                teamMemberRepository.findByTeamIdAndStatus(locked.getTeamId(), TeamMemberStatus.ACTIVE);
         if (activeMembers.isEmpty()) {
             return;
         }
 
-        if (!leaderVoteRepository.existsByTeam_TeamId(team.getTeamId())) {
-            recheckCandidacyPhaseAfterMemberLeft(team, leftTeamMemberId, activeMembers);
+        if (!leaderVoteRepository.existsByTeam_TeamId(locked.getTeamId())) {
+            recheckCandidacyPhaseAfterMemberLeft(locked, leftTeamMemberId, activeMembers);
             return;
         }
 
-        Integer maxRound = leaderVoteRepository.findMaxRoundByTeamId(team.getTeamId());
+        Integer maxRound = leaderVoteRepository.findMaxRoundByTeamId(locked.getTeamId());
         if (maxRound == null) {
             return;
         }
         boolean leaverAlreadyVoted = leaderVoteRepository.existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound(
-                team.getTeamId(), leftTeamMemberId, maxRound);
+                locked.getTeamId(), leftTeamMemberId, maxRound);
         if (leaverAlreadyVoted) {
             return;
         }
 
         long votesInRound = leaderVoteRepository
-                .findByTeam_TeamIdAndRound(team.getTeamId(), maxRound)
+                .findByTeam_TeamIdAndRound(locked.getTeamId(), maxRound)
                 .size();
         if (votesInRound >= activeMembers.size()) {
-            tally(team, maxRound, activeMembers);
+            tally(locked, maxRound, activeMembers);
         }
     }
 
@@ -228,7 +239,10 @@ public class LeaderElectionService {
      */
     @Transactional
     public void resolveCandidacyDeadlineIfDue(Long teamId) {
-        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        // submitCandidacy/recheckAfterMemberLeft와 동시에 실행될 수 있으므로 잠금으로 직렬화한다.
+        Team team = teamRepository
+                .findByIdWithLock(teamId)
+                .orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
         if (team.getStatus() != TeamStatus.LEADER_SELECTING) {
             return;
         }
@@ -259,7 +273,10 @@ public class LeaderElectionService {
      */
     @Transactional
     public void resolveVoteDeadlineIfDue(Long teamId) {
-        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        // castVote/recheckAfterMemberLeft와 동시에 실행될 수 있으므로 잠금으로 직렬화한다.
+        Team team = teamRepository
+                .findByIdWithLock(teamId)
+                .orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
         if (team.getStatus() != TeamStatus.LEADER_SELECTING) {
             return;
         }
@@ -498,20 +515,19 @@ public class LeaderElectionService {
         }
     }
 
-    private Team requireTeamInLeaderSelecting(Long teamId) {
-        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
-        if (team.getStatus() != TeamStatus.LEADER_SELECTING) {
-            throw new TeamException(TeamErrorCode.INVALID_TEAM_STATUS);
-        }
-        return team;
-    }
-
-    // requestRevote와 acceptAiRecommendation은 같은 동률 카드를 읽고 그중 하나만 팀장을
-    // 확정시킬 수 있다 — 잠금 없이 두 요청이 거의 동시에 들어오면, 재투표 요청이 카드를 읽은
-    // 뒤 AI 추천 수락이 먼저 커밋되어도 재투표 요청이 그 사실을 모른 채 "재투표 진행" 카드를
-    // LEADER_DECIDED 이후에 발행할 수 있다. 두 메서드만 팀 행 자체를 잠가 서로를 직렬화한다 —
-    // 뒤에 잠금을 얻는 트랜잭션은 앞선 트랜잭션이 커밋한 최신 상태(LEADER_DECIDED)를 보고
-    // INVALID_TEAM_STATUS로 안전하게 실패한다.
+    // 팀장 여부 투표(resolveCandidacyPhase)든 실제 투표(tally)든, 여러 진입점(팀원 요청 +
+    // recheckAfterMemberLeft + 마감 스케줄러)이 같은 팀의 "확정 조건 충족"을 동시에 판단할 수
+    // 있어 팀 행을 잠가 직렬화한다. 원래는 requestRevote/acceptAiRecommendation의 동률 카드
+    // 경합만 막던 잠금이었는데(두 요청이 거의 동시에 들어오면, 재투표 요청이 카드를 읽은 뒤 AI
+    // 추천 수락이 먼저 커밋되어도 재투표 요청이 그 사실을 모른 채 "재투표 진행" 카드를
+    // LEADER_DECIDED 이후에 발행할 수 있었다), submitCandidacy/castVote/recheckAfterMemberLeft/
+    // resolveCandidacyDeadlineIfDue/resolveVoteDeadlineIfDue까지 전부 여기로 통일했다
+    // (ContestVotingService의 findByIdWithLock 적용과 동일한 이유 — 낙관적 락만으로는 진 쪽
+    // 트랜잭션이 롤백되기 전에 LEADER_RESULT_CARD/LEADER_VOTE_CARD를 이미 브로드캐스트해버려
+    // "확정됐다고 떴다가 사라지는" 유령 카드 증상이 남는다, 2026-08-17).
+    //
+    // 뒤에 잠금을 얻는 트랜잭션은 앞선 트랜잭션이 커밋한 최신 상태를 보고 안전하게 종료(또는
+    // INVALID_TEAM_STATUS)된다.
     private Team requireTeamInLeaderSelectingWithLock(Long teamId) {
         Team team = teamRepository
                 .findByIdWithLock(teamId)
