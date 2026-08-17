@@ -99,6 +99,13 @@ public class Member extends BaseEntity {
         this.birthDate = birthDate;
     }
 
+    // 소셜 로그인에서 받은 이름을 name이 비어있을 때만 채워 넣는다(사용자가 직접 설정한 이름은 존중).
+    public void backfillNameIfAbsent(String name) {
+        if (this.name == null && name != null) {
+            this.name = name;
+        }
+    }
+
     public void updateInfo(String name, Gender gender, LocalDate birthDate) {
         this.name = name;
         this.gender = gender;

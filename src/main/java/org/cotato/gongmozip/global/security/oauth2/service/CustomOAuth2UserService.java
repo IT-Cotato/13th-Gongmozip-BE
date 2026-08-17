@@ -40,31 +40,33 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         AuthProvider provider = oAuth2Response.getProvider();
         String providerMemberId = oAuth2Response.getProviderMemberId();
         String email = oAuth2Response.getEmail();
+        String name = oAuth2Response.getName();
 
-        // 기존 소셜 계정이 있으면 해당 멤버 반환, 없으면 신규 가입 또는 기존 멤버에 소셜 계정 연동
-        return authAccountRepository
+        // 기존 소셜 계정이 있으면 해당 멤버, 없으면 신규 가입 또는 기존 멤버에 소셜 계정 연동
+        Member member = authAccountRepository
                 .findByProviderAndProviderMemberId(provider, providerMemberId)
-                .map(authAccount -> {
-                    Member member = authAccount.getMember();
-                    validateNotWithdrawn(member);
-                    return new CustomOAuth2User(member, provider, isRequiredInfoMissing(member));
-                })
-                .orElseGet(() -> registerOrLink(email, provider, providerMemberId));
+                .map(AuthAccount::getMember)
+                .orElseGet(() -> registerOrLink(email, name, provider, providerMemberId));
+
+        validateNotWithdrawn(member);
+
+        // 재로그인/신규 가입 모두에서, name이 비어있으면 소셜 프로필로 백필
+        member.backfillNameIfAbsent(name);
+
+        return new CustomOAuth2User(member, provider, isRequiredInfoMissing(member));
     }
 
     // 신규 가입 또는 이메일이 같은 기존 멤버에 소셜 계정 연동
-    private CustomOAuth2User registerOrLink(String email, AuthProvider provider, String providerMemberId) {
-        // 이메일이 동일한 멤버가 있으면 재사용, 없으면 소셜 전용 멤버 신규 생성
+    private Member registerOrLink(String email, String name, AuthProvider provider, String providerMemberId) {
+        // 이메일이 동일한 멤버가 있으면 재사용, 없으면 소셜에서 받은 이름으로 신규 생성
         Member member = memberRepository
                 .findByEmail(email)
                 .orElseGet(() -> memberRepository.save(Member.builder()
                         .email(email)
+                        .name(name)
                         .status(MemberStatus.ACTIVE)
                         .emailVerifiedAt(LocalDateTime.now())
                         .build()));
-
-        // 재가입 제한 기간 중인 탈퇴 회원에게 소셜 계정이 재연동되는 것을 차단한다
-        validateNotWithdrawn(member);
 
         // 소셜 인증 계정 저장
         authAccountRepository.save(AuthAccount.builder()
@@ -73,7 +75,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 .providerMemberId(providerMemberId)
                 .build());
 
-        return new CustomOAuth2User(member, provider, isRequiredInfoMissing(member));
+        return member;
     }
 
     private void validateNotWithdrawn(Member member) {

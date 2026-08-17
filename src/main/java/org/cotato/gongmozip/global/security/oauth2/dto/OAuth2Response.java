@@ -9,4 +9,6 @@ public interface OAuth2Response {
     String getProviderMemberId();
 
     String getEmail();
+
+    String getName();
 }

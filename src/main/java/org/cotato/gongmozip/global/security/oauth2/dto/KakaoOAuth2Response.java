@@ -44,4 +44,19 @@ public class KakaoOAuth2Response implements OAuth2Response {
         }
         return email.toString();
     }
+
+    // 카카오는 사용자가 profile_nickname 동의를 거부할 수 있어 null 반환을 허용한다
+    @Override
+    @SuppressWarnings("unchecked")
+    public String getName() {
+        if (kakaoAccount == null) {
+            return null;
+        }
+        Object profile = kakaoAccount.get("profile");
+        if (!(profile instanceof Map)) {
+            return null;
+        }
+        Object nickname = ((Map<String, Object>) profile).get("nickname");
+        return nickname == null ? null : nickname.toString();
+    }
 }
