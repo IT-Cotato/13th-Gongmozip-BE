@@ -39,6 +39,16 @@ public class ProfileController {
 
     // 프로필 API
 
+    @Operation(summary = "프로필 닉네임 중복 체크")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
+    @GetMapping("/profiles/check-nickname")
+    public ResponseEntity<BaseResponse<NicknameCheckResponse>> checkNickname(
+            @RequestParam("nickname") String nickname) {
+        boolean isDuplicated = profileService.isNicknameDuplicated(nickname);
+        return BaseResponseFormatter.success(
+                ProfileSuccessCode.NICKNAME_CHECK_SUCCESS, new NicknameCheckResponse(isDuplicated));
+    }
+
     @Operation(summary = "프로필 생성")
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = ProfileErrorCode.class)
     @PostMapping("/profiles")

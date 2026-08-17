@@ -242,4 +242,7 @@ public class ProfileResponse {
 
     // 20. 프로젝트 경험 AI 평가 생성 응답
     public record ProjectEvaluationCreateResponse(Long evaluationId) {}
+
+    // 21. 프로필 닉네임 중복 체크 응답
+    public record NicknameCheckResponse(boolean isDuplicated) {}
 }

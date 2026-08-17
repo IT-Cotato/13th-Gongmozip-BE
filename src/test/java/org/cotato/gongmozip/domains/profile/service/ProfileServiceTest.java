@@ -115,6 +115,60 @@ class ProfileServiceTest {
         then(profileRepository).should().save(any(Profile.class));
     }
 
+    @DisplayName("이미 존재하는 닉네임인 경우 중복으로 판정한다.")
+    @Test
+    void 이미_존재하는_닉네임인_경우_중복으로_판정한다() {
+        // given
+        String nickname = "중복닉네임";
+        given(profileRepository.existsByNickname("중복닉네임")).willReturn(true);
+
+        // when
+        boolean isDuplicated = profileService.isNicknameDuplicated(nickname);
+
+        // then
+        assertThat(isDuplicated).isTrue();
+    }
+
+    @DisplayName("존재하지 않는 닉네임인 경우 중복이 아님으로 판정한다.")
+    @Test
+    void 존재하지_않는_닉네임인_경우_중복이_아님으로_판정한다() {
+        // given
+        String nickname = "새닉네임";
+        given(profileRepository.existsByNickname("새닉네임")).willReturn(false);
+
+        // when
+        boolean isDuplicated = profileService.isNicknameDuplicated(nickname);
+
+        // then
+        assertThat(isDuplicated).isFalse();
+    }
+
+    @DisplayName("닉네임에 공백이 포함된 경우 trim 처리하여 검사한다.")
+    @Test
+    void 닉네임에_공백이_포함된_경우_trim_처리하여_검사한다() {
+        // given
+        String nickname = "  공백닉네임  ";
+        given(profileRepository.existsByNickname("공백닉네임")).willReturn(true);
+
+        // when
+        boolean isDuplicated = profileService.isNicknameDuplicated(nickname);
+
+        // then
+        assertThat(isDuplicated).isTrue();
+    }
+
+    @DisplayName("닉네임이 null 또는 빈 문자열인 경우 중복이 아님으로 판정한다.")
+    @Test
+    void 닉네임이_null_또는_빈_문자열인_경우_중복이_아님으로_판정한다() {
+        // when
+        boolean isDuplicatedNull = profileService.isNicknameDuplicated(null);
+        boolean isDuplicatedEmpty = profileService.isNicknameDuplicated("");
+
+        // then
+        assertThat(isDuplicatedNull).isFalse();
+        assertThat(isDuplicatedEmpty).isFalse();
+    }
+
     // 권한 및 접근 제어 테스트
 
     @DisplayName("다른 회원의 프로필 수정 시 권한 에러(PROFILE_ACCESS_DENIED)가 발생한다.")
