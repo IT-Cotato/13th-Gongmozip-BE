@@ -51,7 +51,8 @@ class ContestRecommendationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("CONTEST_200_8"))
                 .andExpect(jsonPath("$.data[0].contestId").value(1L))
-                .andExpect(jsonPath("$.data[0].title").value("추천 공모전"));
+                .andExpect(jsonPath("$.data[0].title").value("추천 공모전"))
+                .andExpect(jsonPath("$.data[0].viewCount").value(0));
     }
 
     @Test
@@ -66,7 +67,8 @@ class ContestRecommendationControllerTest {
                         .with(user(new CustomUserDetails(member))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("CONTEST_200_8"))
-                .andExpect(jsonPath("$.data[0].contestId").value(2L));
+                .andExpect(jsonPath("$.data[0].contestId").value(2L))
+                .andExpect(jsonPath("$.data[0].viewCount").value(0));
     }
 
     @Test

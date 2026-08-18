@@ -161,7 +161,8 @@ class ContestControllerTest {
                         .param("size", "20"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.contests[0].contestId").value(1L))
-                .andExpect(jsonPath("$.data.contests[0].title").value("공모전"));
+                .andExpect(jsonPath("$.data.contests[0].title").value("공모전"))
+                .andExpect(jsonPath("$.data.contests[0].viewCount").value(0));
     }
 
     @DisplayName("비로그인 사용자가 공모전 목록 조회 시 401 Unauthorized 에러가 발생한다.")
