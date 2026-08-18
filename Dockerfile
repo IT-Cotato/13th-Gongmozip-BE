@@ -11,6 +11,12 @@ RUN ./gradlew clean bootJar --no-daemon
 
 FROM eclipse-temurin:21-jre
 
+ENV TZ=Asia/Seoul
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && \
+    ln -fs /usr/share/zoneinfo/Asia/Seoul /etc/localtime && \
+    dpkg-reconfigure -f noninteractive tzdata && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY --from=builder /workspace/build/libs/app.jar app.jar
@@ -20,4 +26,4 @@ USER spring
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-Duser.timezone=Asia/Seoul", "-jar", "app.jar"]
