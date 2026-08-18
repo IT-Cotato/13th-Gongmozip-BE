@@ -91,6 +91,17 @@
   테스트: `TeamOptimisticLockingIntegrationTest`(실제 두 트랜잭션으로 버전 충돌 재현),
   `TeamSchedulerJobsTest`(낙관적 잠금 충돌 시에도 나머지 팀 처리가 계속됨을 검증).
 
+  > ⚠️ **낙관적 잠금만으로는 부족했다 (2026-08-18, 실사용 중 재현)**: 위에서 "`ChatbotOrchestrationService`
+  > 자체는 손대지 않음"이라고 판단했던 게 틀렸다. `@Version`은 DB에 중복 반영되는 것만
+  > 막지, 커밋에 실패해 롤백될 트랜잭션이 그 전에 이미 카드 메시지를 브로드캐스트해버리는
+  > 것까진 막지 못한다 — `ChatService.postChatbotMessage`가 저장 직후 커밋을 기다리지 않고
+  > 곧바로 웹소켓으로 나가기 때문이다(`ContestVotingService`/`LeaderElectionService`에서
+  > 정리한 것과 동일한 근본 원인, [04-contest-voting.md](./04-contest-voting.md)/
+  > [02-leader-election.md](./02-leader-election.md) 참고). 실제로 팀원 여러 명이 인사를
+  > 거의 동시에 마쳤을 때, 마지막 인사를 보낸 사람 본인의 `greetedAt`/`leaderCandidacy`만
+  > DB에 안 남은 채 `LEADER_VOTE_CARD`가 발행돼버리는 사고가 재현됐다. `recordGreetingAndAdvance`/
+  > `forceAdvanceGreetingIfDue`도 `findByIdWithLock`으로 팀 행을 잠가 직렬화하도록 고쳤다.
+
 ## 제출 여부 확인 재알림 (2026-08-06, Figma "제출 여부 미진행시" 커버리지 점검 중 발견)
 
 Figma 목업에 "제출 여부 미진행시" 화면이 관련 화면으로 명시돼 있었는데도, 기존 구현은
