@@ -329,6 +329,56 @@ Figma 목업의 "투표 마감까지 00:00:00" 카운트다운에 대응하는 �
   > `LEADER_SELECTING`일 때만 카운트다운을 그리면 되므로 남아있는 값이 화면에 노출될 일도
   > 없다. 단순 데이터 정리(hygiene) 문제라 기능상 영향은 없음.
 
+## AUTO_ASSIGNED 팀장 확정 카드 발행 시점 변경 (2026-08-18, Figma 5.1.3.1/5.1.3.3 확인 후)
+
+2026-08-05 구현(위 "구현 현황" 절) 당시엔 `AUTO_ASSIGNED`도 `LEADER_RESULT_CARD`를 전원
+인사 완료 후에 발행했는데(`advanceAfterGreeting`), Figma 5.1.3.1("팀 인사 유도 및 투표
+결과") 화면을 다시 확인해보니 이 카드가 자기소개 채팅보다 **먼저**(=아무도 인사하기 전에)
+나타나 있었다. 반면 5.1.3.3(공모전 추천) 안내 문구는 "자기소개를 마쳤다면"을 전제하고
+있어, 공모전 단계 진입 자체는 여전히 전원 인사 완료를 기다려야 한다는 것도 같이 확인됐다.
+
+- `ChatbotOrchestrationService.startGreeting()`: `AUTO_ASSIGNED`면 인사 메시지 발행 직후
+  같은 트랜잭션에서 `LEADER_RESULT_CARD`("~님이 팀장으로 확정되었어요!")도 즉시 발행한다
+  (`startGreetingWithAutoAssignedLeader`). 문구에서 "이제 공모전을 골라볼까요?" 부분은
+  제거했다 — 공모전 단계가 실제로 시작되지 않은 시점에 보여주는 카드라 오해를 줄 수 있어서다.
+- `advanceAfterGreeting()`의 `AUTO_ASSIGNED` 분기는 활성 리더가 여전히 있으면 카드를
+  재발행하지 않고 `status → LEADER_DECIDED → CONTEST_SELECTING` 전이만 담당한다(활성 리더가
+  없는 경우는 아래 "지정 리더가 인사 완료 전에 나간 경우" 절 참고).
+- 세 `leaderSelectionMode` 모두 공모전 단계 진입 조건(전원 인사 완료)은 동일하게 유지되고,
+  `AUTO_ASSIGNED`만 팀장 안내를 인사 완료 전에 미리 보여준다는 점만 다르다 — `markGreeted`/
+  `recordGreetingAndAdvance`/`forceAdvanceGreetingIfDue` 추적 로직은 세 모드 공통으로 그대로
+  쓰인다.
+- 테스트: `ChatbotOrchestrationServiceTest`(`startGreeting` 호출 시 인사 메시지+카드 동시
+  발행 검증, `recordGreetingAndAdvance` 호출 시 카드 재발행 없이 상태만 전이하는지 검증).
+- `docs/api.md`의 `AUTO_ASSIGNED` 행/알려진 이슈 노트도 함께 갱신.
+
+### 지정 리더가 인사 완료 전에 나간 경우 (2026-08-18, 코드 리뷰로 발견)
+
+위 변경 직후 코드 리뷰에서, `advanceAfterGreeting`의 `AUTO_ASSIGNED` 분기가 리더 생존 여부를
+전혀 확인하지 않게 된 회귀가 발견됐다. `TeamMember.leave()`는 `status`만 `LEFT`로 바꾸고
+`role`은 그대로 두기 때문에, 지정 리더가 **전원 인사 완료 전에** 팀을 나가면(`GREETING`
+단계) 활성 팀원 중 `TeamRole.LEADER`가 아무도 없는 상태가 된다. 이 상태에서 남은 팀원들이
+인사를 마치면, 회귀된 코드는 리더 존재 여부와 무관하게 그냥 `LEADER_DECIDED` →
+`CONTEST_SELECTING`으로 넘어가버렸다 — 이후 `ChatbotContestRecommendationTxService.
+registerRecommendedCandidates`가 활성 리더를 못 찾아 조용히 후보 등록을 건너뛰고(그 코드의
+주석은 "팀장이 없는 경우는 이론상 없다"고 가정하고 있었다), 팀이 리더 없이 방치됐다.
+
+**범위를 의도적으로 좁혔다**: "확정된 뒤(=`LEADER_DECIDED` 이후) 아무 때나 리더가 나가는"
+경우는 애초에 이번 변경과 무관하게 모든 `leaderSelectionMode`에 걸쳐 존재하는 별개의
+미해결 갭이라(`TeamService.recheckPendingStageAfterLeave`가 재선출 케이스를 다루지 않음),
+이번엔 손대지 않고 "지정 리더가 인사 완료 전에 나가는" 좁은 구간만 고쳤다.
+
+- `advanceAfterGreeting`이 `AUTO_ASSIGNED`일 때 `activeMembers`에 `TeamRole.LEADER`가
+  여전히 있는지 먼저 확인한다. 있으면 기존과 동일. 없으면 `LEADER_LEFT_DURING_GREETING_PROMPT`
+  안내 메시지("팀장으로 예정되었던 팀원이 팀을 나가서, 팀장을 다시 정해야 해요.")를 남기고,
+  `leaderSelectionMode`는 그대로 둔 채(이 필드는 `LEADER_SELECTING` 진입 이후로는 아무도
+  참조하지 않아 바꿀 필요가 없다) 바로 아래 `OPEN_NOMINATION`과 동일한 코드 경로(AI 추천
+  2명을 담은 `LEADER_NOMINATION_CARD` 발행)로 자연스럽게 흘려보낸다.
+  `TeamMember.leaderCandidacy`는 모드와 무관하게 항상 `UNDECIDED`가 기본값이라 별도
+  초기화 없이 바로 투표를 받을 수 있다.
+- 테스트: `ChatbotOrchestrationServiceTest`(지정 리더가 나간 뒤 전원 인사 완료 시
+  `LEADER_SELECTING` 전이 + 안내 메시지 + AI 추천 비동기 호출 검증).
+
 ## 관련 화면
 
 5.1.3.2 팀장 선출 계열 전체, "팀장 후보 등록 후 팀장 투표 진행", "아무도 팀장 후보 등록 X",

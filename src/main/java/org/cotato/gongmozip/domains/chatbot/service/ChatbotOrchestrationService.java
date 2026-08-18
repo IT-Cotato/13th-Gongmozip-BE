@@ -47,6 +47,10 @@ public class ChatbotOrchestrationService {
     private static final String CHATBOT_GUIDE_TITLE = "활용 예시";
     private static final List<String> CHATBOT_GUIDE_EXAMPLES = List.of("우리 역할 분담 추천해줘", "우리 타임라인 추천해줘");
     private static final String REVIEW_COMPLETE_PROMPT = "모든 팀원이 서로에게 리뷰를 남겼어요. 수고 많으셨어요! 팀 프로젝트가 여기서 마무리됩니다.";
+    // AUTO_ASSIGNED로 확정 안내까지 나간 팀장이 전원 인사 완료 전에 팀을 나간 경우에만 쓰인다
+    // (2026-08-18, 좁은 구간 한정 — docs/decisions/02-leader-election.md 참고). 이 문구 다음에
+    // OPEN_NOMINATION과 동일한 흐름(LEADER_NOMINATION_CARD)이 바로 이어진다.
+    private static final String LEADER_LEFT_DURING_GREETING_PROMPT = "팀장으로 예정되었던 팀원이 팀을 나가서, 팀장을 다시 정해야 해요.";
     // 팀장 후보 등록(팀장 여부 투표) 시작(=LEADER_SELECTING 진입) 후 이 시간 안에 전원이 응답하지
     // 않으면 스케줄러가 강제로 확정한다. 투표 마감은 별도(LeaderElectionService.LEADER_VOTE_TIMEOUT_HOURS,
     // 8시간)로 분리되어 있다(2026-08-15 갱신, docs/decisions/02-leader-election.md 참고).
@@ -69,26 +73,37 @@ public class ChatbotOrchestrationService {
 
     /**
      * 팀 생성 직후 호출되어 인사 유도 단계를 시작한다. AUTO_ASSIGNED(매칭 신청 시점 팀장 희망
-     * "네" 1명)면 인사 메시지 자체에 팀장 안내를 포함시킨다 (docs/decisions/01-team.md 참고).
+     * "네" 1명)면 인사 메시지와 함께 팀장 확정 카드(LEADER_RESULT_CARD)도 이 시점에 즉시 발행한다
+     * (Figma 5.1.3.1 "팀 인사 유도 및 투표 결과" 확인, 2026-08-18). 다만 공모전 단계 전환은
+     * 투표가 필요한 경우와 동일하게 전원 인사 완료를 기다렸다가 {@link #advanceAfterGreeting}에서
+     * 이어간다 — 5.1.3.3 공모전 추천 안내 문구가 "자기소개를 마쳤다면"을 전제하기 때문
+     * (docs/decisions/01-team.md 참고).
      */
     @Transactional
     public void startGreeting(Team team) {
         team.advanceStatus(TeamStatus.GREETING);
-        chatService.postChatbotMessage(team, greetingPromptFor(team));
+        if (team.getLeaderSelectionMode() == LeaderSelectionMode.AUTO_ASSIGNED) {
+            startGreetingWithAutoAssignedLeader(team);
+            return;
+        }
+        chatService.postChatbotMessage(team, GREETING_PROMPT);
     }
 
-    private String greetingPromptFor(Team team) {
-        if (team.getLeaderSelectionMode() != LeaderSelectionMode.AUTO_ASSIGNED) {
-            return GREETING_PROMPT;
-        }
+    private void startGreetingWithAutoAssignedLeader(Team team) {
         List<TeamMember> activeMembers =
                 teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE);
-        return activeMembers.stream()
+        TeamMember leader = activeMembers.stream()
                 .filter(teamMember -> teamMember.getRole() == TeamRole.LEADER)
                 .findFirst()
-                .map(leader -> String.format(
-                        GREETING_WITH_LEADER_PROMPT, leader.getProfile().getNickname()))
-                .orElse(GREETING_PROMPT);
+                .orElseThrow(() -> new TeamException(TeamErrorCode.INVALID_TEAM_STATUS));
+        String nickname = leader.getProfile().getNickname();
+
+        chatService.postChatbotMessage(team, String.format(GREETING_WITH_LEADER_PROMPT, nickname));
+        chatService.postChatbotCardMessage(
+                team,
+                MessageType.LEADER_RESULT_CARD,
+                nickname + "님이 팀장으로 확정되었어요!",
+                toIdMetadata("leaderTeamMemberId", leader.getTeamMemberId()));
     }
 
     /**
@@ -147,24 +162,25 @@ public class ChatbotOrchestrationService {
     /**
      * 전원 인사가 끝난 뒤 leaderSelectionMode에 따라 분기한다
      * (docs/decisions/02-leader-election.md 케이스①②③).
-     * - AUTO_ASSIGNED(①): LEADER_SELECTING을 건너뛰고 바로 팀장 확정 안내 후 공모전 단계로.
+     * - AUTO_ASSIGNED(①): 지정된 팀장이 활성 상태로 남아있으면 팀장 확정 카드는 이미
+     *   {@link #startGreeting}에서 발행됐으므로 LEADER_SELECTING을 건너뛰고 상태만 공모전
+     *   단계로 전이한다. 반대로 지정된 팀장이 인사 완료 전에 팀을 나가 더 이상 활성 리더가
+     *   없으면(2026-08-18, 좁은 구간 한정 버그 수정), 안내 메시지를 남기고 OPEN_NOMINATION과
+     *   동일한 투표 흐름으로 자연스럽게 흘러간다(아래 로직 재사용, leaderSelectionMode 자체는
+     *   바꾸지 않음 — 이 값은 여기 이후로 아무도 참조하지 않는다).
      * - CANDIDATE_VOTE(③): 팀장 여부 투표 없이 사전 후보 전원을 바로 후보 등록하고 투표 카드 발행.
      * - OPEN_NOMINATION(②): 기존과 동일하게 AI 추천 2명을 담은 팀장 여부 투표 카드 발행.
      */
     private void advanceAfterGreeting(Team team, List<TeamMember> activeMembers) {
         if (team.getLeaderSelectionMode() == LeaderSelectionMode.AUTO_ASSIGNED) {
-            TeamMember leader = activeMembers.stream()
-                    .filter(teamMember -> teamMember.getRole() == TeamRole.LEADER)
-                    .findFirst()
-                    .orElseThrow(() -> new TeamException(TeamErrorCode.INVALID_TEAM_STATUS));
-            team.advanceStatus(TeamStatus.LEADER_DECIDED);
-            chatService.postChatbotCardMessage(
-                    team,
-                    MessageType.LEADER_RESULT_CARD,
-                    leader.getProfile().getNickname() + "님이 팀장으로 확정되었어요! 이제 공모전을 골라볼까요?",
-                    toIdMetadata("leaderTeamMemberId", leader.getTeamMemberId()));
-            advanceToContestSelecting(team);
-            return;
+            boolean leaderStillActive =
+                    activeMembers.stream().anyMatch(teamMember -> teamMember.getRole() == TeamRole.LEADER);
+            if (leaderStillActive) {
+                team.advanceStatus(TeamStatus.LEADER_DECIDED);
+                advanceToContestSelecting(team);
+                return;
+            }
+            chatService.postChatbotMessage(team, LEADER_LEFT_DURING_GREETING_PROMPT);
         }
 
         team.advanceStatus(TeamStatus.LEADER_SELECTING);

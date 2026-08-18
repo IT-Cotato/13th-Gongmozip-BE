@@ -33,8 +33,10 @@ MATCHED → GREETING → LEADER_SELECTING → LEADER_DECIDED
         → IN_PROGRESS → SUBMITTED → COMPLETED
 ```
 
-- `AUTO_ASSIGNED` 경로에서는 `LEADER_SELECTING` 단계를 건너뛰고 `GREETING` 메시지 자체에
-  팀장 안내가 포함된 채로 바로 `LEADER_DECIDED`로 진입한다.
+- `AUTO_ASSIGNED` 경로에서는 `LEADER_SELECTING` 단계를 건너뛴다. `GREETING` 진입 시 인사
+  메시지와 함께 `LEADER_RESULT_CARD`도 바로 발행되지만(2026-08-18, [02-leader-election.md](./02-leader-election.md)
+  참고), 실제 `LEADER_DECIDED`/`CONTEST_SELECTING` 상태 전이는 다른 모드와 동일하게 전원
+  인사를 마친 뒤에 일어난다.
 
 ### TeamMember
 
