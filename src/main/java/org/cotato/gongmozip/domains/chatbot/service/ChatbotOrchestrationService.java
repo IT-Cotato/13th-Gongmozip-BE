@@ -40,6 +40,9 @@ public class ChatbotOrchestrationService {
 
     private static final String GREETING_PROMPT =
             "안녕하세요. 저는 팀 운영을 도와주는 AI 챗봇이에요. 팀 매칭이 완료되었어요. 각자 간단한 자기소개와 인사를 나눠볼까요?";
+    private static final String GREETING_WITH_LEADER_PROMPT =
+            "안녕하세요? 저는 팀 운영을 도와주는 AI 챗봇이에요. 팀 매칭이 완료되었어요. 더불어 저희 팀은 %s님이 팀장으로"
+                    + " 선정되었습니다🎉 그럼 각자 간단한 자기소개와 인사를 나눠볼까요?";
     private static final String IN_PROGRESS_PROMPT = "언제든 저의 도움이 필요하면 태그해주세요.";
     private static final String CHATBOT_GUIDE_TITLE = "활용 예시";
     private static final List<String> CHATBOT_GUIDE_EXAMPLES = List.of("우리 역할 분담 추천해줘", "우리 타임라인 추천해줘");
@@ -83,18 +86,27 @@ public class ChatbotOrchestrationService {
         return activeMembers.stream()
                 .filter(teamMember -> teamMember.getRole() == TeamRole.LEADER)
                 .findFirst()
-                .map(leader -> GREETING_PROMPT + "\n\n" + leader.getProfile().getNickname()
-                        + "님이 매칭 시점에 팀장 참여를 희망하셔서 팀장으로 확정되었어요!")
+                .map(leader -> String.format(
+                        GREETING_WITH_LEADER_PROMPT, leader.getProfile().getNickname()))
                 .orElse(GREETING_PROMPT);
     }
 
     /**
      * 팀원이 메시지를 보낼 때마다 호출된다. GREETING 단계에서만 동작하며, 해당 팀원의 첫 메시지를
      * 인사로 간주해 기록하고, 활성 팀원 전원이 인사를 마치면 팀장 선출 단계로 전이시킨다.
+     *
+     * <p>같은 팀에 여러 팀원의 메시지가 거의 동시에 도착하거나 {@link #forceAdvanceGreetingIfDue}
+     * (스케줄러)와 겹치면, 각 트랜잭션이 서로 다른 시점의 활성 팀원 스냅샷으로 "전원 인사 완료"를
+     * 판단해 트리거를 쏜 사람 본인의 {@code greetedAt}/{@code leaderCandidacy}가 DB에 반영 안 된
+     * 채로 다음 단계 카드(LEADER_VOTE_CARD 등)만 발행되는 사고가 실사용 중 재현됐다.
+     * {@code ContestVotingService}/{@code LeaderElectionService}에 적용한 것과 동일한 이유로
+     * {@code findByIdWithLock}으로 팀 행을 잠가 직렬화한다(2026-08-18).
      */
     @Transactional
     public void recordGreetingAndAdvance(Long teamId, Long memberId) {
-        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        Team team = teamRepository
+                .findByIdWithLock(teamId)
+                .orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
         if (team.getStatus() != TeamStatus.GREETING) {
             return;
         }
@@ -121,7 +133,9 @@ public class ChatbotOrchestrationService {
      */
     @Transactional
     public void forceAdvanceGreetingIfDue(Long teamId) {
-        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        Team team = teamRepository
+                .findByIdWithLock(teamId)
+                .orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
         if (team.getStatus() != TeamStatus.GREETING) {
             return;
         }

@@ -98,7 +98,7 @@ class ChatbotOrchestrationServiceTest {
         // given
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
 
         // when
         chatbotOrchestrationService.recordGreetingAndAdvance(1L, 10L);
@@ -116,7 +116,7 @@ class ChatbotOrchestrationServiceTest {
         TeamMember sender = teamMemberOf(team, 10L, "김철수");
         TeamMember notGreetedYet = teamMemberOf(team, 20L, "이해은");
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(sender));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(sender, notGreetedYet));
@@ -139,7 +139,7 @@ class ChatbotOrchestrationServiceTest {
         alreadyGreeted.markGreeted(java.time.LocalDateTime.now());
         TeamMember lastToGreet = teamMemberOf(team, 10L, "김철수");
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(lastToGreet));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(alreadyGreeted, lastToGreet));
@@ -166,7 +166,7 @@ class ChatbotOrchestrationServiceTest {
         greeted.markGreeted(java.time.LocalDateTime.now());
         TeamMember neverGreeted = teamMemberOf(team, 20L, "이해은");
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(greeted, neverGreeted));
 
@@ -219,7 +219,7 @@ class ChatbotOrchestrationServiceTest {
         leader.markGreeted(java.time.LocalDateTime.now());
         TeamMember lastToGreet = teamMemberOf(team, 20L, "이해은");
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(lastToGreet));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(leader, lastToGreet));
@@ -258,7 +258,7 @@ class ChatbotOrchestrationServiceTest {
         TeamMember nonCandidate = teamMemberOf(team, 30L, "박준수", false);
         nonCandidate.markGreeted(java.time.LocalDateTime.now());
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(candidate1));
         given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
                 .willReturn(List.of(candidate1, candidate2, nonCandidate));
@@ -289,7 +289,7 @@ class ChatbotOrchestrationServiceTest {
         // given
         Team team =
                 Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
 
         // when
         chatbotOrchestrationService.forceAdvanceGreetingIfDue(1L);
@@ -307,7 +307,7 @@ class ChatbotOrchestrationServiceTest {
         TeamMember sender = teamMemberOf(team, 10L, "김철수");
         sender.markGreeted(java.time.LocalDateTime.now().minusMinutes(1));
 
-        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
         given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(sender));
 
         // when
@@ -322,7 +322,7 @@ class ChatbotOrchestrationServiceTest {
     @Test
     void 존재하지_않는_팀이면_예외가_발생한다() {
         // given
-        given(teamRepository.findById(999L)).willReturn(Optional.empty());
+        given(teamRepository.findByIdWithLock(999L)).willReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> chatbotOrchestrationService.recordGreetingAndAdvance(999L, 1L))
