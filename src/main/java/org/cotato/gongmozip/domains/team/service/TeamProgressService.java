@@ -19,8 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 중간점검 응답 / 공모전 제출 여부 확인. 둘 다 팀장만 응답할 수 있다
- * (docs/decisions/07-scheduler.md).
+ * 공모전 제출 여부 확인. 팀장만 응답할 수 있다 (docs/decisions/07-scheduler.md).
  */
 @Service
 @RequiredArgsConstructor
@@ -35,21 +34,6 @@ public class TeamProgressService {
     private final TeamMemberRepository teamMemberRepository;
     private final ChatService chatService;
     private final CollaborationPointService collaborationPointService;
-
-    @Transactional
-    public void updateProgress(Long teamId, Long memberId, int progressPercent) {
-        Team team = requireTeamInProgress(teamId);
-        TeamMember leader = requireLeader(teamId, memberId);
-
-        boolean firstResponse = team.getProgressCheckRespondedAt() == null;
-        team.recordProgress(progressPercent, LocalDateTime.now());
-
-        if (firstResponse) {
-            collaborationPointService.awardPoint(
-                    leader.getMember(), team, CollaborationPointReason.PROGRESS_CHECK_RESPONSE);
-            chatService.postSystemMessage(team, "진행률에 응답해주셔서 협업거리가 5m 증가했습니다.");
-        }
-    }
 
     @Transactional
     public void submitCompletion(Long teamId, Long memberId, boolean completed) {

@@ -2,8 +2,6 @@ package org.cotato.gongmozip.domains.team.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
@@ -56,9 +54,6 @@ public final class TeamRequest {
     public record LeaderCandidacyRequest(boolean wants) {}
 
     public record LeaderVoteRequest(Long candidateTeamMemberId) {}
-
-    public record UpdateProgressRequest(
-            @NotNull(message = "진행률은 필수 입력 항목입니다.") @Min(0) @Max(100) Integer progressPercent) {}
 
     public record SubmitCompletionRequest(boolean completed) {}
 }

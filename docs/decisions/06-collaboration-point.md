@@ -31,7 +31,7 @@
 | reasonCode | delta | 트리거 |
 |---|---|---|
 | LEAVE_PENALTY | -10m | 채팅방 중도 이탈 |
-| PROGRESS_CHECK_RESPONSE | +5m | 중간점검 응답 (팀장만 응답 가능) |
+| PROGRESS_CHECK_RESPONSE | +5m | (레거시, 2026-08-18부터 미사용) 중간점검이 팀장 전용 응답 카드였을 때 최초 응답 시 지급. 중간점검이 일반 텍스트 안내로 바뀌면서 더 이상 어디서도 적립하지 않음 — 과거 적립 이력과의 호환을 위해 enum 값만 유지 ([07-scheduler.md](./07-scheduler.md) "중간점검 카드 → 텍스트 메시지 전환" 참고) |
 | PROJECT_COMPLETE_MEMBER | +20m | 프로젝트 완주 (팀원) |
 | PROJECT_COMPLETE_LEADER | +30m | 프로젝트 완주 (팀장) |
 | REVIEW_WRITTEN | +10m | 팀원 리뷰 작성 (Phase 9에서 연결 완료, [09-review.md](./09-review.md) 참고) |
@@ -66,7 +66,8 @@
 - ~~미연결 트리거~~ → 전부 연결 완료: `PROGRESS_CHECK_RESPONSE`/`PROJECT_COMPLETE_MEMBER`/
   `PROJECT_COMPLETE_LEADER`는 Phase 7([07-scheduler.md](./07-scheduler.md)), `REVIEW_WRITTEN`은
   Phase 9([09-review.md](./09-review.md))에서 각각 `collaborationPointService.awardPoint(...)`
-  호출을 붙였다.
+  호출을 붙였다. **(2026-08-18 갱신)** `PROGRESS_CHECK_RESPONSE`는 중간점검이 텍스트 메시지로
+  바뀌면서 트리거 자체가 사라져 다시 미연결 상태가 됐다(레거시 enum 값만 유지).
 - 테스트: `CollaborationPointServiceTest`(적립/차감/클램핑), `TeamServiceTest`(나가기 시 호출 검증),
   `MyPageServiceTest` 갱신
 

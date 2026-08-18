@@ -2,7 +2,8 @@ package org.cotato.gongmozip.domains.collaboration.enums;
 
 public enum CollaborationPointReason {
     LEAVE_PENALTY(-10), // 채팅방 중도 이탈
-    PROGRESS_CHECK_RESPONSE(5), // 중간점검 응답 (팀장)
+    PROGRESS_CHECK_RESPONSE(
+            5), // (레거시, 2026-08-18부터 미사용) 중간점검이 팀장 응답 카드였을 때의 최초 응답 지급 사유. 과거 적립 이력 호환을 위해서만 유지 — 07-scheduler.md 참고
     PROJECT_COMPLETE_MEMBER(20), // 프로젝트 완주 (팀원)
     PROJECT_COMPLETE_LEADER(30), // 프로젝트 완주 (팀장)
     REVIEW_WRITTEN(10), // 팀원 리뷰 작성

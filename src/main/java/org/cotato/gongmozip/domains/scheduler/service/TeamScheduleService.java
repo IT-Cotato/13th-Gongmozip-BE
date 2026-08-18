@@ -31,8 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class TeamScheduleService {
 
-    private static final String PROGRESS_CHECK_MESSAGE =
-            "팀원들과 회의를 잘 진행하고 있나요? 현재 진행률을 체크해주세요 :) 진행률 체크는 팀장님만 할 수 있습니다.";
+    private static final String PROGRESS_CHECK_MESSAGE = "공모전 제출일까지 벌써 절반 왔어요!\n현재까지의 진행률을 팀 내에서 체크해보는 시간을 가져보세요!";
     private static final String SUBMISSION_CHECK_MESSAGE = "공모전 마감일 하루 전입니다. 공모전 제출을 완료했다면 '진행 완료'를, 완료하지 못했다면 '미완료'를 "
             + "선택해주세요. 해당 버튼은 팀장님만 선택할 수 있습니다. 팀장님이 '진행 완료'를 선택하면 본 공모전 "
             + "프로젝트가 종료되며, 팀원 리뷰 단계로 이동합니다.";
@@ -120,7 +119,7 @@ public class TeamScheduleService {
                 .toList();
     }
 
-    /** 한 팀에게 중간점검 진행률 체크 카드를 발행한다(1회만, 팀 단위 트랜잭션). */
+    /** 한 팀에게 중간점검 진행률 체크 메시지를 발행한다(1회만, 팀 단위 트랜잭션). */
     @Transactional
     public void sendProgressCheckForTeam(Long teamId) {
         Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
@@ -128,7 +127,7 @@ public class TeamScheduleService {
             return;
         }
         team.markProgressCheckNotified(LocalDateTime.now());
-        chatService.postChatbotCardMessage(team, MessageType.PROGRESS_CHECK_CARD, PROGRESS_CHECK_MESSAGE, null);
+        chatService.postChatbotMessage(team, PROGRESS_CHECK_MESSAGE);
     }
 
     /** 제출확인 시각이 지났는데 아직 알림을 안 보낸 IN_PROGRESS 팀 id 목록을 조회한다. */

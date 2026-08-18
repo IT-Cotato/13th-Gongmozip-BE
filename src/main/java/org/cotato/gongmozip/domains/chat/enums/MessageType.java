@@ -12,6 +12,5 @@ public enum MessageType {
     CONTEST_SHARE_CARD, // 공모전 탭에서 공유한 공모전 카드. 후보 등록은 별도 액션(+ 버튼)에서 처리
     CONTEST_RESULT_CARD, // 공모전 확정 결과 카드 (썸네일/제목/D-day 노출)
     CHATBOT_GUIDE_CARD, // "@챗봇" 활용 예시 안내 카드 ("@챗봇에게 말하기" 버튼용)
-    PROGRESS_CHECK_CARD,
     SUBMISSION_CHECK_CARD
 }

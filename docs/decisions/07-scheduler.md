@@ -16,8 +16,9 @@
 
 ## 결정사항
 
-- **중간점검**: 팀 생성일과 공모전 마감일의 중간 날짜에 진행률 체크 메시지 발송. 진행률 응답은
-  팀장만 가능. 응답 시 `PROGRESS_CHECK_RESPONSE`(+5m) 지급.
+- **중간점검**: 팀 생성일과 공모전 마감일의 중간 날짜에 진행률 체크 메시지 발송. 팀장이 진행률을
+  입력/저장하는 인터랙션 없이, 챗봇이 팀 전체에게 안내 텍스트만 남긴다(2026-08-18 변경, 아래
+  "중간점검 카드 → 텍스트 메시지 전환" 참고).
 - **제출확인**: 공모전 마감일 하루 전에 "진행 완료 / 미완료" 확인 메시지 발송. 버튼은 팀장에게만
   노출(타 팀원에게는 버튼 없이 안내만). "진행 완료" 선택 시 `Team.status = SUBMITTED` →
   팀원 리뷰 단계로 이동(리뷰는 보류), 완주 포인트 지급.
@@ -43,11 +44,9 @@
 - `TeamScheduleService`(도메인 로직) / `TeamSchedulerJobs`(`@Scheduled` cron 트리거)로 분리 —
   cron 배선과 실제 로직을 나눠서 로직 쪽만 순수 단위 테스트 가능하게 함. 공모전 마감은 5분
   간격, 중간점검/제출확인은 매일 09:00 (`SchedulingConfig`에 `@EnableScheduling` 추가).
-- `TeamProgressService` — 중간점검 응답(`PATCH /api/teams/{teamId}/progress`)과 제출확인
-  응답(`PATCH /api/teams/{teamId}/submission`) 둘 다 팀장만 가능. 진행률은 최초 응답 1회만
-  포인트 지급(`progressCheckRespondedAt`으로 멱등성 보장), 제출 완료 시 팀장은
-  `PROJECT_COMPLETE_LEADER`(+30m), 나머지 활성 팀원은 `PROJECT_COMPLETE_MEMBER`(+20m) 지급 후
-  `Team.status = SUBMITTED`.
+- `TeamProgressService` — 제출확인 응답(`PATCH /api/teams/{teamId}/submission`)은 팀장만 가능.
+  제출 완료 시 팀장은 `PROJECT_COMPLETE_LEADER`(+30m), 나머지 활성 팀원은
+  `PROJECT_COMPLETE_MEMBER`(+20m) 지급 후 `Team.status = SUBMITTED`.
 - 테스트: `TeamScheduleServiceTest`, `TeamProgressServiceTest`, `TeamSchedulerJobsTest`
 - **트랜잭션 분리 (2026-08-01)**: 처음엔 `TeamScheduleService`의 3개
   메서드(`resolveDueContestVotingDeadlines`/`sendDueProgressChecks`/`sendDueSubmissionChecks`)가
@@ -151,6 +150,27 @@ Figma 목업에 "제출 여부 미진행시" 화면이 관련 화면으로 명�
   내용은 [08-ai.md](./08-ai.md)의 "AI 호출 비동기 분리" 참고. **(2026-08-15 추가 갱신)**
   이 마감 자체도 후보 등록/투표 두 개로 분리됐다 — [02-leader-election.md](./02-leader-election.md)의
   "후보 등록/투표 마감 분리" 참고.
+
+## 중간점검 카드 → 텍스트 메시지 전환 (2026-08-18)
+
+기획 변경으로, 중간점검 알림을 팀장 전용 인터랙티브 카드(진행률 슬라이더 + "진행률 저장"
+버튼)에서 팀 전체가 보는 일반 챗봇 텍스트 메시지로 바꿨다. 트리거 타이밍(`progressCheckAt`
+계산, 스케줄러 발행 조건)은 그대로이고 발송 방식만 바뀐 것으로, `TeamScheduleService.
+sendProgressCheckForTeam`이 `chatService.postChatbotCardMessage(..., MessageType.
+PROGRESS_CHECK_CARD, ...)` 대신 `chatService.postChatbotMessage(team, PROGRESS_CHECK_MESSAGE)`를
+호출하도록만 변경했다.
+
+이에 따라 다음이 완전히 사용되지 않게 되어 제거했다:
+- `MessageType.PROGRESS_CHECK_CARD`
+- `PATCH /api/teams/{teamId}/progress` (`TeamProgressController.updateProgress`,
+  `TeamProgressService.updateProgress`), 요청 DTO `UpdateProgressRequest`,
+  성공 코드 `TeamSuccessCode.PROGRESS_UPDATED`
+- `Team.progressPercent`/`Team.progressCheckRespondedAt` 필드와 `Team.recordProgress()`
+
+`progressCheckAt`/`progressCheckNotifiedAt`은 새 텍스트 메시지 흐름에서도 그대로 쓰이므로
+남겨뒀다. `CollaborationPointReason.PROGRESS_CHECK_RESPONSE`도 과거 적립 이력과의 호환을 위해
+enum 값 자체는 남기고, 더 이상 어디서도 적립하지 않는다(레거시 값). `progress_percent`/
+`progress_check_responded_at` DB 컬럼도 별도 마이그레이션으로 드롭하지 않고 그대로 둔다.
 
 ## 미정 / 추후 확인 필요
 
