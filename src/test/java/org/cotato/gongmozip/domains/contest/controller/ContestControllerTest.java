@@ -146,7 +146,8 @@ class ContestControllerTest {
                 "주최",
                 "http://thumb",
                 LocalDateTime.now().plusDays(10),
-                10);
+                10,
+                0);
         ContestListResponse listResponse = new ContestListResponse(List.of(contestSummary), 0, 20, 1, 1, false);
 
         given(contestService.getContests(any(), any(), any(), any(), any(), any()))

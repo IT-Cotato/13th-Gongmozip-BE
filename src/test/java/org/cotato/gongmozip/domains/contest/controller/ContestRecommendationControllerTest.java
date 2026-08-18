@@ -44,7 +44,7 @@ class ContestRecommendationControllerTest {
     void getHomeRecommendationsReturnsList() throws Exception {
         Member member = member();
         ContestSummaryResponse summary = new ContestSummaryResponse(
-                1L, "추천 공모전", "IT", "OPEN", "주최사", "thumb.png", java.time.LocalDateTime.now(), 5);
+                1L, "추천 공모전", "IT", "OPEN", "주최사", "thumb.png", java.time.LocalDateTime.now(), 5, 0);
         given(recommendationService.getHomeRecommendations(1L)).willReturn(List.of(summary));
 
         mockMvc.perform(get("/api/recommendations/contests").with(user(new CustomUserDetails(member))))
@@ -59,7 +59,7 @@ class ContestRecommendationControllerTest {
     void getProfileRecommendationsReturnsList() throws Exception {
         Member member = member();
         ContestSummaryResponse summary = new ContestSummaryResponse(
-                2L, "프로필 추천 공모전", "IT", "OPEN", "주최사", "thumb.png", java.time.LocalDateTime.now(), 5);
+                2L, "프로필 추천 공모전", "IT", "OPEN", "주최사", "thumb.png", java.time.LocalDateTime.now(), 5, 0);
         given(recommendationService.getProfileRecommendations(10L, 1L)).willReturn(List.of(summary));
 
         mockMvc.perform(get("/api/profiles/{profileId}/contest-recommendations", 10L)

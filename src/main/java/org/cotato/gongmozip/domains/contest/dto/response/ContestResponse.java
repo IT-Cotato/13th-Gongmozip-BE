@@ -49,7 +49,8 @@ public final class ContestResponse {
             String hostName,
             String thumbnailUrl,
             LocalDateTime applyEndAt,
-            Integer daysRemaining) {}
+            Integer daysRemaining,
+            Integer viewCount) {}
 
     public record ContestListResponse(
             List<ContestSummaryResponse> contests,
