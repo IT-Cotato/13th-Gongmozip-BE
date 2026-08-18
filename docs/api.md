@@ -99,14 +99,18 @@ id 목록을 내려줍니다 — 실제 이름/아바타 등은 프론트가 팀
 ## 팀장 선출
 
 팀장 선출은 별도 화면 진입 없이 **채팅방 안의 카드 메시지**로 전부 진행됩니다. 판정 로직과
-전체 시나리오는 [02-leader-election.md](./decisions/02-leader-election.md) 참고. 프론트는 아래
-3개 API만 있으면 되고, "지금 무엇을 보여줄지"는 전부 채팅 메시지의 `messageType` + `metadata`로
-내려옵니다(REST로 별도 상태를 폴링하지 않음).
+전체 시나리오는 [02-leader-election.md](./decisions/02-leader-election.md) 참고. "지금 무엇을
+보여줄지"는 전부 채팅 메시지의 `messageType` + `metadata`로 내려옵니다(REST로 별도 상태를
+폴링하지 않음) — 다만 "버튼을 이미 눌렀는지"만은 채팅 메시지에 담기지 않으므로 아래 GET 두
+개로 조회합니다(2026-08-18 신규, 공모전 투표의 `GET .../contest-candidates/votes`와 동일한
+목적).
 
 | Method | Path | 설명 |
 |---|---|---|
 | PATCH | `/api/teams/{teamId}/leader-candidacy` | 팀장 여부 투표 — body `{ "wants": boolean }` |
+| GET | `/api/teams/{teamId}/leader-candidacy` | 팀장 여부 투표 진행 상황(응답 인원, 내 응답 여부) 조회 — 신규 |
 | POST | `/api/teams/{teamId}/leader-votes` | 팀장 투표 — body `{ "candidateTeamMemberId": number }` |
+| GET | `/api/teams/{teamId}/leader-votes` | 팀장 투표 진행 상황(참여 인원, 후보별 득표수, 내 투표 여부) 조회 — 신규 |
 | POST | `/api/teams/{teamId}/leader-votes/ai-recommendation/accept` | 동률 시 AI 추천 수락 (선착순 확정, body 없음) |
 | POST | `/api/teams/{teamId}/leader-votes/revote` | 동률 시 재투표 시작 안내 (body 없음, 아래 참고) |
 
@@ -123,12 +127,13 @@ id 목록을 내려줍니다 — 실제 이름/아바타 등은 프론트가 팀
 
 ### 카드 종류와 프론트 처리
 
-- **`LEADER_NOMINATION_CARD`** (팀장 여부 투표, OPEN_NOMINATION 전용): `metadata.aiRecommendedTeamMemberIds`(배열)에 AI가 추천한 후보 2명의 `teamMemberId`가 담김. **본인의 `teamMemberId`가 이 배열에 포함되면** "AI가 당신을 팀장 후보로 추천했어요!" 같은 개인화 문구를 프론트에서 붙여서 보여주면 됨(서버는 추천 대상 id만 내려주고 문구 자체는 이미 카드 텍스트에도 포함돼 있음). 사용자 응답은 `PATCH /leader-candidacy`.
+- **`LEADER_NOMINATION_CARD`** (팀장 여부 투표, OPEN_NOMINATION 전용): `metadata.aiRecommendedTeamMemberIds`(배열)에 AI가 추천한 후보 2명의 `teamMemberId`가 담김. **본인의 `teamMemberId`가 이 배열에 포함되면** "AI가 당신을 팀장 후보로 추천했어요!" 같은 개인화 문구를 프론트에서 붙여서 보여주면 됨(서버는 추천 대상 id만 내려주고 문구 자체는 이미 카드 텍스트에도 포함돼 있음). 사용자 응답은 `PATCH /leader-candidacy`. **"팀장 여부 투표" 버튼 비활성화**: `GET /leader-candidacy`의 `myResponded`가 `true`면(이미 응답함) 비활성화 — `myCandidacy`("UNDECIDED"/"WANTS"/"DOES_NOT_WANT")로 어떤 응답이었는지도 알 수 있음.
 - **`LEADER_VOTE_CARD`**: 세 가지 경우에 재사용되는 같은 타입이라 `metadata` 필드 유무로 구분해야 함.
-  - 최초 투표 카드(후보 확정 직후): `metadata.candidateTeamMemberIds`만 있음 → "팀장 투표" 바텀시트, 후보 중 라디오 선택 후 `POST /leader-votes`.
+  - 최초 투표 카드(후보 확정 직후): `metadata.candidateTeamMemberIds`만 있음 → "팀장 투표" 바텀시트, 후보 중 라디오 선택 후 `POST /leader-votes`. **"팀장 투표하기" 버튼 비활성화**: `GET /leader-votes`의 `myVoted`가 `true`면 비활성화(공모전 투표와 달리 팀장 투표는 마감 전 재투표를 허용하지 않음 — 다시 호출하면 `ALREADY_VOTED_LEADER`로 거부됨).
   - 동률 카드: `candidateTeamMemberIds` + `aiRecommendedTeamMemberId`가 함께 있음 → "재투표하기"/"추천 수락하기" 두 버튼 노출.
     - "추천 수락하기" → `POST /leader-votes/ai-recommendation/accept` (body 없음).
-    - "재투표하기" → `POST /leader-votes/revote` 호출 → 성공하면 서버가 같은 동률 후보 목록으로 새 `LEADER_VOTE_CARD`(안내 텍스트만 다르고 `aiRecommendedTeamMemberId`는 빠짐)를 채팅방에 발행함 → 이 새 카드가 온 뒤 각자 `POST /leader-votes`로 재투표. **이 엔드포인트는 상태를 바꾸지 않고 안내 메시지만 다시 보내는 용도**라, 여러 명이 동시에 눌러도 안전하지만 안내 카드가 중복으로 여러 번 뜰 수 있음 — 프론트에서 버튼을 누른 사람 화면은 즉시 비활성화하는 정도로 충분함.
+    - "재투표하기" → `POST /leader-votes/revote` 호출 → 성공하면 서버가 같은 동률 후보 목록으로 새 `LEADER_VOTE_CARD`(안내 텍스트만 다르고 `aiRecommendedTeamMemberId`는 빠짐)를 채팅방에 발행함 → 이 새 카드가 온 뒤 각자 `POST /leader-votes`로 재투표(새 라운드라 `GET /leader-votes`의 `round`가 올라가고 `myVoted`도 새로 `false`부터 시작함). **재투표 시작 요청 자체(`POST /leader-votes/revote`)는 상태를 바꾸지 않고 안내 메시지만 다시 보내는 용도**라, 여러 명이 동시에 눌러도 안전하지만 안내 카드가 중복으로 여러 번 뜰 수 있음 — 프론트에서 버튼을 누른 사람 화면은 즉시 비활성화하는 정도로 충분함.
+  - **"N명 참여중.." / 후보별 득표 진행 상황**: `GET /leader-votes`로 조회. `requiredVoterCount`가 분모, `participatedVoterCount`가 "N명 참여", `results[].voteCount`가 후보별 득표수(`candidateTeamMemberId`로 프론트가 이미 가진 팀원 목록과 매칭) — 전원이 투표를 마치기 전에도 호출 가능(개표를 확정하지 않는 순수 조회용).
 - **`LEADER_RESULT_CARD`** (팀장 확정, 모든 경로 공통 도착점): `metadata.leaderTeamMemberId`로 최종 팀장을 알려줌. 이 카드가 오면 팀장 선출 플로우는 끝난 것이고, 곧이어 `CONTEST_RECOMMEND_CARD`(공모전 추천, 다음 파트)가 뒤따라옴.
 - 후보가 끝까지 0명이거나(OPEN_NOMINATION) 마감까지 아무도 투표하지 않으면 서버가 무작위로 임시 팀장을 지정하고 동일하게 `LEADER_RESULT_CARD`로 안내함 — 프론트가 별도로 "후보 없음" 화면을 만들 필요 없이 같은 카드로 처리됨.
 

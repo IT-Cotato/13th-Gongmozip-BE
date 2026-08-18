@@ -5,6 +5,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.LeaderCandidacyRequest;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.LeaderVoteRequest;
+import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.LeaderCandidacyStatusResponse;
+import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.LeaderVoteStatusResponse;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamSuccessCode;
 import org.cotato.gongmozip.domains.team.service.LeaderElectionService;
@@ -15,6 +17,7 @@ import org.cotato.gongmozip.global.security.jwt.CustomUserDetails;
 import org.cotato.gongmozip.global.swagger.CustomErrorCodes;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,6 +44,18 @@ public class LeaderController {
         return BaseResponseFormatter.success(TeamSuccessCode.LEADER_CANDIDACY_SUBMITTED);
     }
 
+    @Operation(
+            summary = "팀장 여부 투표 진행 상황 조회",
+            description = "내가 이미 응답했는지(myResponded)를 포함해 응답 진행 상황을 조회합니다. 전원이 응답을 마치기 전에도 호출할 수 있습니다.")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = TeamErrorCode.class)
+    @GetMapping("/leader-candidacy")
+    public ResponseEntity<BaseResponse<LeaderCandidacyStatusResponse>> getCandidacyStatus(
+            @PathVariable("teamId") Long teamId, @AuthenticationPrincipal CustomUserDetails userDetails) {
+        LeaderCandidacyStatusResponse response =
+                leaderElectionService.getCandidacyStatus(teamId, userDetails.getMemberId());
+        return BaseResponseFormatter.success(TeamSuccessCode.LEADER_CANDIDACY_STATUS_RETRIEVED, response);
+    }
+
     @Operation(summary = "팀장 투표")
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = TeamErrorCode.class)
     @PostMapping("/leader-votes")
@@ -50,6 +65,17 @@ public class LeaderController {
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         leaderElectionService.castVote(teamId, userDetails.getMemberId(), request.candidateTeamMemberId());
         return BaseResponseFormatter.success(TeamSuccessCode.LEADER_VOTE_SUBMITTED);
+    }
+
+    @Operation(
+            summary = "팀장 투표 진행 상황 조회",
+            description = "현재 라운드에 참여한 인원 수, 후보별 득표수, 내가 이미 투표했는지(myVoted)를 조회합니다. 전원이 투표를 마치기 전에도 호출할 수 있습니다.")
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = TeamErrorCode.class)
+    @GetMapping("/leader-votes")
+    public ResponseEntity<BaseResponse<LeaderVoteStatusResponse>> getVoteStatus(
+            @PathVariable("teamId") Long teamId, @AuthenticationPrincipal CustomUserDetails userDetails) {
+        LeaderVoteStatusResponse response = leaderElectionService.getVoteStatus(teamId, userDetails.getMemberId());
+        return BaseResponseFormatter.success(TeamSuccessCode.LEADER_VOTE_STATUS_RETRIEVED, response);
     }
 
     @Operation(summary = "팀장 투표 동률 시 AI 추천 수락 (선착순 확정)")

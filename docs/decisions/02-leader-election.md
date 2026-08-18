@@ -379,6 +379,55 @@ registerRecommendedCandidates`가 활성 리더를 못 찾아 조용히 후보 �
 - 테스트: `ChatbotOrchestrationServiceTest`(지정 리더가 나간 뒤 전원 인사 완료 시
   `LEADER_SELECTING` 전이 + 안내 메시지 + AI 추천 비동기 호출 검증).
 
+### OPEN_NOMINATION 팀장 여부 투표 안내 문구 정정 (2026-08-18, Figma 5.1.3.2 확인 후)
+
+`ChatbotLeaderNominationTxService`의 `LEADER_SELECTION_PROMPT`가 Figma 5.1.3.2("팀장
+선출(아무도 사전 팀장 희망 하지 않은 경우)")와 상당히 달랐다 — 기존 문구는 "모두 인사를
+마쳤네요! 이제 팀장을 선출해볼게요. 팀장이 되고 싶은 분은 투표해주세요."에 "AI 추천: A,
+B님이 팀장으로 잘 어울릴 것 같아요!"를 줄바꿈으로 덧붙이는 형태였는데, Figma는 "왜
+추천했는지"(매칭 시점에 아무도 지원 안 함 → 프로필/협업 유형 검사 결과 기반 추천)와
+"추천 안 된 다른 팀원도 자격이 있다"는 안심 문구를 한 문장 안에 자연스럽게 녹여서 보여준다.
+
+- 추천 대상이 있을 때: `LEADER_SELECTION_WITH_RECOMMENDATION_TEMPLATE`으로 Figma 문구를
+  그대로 재현("...검사 결과 %s이 팀장을 잘하실 수 있을 거라 추천드립니다...", `%s`는
+  `"김민정님 혹은 이해은님"`처럼 각 이름에 "님"을 붙이고 " 혹은 "으로 이어붙인 값).
+- 추천 대상이 없을 때(AI 호출 실패 등): Figma에 정의되지 않은 케이스라 기존 문구를
+  다듬은 대체 문구("이제, 팀장을 선출해볼게요. 팀장이 되고 싶은 분은 투표해주세요.")를
+  그대로 유지.
+- 테스트: `ChatbotLeaderNominationTxServiceTest`에 2명 추천 시 Figma 문구와 완전히
+  동일한지 검증하는 케이스 추가.
+
+### "이미 투표/응답했는지" 조회 API 신규 추가 (2026-08-18, Figma 5.1.3.2 확인 후)
+
+Figma 5.1.3.2의 "팀장 후보" 카드는 내가 이미 투표했으면 "팀장 투표하기" 버튼이 비활성화된
+상태로 그려지는데, 팀장 투표/여부 투표 쪽에는 이 판단에 쓸 신호를 내려주는 GET 엔드포인트가
+하나도 없었다(`LeaderController`는 `PATCH`/`POST`만 있었음). 공모전 투표는 이미
+`GET /api/teams/{teamId}/contest-candidates/votes`의 `myVoted`로 동일한 문제를 풀고 있어서
+(`04-contest-voting.md` 참고), 같은 패턴으로 두 개를 추가했다.
+
+- **`GET /api/teams/{teamId}/leader-candidacy`** → `LeaderElectionService.getCandidacyStatus`:
+  `TeamResponse.LeaderCandidacyStatusResponse(requiredResponderCount, respondedCount,
+  myResponded, myCandidacy)`. 후보 목록이 없는 단계라(각자 자기 의사만 밝힘) 공모전처럼
+  득표 tally는 없고, 대신 `myCandidacy`(`UNDECIDED`/`WANTS`/`DOES_NOT_WANT`)로 내가 뭐라고
+  응답했는지까지 알려준다.
+- **`GET /api/teams/{teamId}/leader-votes`** → `LeaderElectionService.getVoteStatus`:
+  `TeamResponse.LeaderVoteStatusResponse(round, requiredVoterCount, participatedVoterCount,
+  myVoted, results)`, `results`는 `LeaderVoteTallyItemResponse(candidateTeamMemberId,
+  voteCount)` — 후보 이름/아바타는 프론트가 이미 `GET /members`로 갖고 있어 중복해서
+  내려주지 않는다. `round` 판정은 `ContestVotingService.getVoteStatus`와 완전히 동일한 로직을
+  그대로 가져왔다: 팀이 아직 `LEADER_SELECTING`이면 `currentRound()`(다음 라운드 예측 포함),
+  이미 확정됐으면 `lastVotedRound()`(표가 실제로 쌓인 마지막 라운드 그대로) — 확정된 팀에
+  예측 로직을 그대로 쓰면 승자가 결정된 라운드가 아니라 그다음(표가 하나도 없는) 라운드를
+  조회해 득표수가 전부 0으로 보이는 버그가 생기기 때문이다.
+- 팀장 투표는 공모전 투표와 달리 **마감 전 재투표를 허용하지 않는다**(`castVote`가
+  `existsByTeam_TeamIdAndVoterTeamMember_TeamMemberIdAndRound`로 중복 투표를 막고
+  `ALREADY_VOTED_LEADER`를 던짐) — 그래서 `myVoted=true`면 그 라운드 안에서는 무조건
+  버튼을 비활성화해야 하고, 공모전처럼 "재투표 진입 버튼"을 따로 둘 필요는 없다. 새 라운드
+  (동률 재투표)가 열리면 `round`가 올라가고 `myVoted`도 `false`부터 다시 시작한다.
+- `docs/api.md`의 팀장 선출 절 갱신.
+- 테스트: `LeaderElectionServiceTest`에 두 메서드 각각 미응답/응답 완료, 그리고
+  "이미 확정된 팀은 마지막 라운드를 그대로 조회한다" 케이스 추가.
+
 ## 관련 화면
 
 5.1.3.2 팀장 선출 계열 전체, "팀장 후보 등록 후 팀장 투표 진행", "아무도 팀장 후보 등록 X",
