@@ -2,6 +2,7 @@ package org.cotato.gongmozip.domains.team.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -19,6 +20,9 @@ import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
+import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.LeaderCandidacyStatusResponse;
+import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.LeaderVoteStatusResponse;
+import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.LeaderVoteTallyItemResponse;
 import org.cotato.gongmozip.domains.team.entity.LeaderVote;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
@@ -218,6 +222,51 @@ class LeaderElectionServiceTest {
         assertThat(b.getRole()).isEqualTo(TeamRole.MEMBER);
         verify(chatService)
                 .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_VOTE_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("아직 응답하지 않은 요청자는 myResponded가 false다.")
+    @Test
+    void 아직_응답하지_않은_요청자는_myResponded가_false다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember requester = teamMemberOf(team, 10L, "김철수");
+        TeamMember responded = teamMemberOf(team, 20L, "이해은");
+        responded.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(requester));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(requester, responded));
+
+        // when
+        LeaderCandidacyStatusResponse response = leaderElectionService.getCandidacyStatus(1L, 10L);
+
+        // then
+        assertThat(response.requiredResponderCount()).isEqualTo(2);
+        assertThat(response.respondedCount()).isEqualTo(1);
+        assertThat(response.myResponded()).isFalse();
+        assertThat(response.myCandidacy()).isEqualTo("UNDECIDED");
+    }
+
+    @DisplayName("이미 응답한 요청자는 myResponded가 true고 자신의 응답을 그대로 돌려받는다.")
+    @Test
+    void 이미_응답한_요청자는_myResponded가_true다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember requester = teamMemberOf(team, 10L, "김철수");
+        requester.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 10L)).willReturn(Optional.of(requester));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(requester));
+
+        // when
+        LeaderCandidacyStatusResponse response = leaderElectionService.getCandidacyStatus(1L, 10L);
+
+        // then
+        assertThat(response.myResponded()).isTrue();
+        assertThat(response.myCandidacy()).isEqualTo("WANTS");
     }
 
     @DisplayName("아직 후보가 정해지지 않았으면 투표할 수 없다.")
@@ -456,6 +505,119 @@ class LeaderElectionServiceTest {
         ArgumentCaptor<List<Long>> candidateIdsCaptor = ArgumentCaptor.forClass(List.class);
         verify(leaderTiebreakAsyncService).resolveTiebreakAsync(eq(1L), eq(2), candidateIdsCaptor.capture());
         assertThat(candidateIdsCaptor.getValue()).containsExactlyInAnyOrder(10L, 20L);
+    }
+
+    @DisplayName("투표 진행 중 아직 투표하지 않은 요청자는 myVoted가 false고 득표수가 정확히 집계된다.")
+    @Test
+    void 투표_진행_중_아직_투표하지_않은_요청자는_myVoted가_false다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember candidate1 = teamMemberOf(team, 10L, "김철수");
+        candidate1.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember candidate2 = teamMemberOf(team, 20L, "이해은");
+        candidate2.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember requester = teamMemberOf(team, 30L, "박준수");
+        requester.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 30L)).willReturn(Optional.of(requester));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(candidate1, candidate2, requester));
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(LeaderVote.builder()
+                        .team(team)
+                        .voterTeamMember(candidate2)
+                        .candidateTeamMember(candidate1)
+                        .round(1)
+                        .build()));
+
+        // when
+        LeaderVoteStatusResponse response = leaderElectionService.getVoteStatus(1L, 30L);
+
+        // then
+        assertThat(response.round()).isEqualTo(1);
+        assertThat(response.requiredVoterCount()).isEqualTo(3);
+        assertThat(response.participatedVoterCount()).isEqualTo(1);
+        assertThat(response.myVoted()).isFalse();
+        assertThat(response.results())
+                .extracting(LeaderVoteTallyItemResponse::candidateTeamMemberId, LeaderVoteTallyItemResponse::voteCount)
+                .containsExactlyInAnyOrder(tuple(10L, 1L), tuple(20L, 0L));
+    }
+
+    @DisplayName("이미 투표한 요청자는 myVoted가 true다.")
+    @Test
+    void 이미_투표한_요청자는_myVoted가_true다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        TeamMember candidate = teamMemberOf(team, 10L, "김철수");
+        candidate.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember requester = teamMemberOf(team, 20L, "이해은");
+        requester.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(requester));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(candidate, requester));
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(null);
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(LeaderVote.builder()
+                        .team(team)
+                        .voterTeamMember(requester)
+                        .candidateTeamMember(candidate)
+                        .round(1)
+                        .build()));
+
+        // when
+        LeaderVoteStatusResponse response = leaderElectionService.getVoteStatus(1L, 20L);
+
+        // then
+        assertThat(response.myVoted()).isTrue();
+    }
+
+    @DisplayName("이미 팀장이 확정된 팀은 표가 다 찬 마지막 라운드를 그대로 조회한다(다음 빈 라운드로 넘어가지 않음).")
+    @Test
+    void 이미_확정된_팀은_마지막_라운드를_그대로_조회한다() {
+        // given
+        Team team = Team.builder().teamId(1L).status(TeamStatus.LEADER_DECIDED).build();
+        TeamMember winner = teamMemberOf(team, 10L, "김철수");
+        winner.updateLeaderCandidacy(LeaderCandidacyStatus.WANTS);
+        TeamMember requester = teamMemberOf(team, 20L, "이해은");
+        requester.updateLeaderCandidacy(LeaderCandidacyStatus.DOES_NOT_WANT);
+
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 20L)).willReturn(Optional.of(requester));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(winner, requester));
+        // 1라운드가 활성 팀원 전원(2명)의 표로 꽉 차서 확정됐다 — currentRound()라면 2라운드로
+        // 예측하지만, 이미 확정된 팀은 실제 표가 쌓인 1라운드를 그대로 조회해야 한다.
+        given(leaderVoteRepository.findMaxRoundByTeamId(1L)).willReturn(1);
+        given(leaderVoteRepository.findByTeam_TeamIdAndRound(1L, 1))
+                .willReturn(List.of(
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(winner)
+                                .candidateTeamMember(winner)
+                                .round(1)
+                                .build(),
+                        LeaderVote.builder()
+                                .team(team)
+                                .voterTeamMember(requester)
+                                .candidateTeamMember(winner)
+                                .round(1)
+                                .build()));
+
+        // when
+        LeaderVoteStatusResponse response = leaderElectionService.getVoteStatus(1L, 20L);
+
+        // then
+        assertThat(response.round()).isEqualTo(1);
+        assertThat(response.participatedVoterCount()).isEqualTo(2);
+        assertThat(response.results())
+                .extracting(LeaderVoteTallyItemResponse::voteCount)
+                .containsExactly(2L);
     }
 
     @DisplayName("LEADER_SELECTING 상태가 아니면 AI 추천 수락에 실패한다.")

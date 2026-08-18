@@ -66,6 +66,32 @@ class ChatbotLeaderNominationTxServiceTest {
         assertThat(contentCaptor.getValue()).contains("김민정");
     }
 
+    @DisplayName("추천이 2명이면 Figma 5.1.3.2 문구 그대로 '혹은'으로 이어붙인다.")
+    @Test
+    void 추천이_2명이면_혹은으로_이어붙인다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        TeamMember member1 = teamMemberOf(team, 10L, "김민정");
+        TeamMember member2 = teamMemberOf(team, 20L, "이해은");
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(member1, member2));
+
+        // when
+        txService.announceLeaderNomination(1L, List.of(10L, 20L));
+
+        // then
+        ArgumentCaptor<String> contentCaptor = ArgumentCaptor.forClass(String.class);
+        verify(chatService)
+                .postChatbotCardMessage(
+                        eq(team), eq(MessageType.LEADER_NOMINATION_CARD), contentCaptor.capture(), anyString());
+        assertThat(contentCaptor.getValue())
+                .isEqualTo("이제, 팀장을 선출해볼게요. 매칭 전에 팀장을 지원해주신 분이 없으셔서 사용자 프로필 및 협업 유형"
+                        + " 검사 결과 김민정님 혹은 이해은님이 팀장을 잘하실 수 있을 거라 추천드립니다. 다른 분들도 모두"
+                        + " 팀장을 하기 충분한 자질을 가지신 분들이니, 팀장 여부를 모두 투표해주세요.");
+    }
+
     @DisplayName("추천 결과가 없으면 이름 없이 기본 문구로 카드를 발행한다.")
     @Test
     void 추천_결과가_없으면_기본_문구로_카드를_발행한다() {

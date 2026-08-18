@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +18,9 @@ import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
 import org.cotato.gongmozip.domains.chat.service.ChatService;
 import org.cotato.gongmozip.domains.chatbot.service.ChatbotOrchestrationService;
+import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.LeaderCandidacyStatusResponse;
+import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.LeaderVoteStatusResponse;
+import org.cotato.gongmozip.domains.team.dto.response.TeamResponse.LeaderVoteTallyItemResponse;
 import org.cotato.gongmozip.domains.team.entity.LeaderVote;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
@@ -80,6 +84,65 @@ public class LeaderElectionService {
         if (allResolved) {
             resolveCandidacyPhase(team, activeMembers);
         }
+    }
+
+    /**
+     * "팀장 여부 투표"(candidacy) 진행 상황을 조회한다. Figma는 이미 응답한 사람에게 "팀장 여부
+     * 투표" 버튼을 비활성화해서 보여주는데, 이를 판단할 신호가 프론트에 없었다 — 공모전 투표의
+     * {@code ContestVotingService.getVoteStatus}(myVoted)와 동일한 목적으로 추가했다
+     * (2026-08-18, Figma 5.1.3.2 확인 후).
+     */
+    public LeaderCandidacyStatusResponse getCandidacyStatus(Long teamId, Long memberId) {
+        TeamMember requester = requireActiveMember(teamId, memberId);
+        List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
+        long respondedCount = activeMembers.stream()
+                .filter(tm -> tm.getLeaderCandidacy() != LeaderCandidacyStatus.UNDECIDED)
+                .count();
+        boolean myResponded = requester.getLeaderCandidacy() != LeaderCandidacyStatus.UNDECIDED;
+        return new LeaderCandidacyStatusResponse(
+                activeMembers.size(),
+                respondedCount,
+                myResponded,
+                requester.getLeaderCandidacy().name());
+    }
+
+    /**
+     * 팀장 후보 투표 진행 상황을 조회한다. 전원이 투표를 마치기 전에도 호출할 수 있어 "N명
+     * 참여중" 카운터와 "팀장 투표하기" 버튼 비활성화(내가 이미 투표했는지)를 그릴 수 있다 —
+     * {@code ContestVotingService.getVoteStatus}와 동일한 패턴(2026-08-18).
+     */
+    public LeaderVoteStatusResponse getVoteStatus(Long teamId, Long memberId) {
+        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        TeamMember requester = requireActiveMember(teamId, memberId);
+        List<TeamMember> activeMembers = teamMemberRepository.findByTeamIdAndStatus(teamId, TeamMemberStatus.ACTIVE);
+
+        // 투표가 아직 열려있는 팀만 "다음 라운드가 뭘지" 예측해야 한다 — 이미 확정된 팀에 이
+        // 예측을 그대로 쓰면 승자를 결정지은 마지막 라운드가 아니라 그다음(투표가 하나도 없는)
+        // 라운드를 조회해 득표수가 전부 0으로 보이는 버그가 생긴다
+        // (ContestVotingService.getVoteStatus와 동일한 이유로 분기).
+        int round = team.getStatus() == TeamStatus.LEADER_SELECTING
+                ? currentRound(teamId, activeMembers.size())
+                : lastVotedRound(teamId);
+        List<LeaderVote> votes = leaderVoteRepository.findByTeam_TeamIdAndRound(teamId, round);
+
+        Map<Long, Long> voteCountByCandidateId = votes.stream()
+                .collect(Collectors.groupingBy(
+                        vote -> vote.getCandidateTeamMember().getTeamMemberId(), Collectors.counting()));
+        long participatedVoterCount = votes.stream()
+                .map(vote -> vote.getVoterTeamMember().getTeamMemberId())
+                .distinct()
+                .count();
+        boolean myVoted = votes.stream()
+                .anyMatch(vote -> vote.getVoterTeamMember().getTeamMemberId().equals(requester.getTeamMemberId()));
+
+        List<LeaderVoteTallyItemResponse> results = eligibleCandidateIds(teamId, round, activeMembers).stream()
+                .map(candidateId -> new LeaderVoteTallyItemResponse(
+                        candidateId, voteCountByCandidateId.getOrDefault(candidateId, 0L)))
+                .sorted(Comparator.comparingLong(LeaderVoteTallyItemResponse::voteCount)
+                        .reversed())
+                .toList();
+
+        return new LeaderVoteStatusResponse(round, activeMembers.size(), participatedVoterCount, myVoted, results);
     }
 
     /** 팀장 후보에게 투표한다. 활성 팀원 전원이 투표를 마치면 개표한다. */
@@ -451,6 +514,13 @@ public class LeaderElectionService {
         long votesInMaxRound =
                 leaderVoteRepository.findByTeam_TeamIdAndRound(teamId, maxRound).size();
         return votesInMaxRound >= activeMemberCount ? maxRound + 1 : maxRound;
+    }
+
+    // 투표가 끝난(더 이상 LEADER_SELECTING이 아닌) 팀의 마지막 라운드. 표가 하나도 없으면
+    // (참여자 0명으로 무작위 확정된 경우) 1라운드로 취급한다.
+    private int lastVotedRound(Long teamId) {
+        Integer maxRound = leaderVoteRepository.findMaxRoundByTeamId(teamId);
+        return maxRound == null ? 1 : maxRound;
     }
 
     private List<Long> eligibleCandidateIds(Long teamId, int round, List<TeamMember> activeMembers) {
