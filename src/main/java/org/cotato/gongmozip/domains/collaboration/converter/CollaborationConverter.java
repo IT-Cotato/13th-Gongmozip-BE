@@ -42,7 +42,7 @@ public final class CollaborationConverter {
         }
         return switch (reason) {
             case LEAVE_PENALTY -> "채팅방 중도 이탈";
-            case PROGRESS_CHECK_RESPONSE -> "중간점검 응답 완료";
+            case PROGRESS_CHECK_RESPONSE -> "중간점검 응답 완료"; // 레거시 — 더 이상 적립되지 않음, 과거 이력 표시용
             case PROJECT_COMPLETE_MEMBER -> "프로젝트 완주";
             case PROJECT_COMPLETE_LEADER -> "프로젝트 완주 (팀장)";
             case REVIEW_WRITTEN -> "팀원 리뷰 작성 완료";

@@ -56,9 +56,6 @@ public class Team extends BaseEntity {
     @Column(name = "chatbot_enabled", nullable = false)
     private boolean chatbotEnabled;
 
-    @Column(name = "progress_percent")
-    private Integer progressPercent;
-
     @Column(name = "progress_check_at")
     private LocalDateTime progressCheckAt;
 
@@ -84,12 +81,10 @@ public class Team extends BaseEntity {
     @Column(name = "leader_vote_deadline_at")
     private LocalDateTime leaderVoteDeadlineAt;
 
-    // 중간점검/제출확인 카드가 이미 발행되었는지 추적하는 멱등성 플래그(스케줄러 중복 발행 방지).
+    // 중간점검/제출확인 알림이 이미 발행되었는지 추적하는 멱등성 플래그(스케줄러 중복 발행 방지).
+    // 중간점검은 일반 텍스트 메시지, 제출확인은 카드로 발행되며 이 필드는 둘 다에 쓰인다.
     @Column(name = "progress_check_notified_at")
     private LocalDateTime progressCheckNotifiedAt;
-
-    @Column(name = "progress_check_responded_at")
-    private LocalDateTime progressCheckRespondedAt;
 
     @Column(name = "submission_check_notified_at")
     private LocalDateTime submissionCheckNotifiedAt;
@@ -158,11 +153,6 @@ public class Team extends BaseEntity {
 
     public void markContestVoteReminderNotified(LocalDateTime notifiedAt) {
         this.contestVoteReminderNotifiedAt = notifiedAt;
-    }
-
-    public void recordProgress(int progressPercent, LocalDateTime respondedAt) {
-        this.progressPercent = progressPercent;
-        this.progressCheckRespondedAt = respondedAt;
     }
 
     public void markSubmissionCheckNotified(LocalDateTime notifiedAt) {

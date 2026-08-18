@@ -15,7 +15,6 @@ public enum TeamSuccessCode implements BaseSuccessCode {
     CHATBOT_TOGGLED(HttpStatus.OK, "TEAM_200_3", "챗봇 설정 변경에 성공하였습니다."),
     LEADER_CANDIDACY_SUBMITTED(HttpStatus.OK, "TEAM_200_4", "팀장 여부 투표에 성공하였습니다."),
     LEADER_VOTE_SUBMITTED(HttpStatus.OK, "TEAM_200_5", "팀장 투표에 성공하였습니다."),
-    PROGRESS_UPDATED(HttpStatus.OK, "TEAM_200_6", "진행률 응답에 성공하였습니다."),
     SUBMISSION_RECORDED(HttpStatus.OK, "TEAM_200_7", "제출 여부 응답에 성공하였습니다."),
     AI_RECOMMENDATION_ACCEPTED(HttpStatus.OK, "TEAM_200_8", "AI 추천을 수락하여 팀장이 확정되었습니다."),
     LEADER_REVOTE_REQUESTED(HttpStatus.OK, "TEAM_200_9", "재투표 안내 메시지를 발행했습니다."),

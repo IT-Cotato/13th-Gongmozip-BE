@@ -13,7 +13,7 @@
 | team | FK |
 | senderType | `MEMBER` / `CHATBOT` / `SYSTEM` |
 | senderTeamMember | nullable — CHATBOT/SYTEM이면 null |
-| messageType | `TEXT`, `SYSTEM_NOTICE`, `SLEADER_NOMINATION_CARD`, `LEADER_VOTE_CARD`, `CONTEST_RECOMMEND_CARD`, `CONTEST_VOTE_CARD`, `PROGRESS_CHECK_CARD`, `SUBMISSION_CHECK_CARD` |
+| messageType | `TEXT`, `SYSTEM_NOTICE`, `SLEADER_NOMINATION_CARD`, `LEADER_VOTE_CARD`, `CONTEST_RECOMMEND_CARD`, `CONTEST_VOTE_CARD`, `SUBMISSION_CHECK_CARD` |
 | content | 텍스트 |
 | metadata | 카드가 참조하는 투표/후보 id 등 (JSON 텍스트) |
 

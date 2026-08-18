@@ -193,9 +193,9 @@ class TeamScheduleServiceTest {
         verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
     }
 
-    @DisplayName("중간점검 시각이 지난 팀에게 진행률 체크 카드를 발행하고 알림 처리한다.")
+    @DisplayName("중간점검 시각이 지난 팀에게 진행률 체크 메시지를 발행하고 알림 처리한다.")
     @Test
-    void 중간점검_시각이_지난_팀에게_진행률_체크_카드를_발행하고_알림_처리한다() {
+    void 중간점검_시각이_지난_팀에게_진행률_체크_메시지를_발행하고_알림_처리한다() {
         // given
         Team team = Team.builder().teamId(1L).status(TeamStatus.IN_PROGRESS).build();
         given(teamRepository.findById(1L)).willReturn(Optional.of(team));
@@ -205,8 +205,7 @@ class TeamScheduleServiceTest {
 
         // then
         assertThat(team.getProgressCheckNotifiedAt()).isNotNull();
-        verify(chatService)
-                .postChatbotCardMessage(eq(team), eq(MessageType.PROGRESS_CHECK_CARD), anyString(), eq(null));
+        verify(chatService).postChatbotMessage(eq(team), anyString());
     }
 
     @DisplayName("이미 중간점검 알림을 보낸 팀은 다시 발행하지 않는다.")
@@ -221,7 +220,7 @@ class TeamScheduleServiceTest {
         teamScheduleService.sendProgressCheckForTeam(1L);
 
         // then
-        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+        verify(chatService, never()).postChatbotMessage(any(), anyString());
     }
 
     @DisplayName("존재하지 않는 팀의 중간점검을 처리하려 하면 예외가 발생한다.")

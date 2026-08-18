@@ -5,7 +5,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.SubmitCompletionRequest;
-import org.cotato.gongmozip.domains.team.dto.request.TeamRequest.UpdateProgressRequest;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamSuccessCode;
 import org.cotato.gongmozip.domains.team.service.TeamProgressService;
@@ -22,24 +21,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "TeamProgress", description = "중간점검/제출확인 관련 API (팀장 전용)")
+@Tag(name = "TeamProgress", description = "제출확인 관련 API (팀장 전용)")
 @RestController
 @RequestMapping("/api/teams/{teamId}")
 @RequiredArgsConstructor
 public class TeamProgressController {
 
     private final TeamProgressService teamProgressService;
-
-    @Operation(summary = "중간점검 진행률 응답 (팀장 전용)")
-    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = TeamErrorCode.class)
-    @PatchMapping("/progress")
-    public ResponseEntity<BaseResponse<Void>> updateProgress(
-            @PathVariable("teamId") Long teamId,
-            @RequestBody @Valid UpdateProgressRequest request,
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
-        teamProgressService.updateProgress(teamId, userDetails.getMemberId(), request.progressPercent());
-        return BaseResponseFormatter.success(TeamSuccessCode.PROGRESS_UPDATED);
-    }
 
     @Operation(summary = "공모전 제출 여부 확인 (팀장 전용)")
     @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = TeamErrorCode.class)
