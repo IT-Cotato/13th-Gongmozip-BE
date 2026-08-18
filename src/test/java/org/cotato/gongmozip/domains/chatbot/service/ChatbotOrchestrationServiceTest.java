@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -181,9 +182,9 @@ class ChatbotOrchestrationServiceTest {
         verify(leaderNominationAsyncService).recommendLeaderNomineesAsync(1L);
     }
 
-    @DisplayName("AUTO_ASSIGNED 팀은 인사 메시지 자체에 팀장 안내가 포함된다.")
+    @DisplayName("AUTO_ASSIGNED 팀은 인사 유도 시작과 동시에 인사 메시지와 팀장 확정 카드를 함께 발행한다.")
     @Test
-    void AUTO_ASSIGNED_팀은_인사_메시지에_팀장_안내가_포함된다() {
+    void AUTO_ASSIGNED_팀은_인사_유도_시작과_동시에_인사_메시지와_팀장_확정_카드를_함께_발행한다() {
         // given
         Team team = Team.builder()
                 .teamId(1L)
@@ -199,12 +200,25 @@ class ChatbotOrchestrationServiceTest {
         chatbotOrchestrationService.startGreeting(team);
 
         // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.GREETING);
         ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
         verify(chatService).postChatbotMessage(eq(team), messageCaptor.capture());
         assertThat(messageCaptor.getValue()).contains("김민정").contains("팀장");
+
+        ArgumentCaptor<String> cardContentCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> metadataCaptor = ArgumentCaptor.forClass(String.class);
+        verify(chatService)
+                .postChatbotCardMessage(
+                        eq(team),
+                        eq(MessageType.LEADER_RESULT_CARD),
+                        cardContentCaptor.capture(),
+                        metadataCaptor.capture());
+        assertThat(cardContentCaptor.getValue()).contains("김민정").contains("팀장으로 확정");
+        assertThat(metadataCaptor.getValue()).contains("leaderTeamMemberId").contains("10");
+        verify(contestRecommendationAsyncService, never()).recommendContestsAsync(any(), any());
     }
 
-    @DisplayName("AUTO_ASSIGNED 팀은 전원 인사 완료 시 LEADER_SELECTING을 건너뛰고 바로 공모전 단계로 전이한다.")
+    @DisplayName("AUTO_ASSIGNED 팀은 전원 인사 완료 시 LEADER_SELECTING과 카드 재발행 없이 바로 공모전 단계로 전이한다.")
     @Test
     void AUTO_ASSIGNED_팀은_전원_인사_완료_시_LEADER_SELECTING을_건너뛴다() {
         // given
@@ -229,11 +243,8 @@ class ChatbotOrchestrationServiceTest {
 
         // then
         assertThat(team.getStatus()).isEqualTo(TeamStatus.CONTEST_SELECTING);
-        ArgumentCaptor<String> metadataCaptor = ArgumentCaptor.forClass(String.class);
-        verify(chatService)
-                .postChatbotCardMessage(
-                        eq(team), eq(MessageType.LEADER_RESULT_CARD), anyString(), metadataCaptor.capture());
-        assertThat(metadataCaptor.getValue()).contains("leaderTeamMemberId").contains("10");
+        verify(chatService, never())
+                .postChatbotCardMessage(any(), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
         verify(chatService, never())
                 .postChatbotCardMessage(any(), eq(MessageType.LEADER_NOMINATION_CARD), anyString(), anyString());
         verify(leaderNominationAsyncService, never()).recommendLeaderNomineesAsync(any());
@@ -241,6 +252,40 @@ class ChatbotOrchestrationServiceTest {
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
         verify(contestRecommendationAsyncService).recommendContestsAsync(1L, InterestCategory.IT_AI_TECH);
         verify(leaderNominationAsyncService, never()).recommendLeaderNomineesAsync(any());
+    }
+
+    @DisplayName("AUTO_ASSIGNED 팀의 지정 리더가 인사 완료 전 팀을 나가면 공모전 단계로 넘어가지 않고 투표 흐름으로 전환된다.")
+    @Test
+    void AUTO_ASSIGNED_팀의_지정_리더가_인사_완료_전_나가면_투표_흐름으로_전환된다() {
+        // given
+        Team team = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.GREETING)
+                .leaderSelectionMode(LeaderSelectionMode.AUTO_ASSIGNED)
+                .preferredCategory(InterestCategory.IT_AI_TECH)
+                .build();
+        // 지정 리더(10L)는 이미 나가서 활성 팀원 목록에 없다 — 남은 두 명만 인사를 마친다.
+        TeamMember alreadyGreeted = teamMemberOf(team, 20L, "이해은");
+        alreadyGreeted.markGreeted(java.time.LocalDateTime.now());
+        TeamMember lastToGreet = teamMemberOf(team, 30L, "박준수");
+
+        given(teamRepository.findByIdWithLock(1L)).willReturn(Optional.of(team));
+        given(teamMemberRepository.findByTeam_TeamIdAndMember_MemberId(1L, 30L)).willReturn(Optional.of(lastToGreet));
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(alreadyGreeted, lastToGreet));
+
+        // when
+        chatbotOrchestrationService.recordGreetingAndAdvance(1L, 30L);
+
+        // then
+        assertThat(team.getStatus()).isEqualTo(TeamStatus.LEADER_SELECTING);
+        verify(chatService).postChatbotMessage(eq(team), contains("나가서"));
+        verify(chatService, never())
+                .postChatbotCardMessage(any(), eq(MessageType.LEADER_RESULT_CARD), anyString(), anyString());
+
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+        verify(leaderNominationAsyncService).recommendLeaderNomineesAsync(1L);
+        verify(contestRecommendationAsyncService, never()).recommendContestsAsync(any(), any());
     }
 
     @DisplayName("CANDIDATE_VOTE 팀은 팀장 여부 투표 없이 사전 후보 전원을 바로 투표 카드로 발행한다.")
