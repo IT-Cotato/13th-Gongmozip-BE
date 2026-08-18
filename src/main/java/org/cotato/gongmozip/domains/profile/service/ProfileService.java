@@ -63,9 +63,9 @@ public class ProfileService {
 
         validateGpa(request.gpa(), request.gpaScale());
 
-        // 닉네임 중복 체크 (trim 적용)
+        // 닉네임 중복 체크 (trim 적용, 타인 중복만 감지)
         String trimmedNickname = request.nickname() != null ? request.nickname().trim() : "";
-        if (profileRepository.existsByNickname(trimmedNickname)) {
+        if (profileRepository.existsByNicknameAndMemberNot(trimmedNickname, member)) {
             throw new ProfileException(ProfileErrorCode.DUPLICATE_NICKNAME);
         }
 
@@ -76,12 +76,12 @@ public class ProfileService {
     }
 
     @Transactional(readOnly = true)
-    public boolean isNicknameDuplicated(String nickname) {
+    public boolean isNicknameDuplicated(String nickname, Member member) {
         String trimmedNickname = nickname != null ? nickname.trim() : "";
         if (trimmedNickname.isEmpty()) {
             return false;
         }
-        return profileRepository.existsByNickname(trimmedNickname);
+        return profileRepository.existsByNicknameAndMemberNot(trimmedNickname, member);
     }
 
     public ProfileListResponse getMyProfiles(Member member) {
@@ -123,14 +123,14 @@ public class ProfileService {
         Double newGpaScale = request.gpaScale() != null ? request.gpaScale() : profile.getGpaScale();
         validateGpa(newGpa, newGpaScale);
 
-        // 닉네임 변경 시 중복 검사 (trim, 공백 검사 및 본인 제외 검증)
+        // 닉네임 변경 시 중복 검사 (trim, 공백 검사 및 타인 중복 검증)
         if (request.nickname() != null) {
             String trimmedNickname = request.nickname().trim();
             if (trimmedNickname.isEmpty()) {
                 throw new ProfileException(ProfileErrorCode.NO_FIELDS_TO_UPDATE);
             }
             if (!trimmedNickname.equals(profile.getNickname())) {
-                if (profileRepository.existsByNicknameAndProfileIdNot(trimmedNickname, profileId)) {
+                if (profileRepository.existsByNicknameAndMemberNot(trimmedNickname, member)) {
                     throw new ProfileException(ProfileErrorCode.DUPLICATE_NICKNAME);
                 }
                 profile.updateNickname(trimmedNickname);

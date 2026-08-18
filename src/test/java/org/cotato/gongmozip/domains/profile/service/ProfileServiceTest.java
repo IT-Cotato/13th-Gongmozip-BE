@@ -106,7 +106,7 @@ class ProfileServiceTest {
         CreateProfileRequest request = new CreateProfileRequest(
                 "러너", "학교", 3, "소프트웨어", "경영", 4.0, 4.5, List.of(InterestCategory.IT_AI_TECH), true);
         given(memberRepository.findByIdWithLock(1L)).willReturn(Optional.of(member));
-        given(profileRepository.existsByNickname("러너")).willReturn(false);
+        given(profileRepository.existsByNicknameAndMemberNot("러너", member)).willReturn(false);
 
         // when
         CreateProfileResponse response = profileService.createProfile(request, member);
@@ -115,18 +115,32 @@ class ProfileServiceTest {
         then(profileRepository).should().save(any(Profile.class));
     }
 
-    @DisplayName("이미 존재하는 닉네임인 경우 중복으로 판정한다.")
+    @DisplayName("타인이 이미 사용하는 닉네임인 경우 중복으로 판정한다.")
     @Test
-    void 이미_존재하는_닉네임인_경우_중복으로_판정한다() {
+    void 타인이_이미_사용하는_닉네임인_경우_중복으로_판정한다() {
         // given
         String nickname = "중복닉네임";
-        given(profileRepository.existsByNickname("중복닉네임")).willReturn(true);
+        given(profileRepository.existsByNicknameAndMemberNot("중복닉네임", member)).willReturn(true);
 
         // when
-        boolean isDuplicated = profileService.isNicknameDuplicated(nickname);
+        boolean isDuplicated = profileService.isNicknameDuplicated(nickname, member);
 
         // then
         assertThat(isDuplicated).isTrue();
+    }
+
+    @DisplayName("본인의 다른 프로필이 사용하는 닉네임인 경우 중복이 아닌 것으로 판정한다.")
+    @Test
+    void 본인의_다른_프로필이_사용하는_닉네임인_경우_중복이_아닌_것으로_판정한다() {
+        // given
+        String nickname = "본인중복닉네임";
+        given(profileRepository.existsByNicknameAndMemberNot("본인중복닉네임", member)).willReturn(false);
+
+        // when
+        boolean isDuplicated = profileService.isNicknameDuplicated(nickname, member);
+
+        // then
+        assertThat(isDuplicated).isFalse();
     }
 
     @DisplayName("존재하지 않는 닉네임인 경우 중복이 아님으로 판정한다.")
@@ -134,10 +148,10 @@ class ProfileServiceTest {
     void 존재하지_않는_닉네임인_경우_중복이_아님으로_판정한다() {
         // given
         String nickname = "새닉네임";
-        given(profileRepository.existsByNickname("새닉네임")).willReturn(false);
+        given(profileRepository.existsByNicknameAndMemberNot("새닉네임", member)).willReturn(false);
 
         // when
-        boolean isDuplicated = profileService.isNicknameDuplicated(nickname);
+        boolean isDuplicated = profileService.isNicknameDuplicated(nickname, member);
 
         // then
         assertThat(isDuplicated).isFalse();
@@ -148,10 +162,10 @@ class ProfileServiceTest {
     void 닉네임에_공백이_포함된_경우_trim_처리하여_검사한다() {
         // given
         String nickname = "  공백닉네임  ";
-        given(profileRepository.existsByNickname("공백닉네임")).willReturn(true);
+        given(profileRepository.existsByNicknameAndMemberNot("공백닉네임", member)).willReturn(true);
 
         // when
-        boolean isDuplicated = profileService.isNicknameDuplicated(nickname);
+        boolean isDuplicated = profileService.isNicknameDuplicated(nickname, member);
 
         // then
         assertThat(isDuplicated).isTrue();
@@ -161,8 +175,8 @@ class ProfileServiceTest {
     @Test
     void 닉네임이_null_또는_빈_문자열인_경우_중복이_아님으로_판정한다() {
         // when
-        boolean isDuplicatedNull = profileService.isNicknameDuplicated(null);
-        boolean isDuplicatedEmpty = profileService.isNicknameDuplicated("");
+        boolean isDuplicatedNull = profileService.isNicknameDuplicated(null, member);
+        boolean isDuplicatedEmpty = profileService.isNicknameDuplicated("", member);
 
         // then
         assertThat(isDuplicatedNull).isFalse();
@@ -750,14 +764,14 @@ class ProfileServiceTest {
         then(projectAiSummaryService).should().generateSummaryAsync(20L, "프로젝트", "역할", "설명", null);
     }
 
-    @DisplayName("프로필 수정 시 닉네임을 변경할 때 trim을 처리하고 본인 제외 중복 체크가 정상 수행된다.")
+    @DisplayName("프로필 수정 시 닉네임을 변경할 때 trim을 처리하고 타인 제외 중복 체크가 정상 수행된다.")
     @Test
-    void 프로필_수정_닉네임_trim_및_본인제외_중복체크() {
+    void 프로필_수정_닉네임_trim_및_타인제외_중복체크() {
         // given
         Profile profile =
                 Profile.builder().profileId(10L).member(member).nickname("러너").build();
         given(profileRepository.findById(10L)).willReturn(Optional.of(profile));
-        given(profileRepository.existsByNicknameAndProfileIdNot("새로운닉네임", 10L)).willReturn(false);
+        given(profileRepository.existsByNicknameAndMemberNot("새로운닉네임", member)).willReturn(false);
 
         UpdateProfileRequest request = new UpdateProfileRequest("  새로운닉네임  ", null, null, null, null, null, null, null);
 
@@ -766,7 +780,7 @@ class ProfileServiceTest {
 
         // then
         assertThat(profile.getNickname()).isEqualTo("새로운닉네임");
-        then(profileRepository).should().existsByNicknameAndProfileIdNot("새로운닉네임", 10L);
+        then(profileRepository).should().existsByNicknameAndMemberNot("새로운닉네임", member);
     }
 
     @DisplayName("자격증 직접 입력 시 명칭이 공백이면 예외가 발생한다.")
