@@ -156,7 +156,8 @@ public final class ContestConverter {
                 contest.getHostName(),
                 contest.getThumbnailUrl(),
                 contest.getApplyEndAt(),
-                calculateDaysRemaining(contest.getApplyEndAt(), now));
+                calculateDaysRemaining(contest.getApplyEndAt(), now),
+                contest.getViewCount());
     }
 
     public static ContestListResponse toContestListResponse(Page<Contest> contestPage, LocalDateTime now) {
