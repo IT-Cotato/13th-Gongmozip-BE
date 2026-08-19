@@ -38,9 +38,9 @@ public class TeamScheduleService {
     private static final String SUBMISSION_CHECK_REMINDER_MESSAGE = "프로젝트가 진행완료되었으면, 진행완료 버튼을 눌러주세요.";
     // "진행 완료"로 응답하지 않으면 이 간격으로 계속 재알림한다(docs/decisions/07-scheduler.md).
     private static final int SUBMISSION_CHECK_REMINDER_HOURS = 2;
-    private static final String CONTEST_VOTE_REMINDER_MESSAGE = "공모전 투표 완료하셨나요? 투표마감까지 10분 남았어요!";
+    private static final String CONTEST_VOTE_REMINDER_MESSAGE = "공모전 투표마감까지 얼마 안 남았어요! 투표 현황을 확인해보세요!";
     // 공모전 후보/투표 마감 몇 분 전에 리마인더를 보낼지 (docs/decisions/04-contest-voting.md).
-    private static final int CONTEST_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE = 10;
+    private static final int CONTEST_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE = 120;
     private static final String LEADER_VOTE_REMINDER_MESSAGE = "팀장 투표 완료하셨나요? 투표마감까지 얼마 안 남았어요!";
     // 팀장 투표 마감 몇 분 전에 리마인더를 보낼지 (docs/decisions/02-leader-election.md).
     private static final int LEADER_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE = 30;
@@ -93,7 +93,7 @@ public class TeamScheduleService {
     /**
      * 한 팀에게 공모전 투표 마감 리마인더 카드를 발행한다(1회만, 팀 단위 트랜잭션). 대상 id
      * 조회와 실제 발송 사이에 시간이 흐를 수 있으므로, 발송 직전에 마감 시각이 여전히 유효한
-     * 리마인더 구간(now ~ now+10분) 안인지 다시 검증한다.
+     * 리마인더 구간(now ~ now+2시간) 안인지 다시 검증한다.
      */
     @Transactional
     public void sendContestVoteReminderForTeam(Long teamId) {
