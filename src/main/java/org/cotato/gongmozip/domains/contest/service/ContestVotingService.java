@@ -297,7 +297,10 @@ public class ContestVotingService {
                     .filter(candidate -> candidate.getContestCandidateId().equals(topCandidateIds.get(0)))
                     .findFirst()
                     .orElseThrow(() -> new ContestException(ContestErrorCode.CONTEST_CANDIDATE_NOT_FOUND));
-            decideContest(team, winner, "투표 결과, \"" + winner.getContest().getTitle() + "\"이(가) 팀 공모전으로 확정되었습니다!");
+            decideContest(
+                    team,
+                    winner,
+                    "투표 결과, " + winner.getContest().getTitle() + "이 이번 팀 공모전으로 선택되었어요. 이제 팀원들과 함께 공모전 준비를 시작해보세요.");
         } else {
             // 동률: 동률 후보들만 대상으로 다음 라운드 재투표를 안내한다. 남은 시간을 그대로
             // 물려받지 않고 새 라운드에도 24시간을 새로 준다. 직전 라운드에서 마감 리마인더가
@@ -310,7 +313,7 @@ public class ContestVotingService {
             chatService.postChatbotCardMessage(
                     team,
                     MessageType.CONTEST_VOTE_CARD,
-                    "동률이 발생했어요. 동률이 나온 공모전들끼리 재투표를 진행할게요.",
+                    "동률이 나와서, 동률이 나온 공모전들끼리 재투표를 진행할게요.",
                     toCandidateMetadata(topCandidateIds));
         }
     }

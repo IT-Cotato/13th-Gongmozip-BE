@@ -38,7 +38,7 @@ public class ChatbotContestRecommendationAsyncService {
     private final ChatbotContestRecommendationTxService txService;
 
     @Async("aiSummaryExecutor")
-    public void recommendContestsAsync(Long teamId, InterestCategory preferredCategory) {
+    public void recommendContestsAsync(Long teamId, InterestCategory preferredCategory, boolean autoAssignedLeader) {
         // 마감이 가장 많이 남은 순서대로 추천한다(팀이 막 꾸려진 시점이라 준비 기간이 넉넉한
         // 공모전을 우선 보여주는 편이 낫다는 판단, 2026-08-05).
         List<Contest> openContests = contestRepository
@@ -57,7 +57,7 @@ public class ChatbotContestRecommendationAsyncService {
                     openContests.stream().map(Contest::getContestId).toList()));
         } catch (Exception e) {
             log.error("공모전 추천 AI 호출 실패 - teamId: {}", teamId, e);
-            txService.announcePlainPrompt(teamId);
+            txService.announcePlainPrompt(teamId, autoAssignedLeader);
             return;
         }
 
@@ -67,9 +67,9 @@ public class ChatbotContestRecommendationAsyncService {
         }
 
         if (recommendedContestIds.isEmpty()) {
-            txService.announcePlainPrompt(teamId);
+            txService.announcePlainPrompt(teamId, autoAssignedLeader);
         } else {
-            txService.registerCandidatesAndAnnounce(teamId, candidatePool, recommendedContestIds);
+            txService.registerCandidatesAndAnnounce(teamId, candidatePool, recommendedContestIds, autoAssignedLeader);
         }
     }
 
