@@ -27,9 +27,11 @@ import org.cotato.gongmozip.domains.team.enums.LeaderCandidacyStatus;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
 import org.cotato.gongmozip.domains.team.enums.TeamRole;
 import org.cotato.gongmozip.global.entity.BaseEntity;
+import org.hibernate.annotations.DynamicUpdate;
 
 @Getter
 @Entity
+@DynamicUpdate
 @Table(
         name = "team_members",
         uniqueConstraints = {
