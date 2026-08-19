@@ -37,4 +37,7 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
             TeamStatus status, LocalDateTime reminderThreshold);
 
     List<Team> findByStatusAndSubmissionCheckReminderAtLessThanEqual(TeamStatus status, LocalDateTime now);
+
+    List<Team> findByStatusAndLeaderVoteDeadlineAtLessThanEqualAndLeaderVoteReminderNotifiedAtIsNull(
+            TeamStatus status, LocalDateTime reminderThreshold);
 }

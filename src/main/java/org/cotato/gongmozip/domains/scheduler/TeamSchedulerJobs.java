@@ -135,4 +135,17 @@ public class TeamSchedulerJobs {
             }
         }
     }
+
+    // 팀장 투표 마감 30분 전 리마인더도 같은 5분 간격으로 확인한다.
+    @Scheduled(cron = "0 */5 * * * *")
+    @SchedulerLock(name = "team-leader-vote-reminder", lockAtMostFor = "PT10M")
+    public void sendLeaderVoteReminders() {
+        for (Long teamId : teamScheduleService.findDueLeaderVoteReminderTeamIds()) {
+            try {
+                teamScheduleService.sendLeaderVoteReminderForTeam(teamId);
+            } catch (Exception e) {
+                log.error("팀장 투표 리마인더 발행 실패 - teamId: {}", teamId, e);
+            }
+        }
+    }
 }

@@ -73,8 +73,11 @@ public class LeaderTiebreakTxService {
                         + "팀원들의 성향과 역할 조합을 바탕으로 가장 높은 협업 시너지가 기대됩니다. 추천을 수락하시나요?";
 
         // 재투표 라운드도 독립된 8시간 마감을 새로 받는다(직전 라운드에서 남은 시간을 그대로
-        // 물려받지 않음, 2026-08-15 결정).
+        // 물려받지 않음, 2026-08-15 결정). 직전 라운드에서 마감 리마인더가 이미 발행됐을 수
+        // 있으므로(findDueLeaderVoteReminderTeamIds가 leaderVoteReminderNotifiedAt IS NULL로
+        // 조회), 새 라운드에서 다시 리마인더가 나갈 수 있도록 플래그도 같이 초기화한다.
         team.scheduleLeaderVoteDeadline(LocalDateTime.now().plusHours(LEADER_VOTE_TIMEOUT_HOURS));
+        team.markLeaderVoteReminderNotified(null);
         chatService.postChatbotCardMessage(
                 team, MessageType.LEADER_VOTE_CARD, content, toTiebreakMetadata(topCandidateIds, aiRecommendedId));
     }
