@@ -49,8 +49,11 @@ public class TeamSchedulerJobs {
         }
     }
 
-    // 중간점검/제출확인은 날짜 단위 비교라 하루 한 번이면 충분하다.
-    @Scheduled(cron = "0 0 9 * * *")
+    // 중간점검은 하루 1번(09시)만 확인하면 실제 절반 시점(progressCheckAt)이 지난 뒤 최대
+    // 24시간 지연될 수 있어(2026-08-19), 09/14/19시 하루 3번으로 완화했다 — 지연 폭을
+    // 절반 이하로 줄이면서도, 팀마다 다른 시각에 흩어져 알림이 가는 걸 막아 예측 가능한
+    // 시간대(업무/저녁 시간)에만 발송되게 한다.
+    @Scheduled(cron = "0 0 9,14,19 * * *")
     @SchedulerLock(name = "team-progress-check", lockAtMostFor = "PT30M")
     public void sendProgressChecks() {
         for (Long teamId : teamScheduleService.findDueProgressCheckTeamIds()) {
