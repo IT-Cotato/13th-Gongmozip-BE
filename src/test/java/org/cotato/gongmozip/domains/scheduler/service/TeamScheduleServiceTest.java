@@ -407,4 +407,99 @@ class TeamScheduleServiceTest {
         // then
         verify(leaderElectionService).resolveVoteDeadlineIfDue(1L);
     }
+
+    @DisplayName("팀장 투표 마감 30분 이내로 남았고 아직 리마인더를 안 보낸 팀 id 목록을 조회한다.")
+    @Test
+    void 팀장_투표_마감_30분_이내로_남은_팀_id_목록을_조회한다() {
+        // given
+        Team team1 = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.LEADER_SELECTING)
+                .leaderVoteDeadlineAt(java.time.LocalDateTime.now().plusMinutes(10))
+                .build();
+        given(teamRepository.findByStatusAndLeaderVoteDeadlineAtLessThanEqualAndLeaderVoteReminderNotifiedAtIsNull(
+                        eq(TeamStatus.LEADER_SELECTING), any()))
+                .willReturn(List.of(team1));
+
+        // when
+        List<Long> dueTeamIds = teamScheduleService.findDueLeaderVoteReminderTeamIds();
+
+        // then
+        assertThat(dueTeamIds).containsExactly(1L);
+    }
+
+    @DisplayName("마감이 이미 지난 팀은 팀장 투표 리마인더 조회 대상에서 제외된다.")
+    @Test
+    void 마감이_이미_지난_팀은_팀장_투표_리마인더_조회_대상에서_제외된다() {
+        // given
+        Team expired = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.LEADER_SELECTING)
+                .leaderVoteDeadlineAt(java.time.LocalDateTime.now().minusMinutes(1))
+                .build();
+        given(teamRepository.findByStatusAndLeaderVoteDeadlineAtLessThanEqualAndLeaderVoteReminderNotifiedAtIsNull(
+                        eq(TeamStatus.LEADER_SELECTING), any()))
+                .willReturn(List.of(expired));
+
+        // when
+        List<Long> dueTeamIds = teamScheduleService.findDueLeaderVoteReminderTeamIds();
+
+        // then
+        assertThat(dueTeamIds).isEmpty();
+    }
+
+    @DisplayName("마감이 이미 지난 팀에는 팀장 투표 리마인더 카드를 발행하지 않는다.")
+    @Test
+    void 마감이_이미_지난_팀에는_팀장_투표_리마인더_카드를_발행하지_않는다() {
+        // given
+        Team team = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.LEADER_SELECTING)
+                .leaderVoteDeadlineAt(java.time.LocalDateTime.now().minusMinutes(1))
+                .build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        teamScheduleService.sendLeaderVoteReminderForTeam(1L);
+
+        // then
+        assertThat(team.getLeaderVoteReminderNotifiedAt()).isNull();
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
+
+    @DisplayName("팀장 투표 마감이 임박한 팀에게 리마인더 카드를 발행하고 알림 처리한다.")
+    @Test
+    void 팀장_투표_마감이_임박한_팀에게_리마인더_카드를_발행하고_알림_처리한다() {
+        // given
+        Team team = Team.builder()
+                .teamId(1L)
+                .status(TeamStatus.LEADER_SELECTING)
+                .leaderVoteDeadlineAt(java.time.LocalDateTime.now().plusMinutes(10))
+                .build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        teamScheduleService.sendLeaderVoteReminderForTeam(1L);
+
+        // then
+        assertThat(team.getLeaderVoteReminderNotifiedAt()).isNotNull();
+        verify(chatService)
+                .postChatbotCardMessage(eq(team), eq(MessageType.LEADER_VOTE_REMINDER_CARD), anyString(), eq(null));
+    }
+
+    @DisplayName("이미 팀장 투표 리마인더를 보낸 팀은 다시 발행하지 않는다.")
+    @Test
+    void 이미_팀장_투표_리마인더를_보낸_팀은_다시_발행하지_않는다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.LEADER_SELECTING).build();
+        team.markLeaderVoteReminderNotified(java.time.LocalDateTime.now());
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+
+        // when
+        teamScheduleService.sendLeaderVoteReminderForTeam(1L);
+
+        // then
+        verify(chatService, never()).postChatbotCardMessage(any(), any(), anyString(), any());
+    }
 }

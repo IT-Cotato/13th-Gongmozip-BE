@@ -329,6 +329,33 @@ Figma 목업의 "투표 마감까지 00:00:00" 카운트다운에 대응하는 �
   > `LEADER_SELECTING`일 때만 카운트다운을 그리면 되므로 남아있는 값이 화면에 노출될 일도
   > 없다. 단순 데이터 정리(hygiene) 문제라 기능상 영향은 없음.
 
+## 투표 마감 리마인더 (2026-08-19, Figma "팀장 투표 상단 공지바" 확인 후)
+
+`ContestVotingService`의 [투표 마감 리마인더](./04-contest-voting.md#투표-마감-리마인더-2026-08-06-figma-5133-커버리지-점검-중-발견)와
+동일한 문제·동일한 패턴이었다 — Figma 목업에 "팀장 투표 완료하셨나요? 투표마감까지 얼마 안
+남았어요!" 리마인더 카드가 있는데, 마감 확정 스케줄러(`resolveLeaderVoteDeadlines`)는 마감
+**순간**에만 반응할 뿐 마감 전에 미리 알리는 잡이 없었다.
+
+- `Team.leaderVoteReminderNotifiedAt`(마이그레이션 V39) — 공모전 투표 리마인더와 동일한 "1회만
+  발행" 멱등성 플래그 패턴. 투표 마감 자체가 라운드마다(동률 재투표 등) 새로 세팅되므로,
+  `scheduleLeaderVoteDeadline`을 호출하는 두 지점 중 **새 라운드를 여는 쪽**
+  (`LeaderTiebreakTxService.applyTiebreakResult`의 동률 재투표 분기)에서만 플래그도 같이
+  `null`로 초기화한다 — 최초 투표 카드를 발행하는 `resolveCandidacyPhase`는 신규 팀이라 이미
+  `null`이므로 별도 초기화가 필요 없다(공모전 쪽과 동일한 이유).
+- `TeamScheduleService.findDueLeaderVoteReminderTeamIds()` — `leaderVoteDeadlineAt`이 30분
+  이내로 남았고 아직 리마인더를 안 보낸 `LEADER_SELECTING` 팀을 조회.
+  `sendLeaderVoteReminderForTeam(teamId)`가 `MessageType.LEADER_VOTE_REMINDER_CARD`(메타데이터
+  없음)로 안내 카드를 발행한다. 마감이 이미 지난 팀은 조회/발송 양쪽에서 제외한다(공모전
+  리마인더의 CodeRabbit 리뷰 반영 사항을 처음부터 반영).
+- `TeamSchedulerJobs.sendLeaderVoteReminders()` — 다른 마감 관련 잡들과 동일하게 5분 간격.
+- 왜 10분이 아니라 30분인가: 공모전 투표는 팀원 전원이 동시에 진행하는 짧은 액션이라 10분
+  전이면 충분하지만, 팀장 투표는 후보 등록(최대 3시간)을 거친 뒤라 실사용 흐름상 좀 더 일찍
+  환기시키는 게 낫다는 판단(요구사항 확정, 2026-08-19).
+- 프론트는 리마인더 카드의 버튼 라벨을 서버가 정해주지 않는다 — `GET
+  .../leader-votes/status`의 `myVoted`로 직접 판단해야 한다(공모전 쪽과 동일한 아키텍처 —
+  이 앱은 브로드캐스트 전용 채팅이라 서버가 유저별로 카드를 다르게 보낼 수 없다).
+- 테스트: `TeamScheduleServiceTest`, `TeamSchedulerJobsTest`.
+
 ## AUTO_ASSIGNED 팀장 확정 카드 발행 시점 변경 (2026-08-18, Figma 5.1.3.1/5.1.3.3 확인 후)
 
 2026-08-05 구현(위 "구현 현황" 절) 당시엔 `AUTO_ASSIGNED`도 `LEADER_RESULT_CARD`를 전원

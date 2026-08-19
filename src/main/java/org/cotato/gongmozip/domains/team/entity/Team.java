@@ -101,6 +101,12 @@ public class Team extends BaseEntity {
     @Column(name = "contest_vote_reminder_notified_at")
     private LocalDateTime contestVoteReminderNotifiedAt;
 
+    // 팀장 투표 마감 30분 전 리마인더가 이미 발행되었는지 추적하는 멱등성 플래그(스케줄러
+    // 중복 발행 방지, docs/decisions/02-leader-election.md). scheduleLeaderVoteDeadline로 새
+    // 라운드 마감이 세팅될 때마다 null로 리셋된다.
+    @Column(name = "leader_vote_reminder_notified_at")
+    private LocalDateTime leaderVoteReminderNotifiedAt;
+
     @Column(name = "submitted", nullable = false)
     private boolean submitted;
 
@@ -153,6 +159,10 @@ public class Team extends BaseEntity {
 
     public void markContestVoteReminderNotified(LocalDateTime notifiedAt) {
         this.contestVoteReminderNotifiedAt = notifiedAt;
+    }
+
+    public void markLeaderVoteReminderNotified(LocalDateTime notifiedAt) {
+        this.leaderVoteReminderNotifiedAt = notifiedAt;
     }
 
     public void markSubmissionCheckNotified(LocalDateTime notifiedAt) {

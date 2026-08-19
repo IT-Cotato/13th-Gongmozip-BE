@@ -41,6 +41,9 @@ public class TeamScheduleService {
     private static final String CONTEST_VOTE_REMINDER_MESSAGE = "공모전 투표 완료하셨나요? 투표마감까지 10분 남았어요!";
     // 공모전 후보/투표 마감 몇 분 전에 리마인더를 보낼지 (docs/decisions/04-contest-voting.md).
     private static final int CONTEST_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE = 10;
+    private static final String LEADER_VOTE_REMINDER_MESSAGE = "팀장 투표 완료하셨나요? 투표마감까지 얼마 안 남았어요!";
+    // 팀장 투표 마감 몇 분 전에 리마인더를 보낼지 (docs/decisions/02-leader-election.md).
+    private static final int LEADER_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE = 30;
     // 인사 유도 시작(=팀 생성) 후 이 시간 안에 전원이 인사를 마치지 않으면 강제로 다음 단계로 넘긴다
     // (기능명세서 5.1.3.1 E1).
     private static final int GREETING_TIMEOUT_HOURS = 2;
@@ -233,5 +236,45 @@ public class TeamScheduleService {
     @Transactional
     public void resolveLeaderVoteDeadlineForTeam(Long teamId) {
         leaderElectionService.resolveVoteDeadlineIfDue(teamId);
+    }
+
+    /**
+     * 팀장 투표 마감까지 {@value #LEADER_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE}분 이내로 남았는데
+     * 아직 리마인더를 안 보낸 LEADER_SELECTING 팀 id 목록을 조회한다. 마감이 이미 지난 팀은
+     * 걸러낸다 — {@code findDueContestVoteReminderTeamIds}와 동일한 이유.
+     */
+    public List<Long> findDueLeaderVoteReminderTeamIds() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime reminderThreshold = now.plusMinutes(LEADER_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE);
+        return teamRepository
+                .findByStatusAndLeaderVoteDeadlineAtLessThanEqualAndLeaderVoteReminderNotifiedAtIsNull(
+                        TeamStatus.LEADER_SELECTING, reminderThreshold)
+                .stream()
+                .filter(team -> team.getLeaderVoteDeadlineAt() != null
+                        && team.getLeaderVoteDeadlineAt().isAfter(now))
+                .map(Team::getTeamId)
+                .toList();
+    }
+
+    /**
+     * 한 팀에게 팀장 투표 마감 리마인더 카드를 발행한다(1회만, 팀 단위 트랜잭션). 대상 id
+     * 조회와 실제 발송 사이에 시간이 흐를 수 있으므로, 발송 직전에 마감 시각이 여전히 유효한
+     * 리마인더 구간(now ~ now+30분) 안인지 다시 검증한다.
+     */
+    @Transactional
+    public void sendLeaderVoteReminderForTeam(Long teamId) {
+        Team team = teamRepository.findById(teamId).orElseThrow(() -> new TeamException(TeamErrorCode.TEAM_NOT_FOUND));
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime deadline = team.getLeaderVoteDeadlineAt();
+        if (team.getStatus() != TeamStatus.LEADER_SELECTING
+                || team.getLeaderVoteReminderNotifiedAt() != null
+                || deadline == null
+                || !deadline.isAfter(now)
+                || deadline.isAfter(now.plusMinutes(LEADER_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE))) {
+            return;
+        }
+        team.markLeaderVoteReminderNotified(now);
+        chatService.postChatbotCardMessage(
+                team, MessageType.LEADER_VOTE_REMINDER_CARD, LEADER_VOTE_REMINDER_MESSAGE, null);
     }
 }

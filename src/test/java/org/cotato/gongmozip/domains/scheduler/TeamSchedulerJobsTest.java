@@ -161,4 +161,20 @@ class TeamSchedulerJobsTest {
         verify(teamScheduleService).resolveLeaderVoteDeadlineForTeam(1L);
         verify(teamScheduleService).resolveLeaderVoteDeadlineForTeam(2L);
     }
+
+    @DisplayName("한 팀의 팀장 투표 리마인더 발행이 실패해도 나머지 팀은 계속 처리된다.")
+    @Test
+    void 한_팀의_팀장_투표_리마인더_발행이_실패해도_나머지_팀은_계속_처리된다() {
+        // given
+        given(teamScheduleService.findDueLeaderVoteReminderTeamIds()).willReturn(List.of(1L, 2L, 3L));
+        willThrow(new RuntimeException("boom")).given(teamScheduleService).sendLeaderVoteReminderForTeam(2L);
+
+        // when
+        teamSchedulerJobs.sendLeaderVoteReminders();
+
+        // then
+        verify(teamScheduleService).sendLeaderVoteReminderForTeam(1L);
+        verify(teamScheduleService).sendLeaderVoteReminderForTeam(2L);
+        verify(teamScheduleService).sendLeaderVoteReminderForTeam(3L);
+    }
 }
