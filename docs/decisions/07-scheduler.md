@@ -22,9 +22,13 @@
 - **제출확인**: 공모전 마감일 하루 전에 "진행 완료 / 미완료" 확인 메시지 발송. 버튼은 팀장에게만
   노출(타 팀원에게는 버튼 없이 안내만). "진행 완료" 선택 시 `Team.status = SUBMITTED` →
   팀원 리뷰 단계로 이동(리뷰는 보류), 완주 포인트 지급.
-- 배치 방식은 Spring `@Scheduled` 일 1회 cron으로 시작 — `progressCheckAt`/`submissionCheckAt`이
-  오늘 날짜이고 아직 메시지를 발송하지 않은 `Team`을 조회해 처리. 별도 Quartz 등은 불필요할
-  것으로 예상 (팀 수가 아주 많아지면 재검토).
+- 배치 방식은 Spring `@Scheduled` cron으로 처리 — `progressCheckAt`/`submissionCheckAt`이 지난
+  뒤 아직 메시지를 발송하지 않은 `Team`을 조회해 처리. 별도 Quartz 등은 불필요할 것으로 예상
+  (팀 수가 아주 많아지면 재검토).
+  **(2026-08-19 갱신)** 중간점검은 원래 하루 1회(09시)만 확인했는데, 실제 절반 시점
+  (`progressCheckAt`)이 지난 뒤 최대 24시간까지 지연될 수 있다는 지적으로 09/14/19시 하루
+  3회로 완화했다(`TeamSchedulerJobs.sendProgressChecks`). 제출확인(`sendSubmissionChecks`)은
+  아직 하루 1회(09시) 그대로다 — 같은 지연 이슈가 있지만 이번 변경 범위에는 포함하지 않았다.
 
 ## 구현 현황 (Phase 7 완료)
 
@@ -43,7 +47,8 @@
   공모전이 막 확정된 시점에 1회 세팅 (`Team.scheduleCheckpoints`).
 - `TeamScheduleService`(도메인 로직) / `TeamSchedulerJobs`(`@Scheduled` cron 트리거)로 분리 —
   cron 배선과 실제 로직을 나눠서 로직 쪽만 순수 단위 테스트 가능하게 함. 공모전 마감은 5분
-  간격, 중간점검/제출확인은 매일 09:00 (`SchedulingConfig`에 `@EnableScheduling` 추가).
+  간격, 제출확인은 매일 09:00, 중간점검은 09/14/19시 하루 3회(2026-08-19 갱신)
+  (`SchedulingConfig`에 `@EnableScheduling` 추가).
 - `TeamProgressService` — 제출확인 응답(`PATCH /api/teams/{teamId}/submission`)은 팀장만 가능.
   제출 완료 시 팀장은 `PROJECT_COMPLETE_LEADER`(+30m), 나머지 활성 팀원은
   `PROJECT_COMPLETE_MEMBER`(+20m) 지급 후 `Team.status = SUBMITTED`.
