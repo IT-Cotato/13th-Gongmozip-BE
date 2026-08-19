@@ -205,15 +205,28 @@ public class ChatbotOrchestrationService {
     private void postCandidateVoteCard(List<TeamMember> activeMembers, Team team) {
         activeMembers.forEach(teamMember -> teamMember.updateLeaderCandidacy(
                 teamMember.isPreLeaderCandidate() ? LeaderCandidacyStatus.WANTS : LeaderCandidacyStatus.DOES_NOT_WANT));
-        List<Long> candidateIds = activeMembers.stream()
-                .filter(TeamMember::isPreLeaderCandidate)
-                .map(TeamMember::getTeamMemberId)
-                .toList();
+        List<TeamMember> preCandidates =
+                activeMembers.stream().filter(TeamMember::isPreLeaderCandidate).toList();
+        List<Long> candidateIds =
+                preCandidates.stream().map(TeamMember::getTeamMemberId).toList();
+        String candidateNames = joinNamesWithParticle(
+                preCandidates.stream().map(tm -> tm.getProfile().getNickname()).toList());
         chatService.postChatbotCardMessage(
                 team,
                 MessageType.LEADER_VOTE_CARD,
-                "팀장 희망자가 여러 명이에요. 팀장이 되면 좋을 것 같은 팀원에게 투표해주세요!",
+                "이제 팀장을 선출해볼게요. 매칭 전에 팀장에 지원해주신 " + candidateNames
+                        + "이 팀장 후보입니다. 팀장 지원자 분들은 되도록이면 프로필을 공개로 돌려, 팀원들이 볼 수 있도록 해주세요.",
                 toIdsMetadata("candidateTeamMemberIds", candidateIds));
+    }
+
+    // 이름 뒤에 "님"을 붙여 이어붙인다 — 2명이면 Figma 문구와 동일하게 "A님과 B님", 3명 이상이면
+    // "A님, B님, C님"으로 나열한다(매칭 알고리즘상 팀당 최대 4명이라 이 이상은 없음).
+    private String joinNamesWithParticle(List<String> names) {
+        List<String> withSuffix = names.stream().map(name -> name + "님").toList();
+        if (withSuffix.size() == 2) {
+            return withSuffix.get(0) + "과 " + withSuffix.get(1);
+        }
+        return String.join(", ", withSuffix);
     }
 
     /**
