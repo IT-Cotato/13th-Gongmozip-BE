@@ -69,7 +69,8 @@ public class LeaderTiebreakTxService {
                 recommended == null ? null : recommended.getProfile().getNickname();
         String content = recommendedName == null
                 ? "동률이 발생했어요. 동률이었던 팀원들끼리 재투표를 진행할게요."
-                : "동률이 발생했어요. AI가 보기엔 " + recommendedName + "님이 팀장으로 잘 어울릴 것 같아요. 추천을 수락하거나, 동률이었던 팀원들끼리 재투표를 진행해주세요.";
+                : "투표 결과 동률이 발생했습니다. 팀의 시너지를 고려한 분석 결과, " + recommendedName + "님을 팀장으로 추천합니다. "
+                        + "팀원들의 성향과 역할 조합을 바탕으로 가장 높은 협업 시너지가 기대됩니다. 추천을 수락하시나요?";
 
         // 재투표 라운드도 독립된 8시간 마감을 새로 받는다(직전 라운드에서 남은 시간을 그대로
         // 물려받지 않음, 2026-08-15 결정).

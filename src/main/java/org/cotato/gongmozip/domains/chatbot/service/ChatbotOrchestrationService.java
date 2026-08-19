@@ -246,10 +246,15 @@ public class ChatbotOrchestrationService {
 
         Long teamId = team.getTeamId();
         InterestCategory preferredCategory = team.getPreferredCategory();
+        // AUTO_ASSIGNED는 팀장 선출 과정 자체가 없고 자기소개만 거치므로, 안내 문구를 "팀장
+        // 선출까지 마쳤다면"이 아니라 "자기소개를 마쳤다면"으로 다르게 해야 한다(Figma 5.1.3.3
+        // ver.2 확인, 2026-08-19).
+        boolean autoAssignedLeader = team.getLeaderSelectionMode() == LeaderSelectionMode.AUTO_ASSIGNED;
         runAfterCommit(
                 "공모전 추천 비동기 작업 제출 실패 - teamId: {}",
                 teamId,
-                () -> contestRecommendationAsyncService.recommendContestsAsync(teamId, preferredCategory));
+                () -> contestRecommendationAsyncService.recommendContestsAsync(
+                        teamId, preferredCategory, autoAssignedLeader));
     }
 
     // 상태 전이 트랜잭션이 실제로 커밋된 뒤에만 비동기 AI 호출을 트리거한다 — 커밋 전에 실행되면

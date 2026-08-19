@@ -31,7 +31,16 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ChatbotContestRecommendationTxService {
 
-    private static final String CONTEST_SELECTION_PROMPT = "팀장 선출까지 마쳤으면, 팀원들과 함께 나갈 공모전을 후보로 추가하고 투표해보세요!";
+    // AUTO_ASSIGNED는 팀장 선출 과정 없이 자기소개만 거치므로 첫 문장을 다르게 한다(Figma
+    // 5.1.3.3 ver.1/ver.2, 2026-08-19) — 나머지 안내는 두 경우 공통이라 공유한다.
+    private static final String CONTEST_SELECTION_GUIDE = "팀의 카테고리를 바탕으로 공모전을 먼저 추천해드릴게요!\n"
+            + "• 더 원하는 공모전이 있다면 후보 리스트에 자유롭게 추가해주세요.\n"
+            + "• 공모전 투표는 2개까지 가능해요.\n"
+            + "• 후보 등록과 투표는 24시간 동안 진행되고, 모든 팀원이 투표하면 바로 마감돼요!";
+    private static final String CONTEST_SELECTION_PROMPT_AFTER_ELECTION =
+            "팀장 선출까지 마쳤다면, 이제 함께 나갈 공모전을 골라볼까요?🏆\n" + CONTEST_SELECTION_GUIDE;
+    private static final String CONTEST_SELECTION_PROMPT_AFTER_GREETING =
+            "자기소개를 마쳤다면, 이제 함께 나갈 공모전을 골라볼까요?🏆\n" + CONTEST_SELECTION_GUIDE;
 
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
@@ -41,21 +50,25 @@ public class ChatbotContestRecommendationTxService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
-    public void announcePlainPrompt(Long teamId) {
+    public void announcePlainPrompt(Long teamId, boolean autoAssignedLeader) {
         Team team = findTeam(teamId);
-        chatService.postChatbotMessage(team, CONTEST_SELECTION_PROMPT);
+        chatService.postChatbotMessage(team, contestSelectionPrompt(autoAssignedLeader));
     }
 
     @Transactional
     public void registerCandidatesAndAnnounce(
-            Long teamId, List<Contest> openContests, List<Long> recommendedContestIds) {
+            Long teamId, List<Contest> openContests, List<Long> recommendedContestIds, boolean autoAssignedLeader) {
         Team team = findTeam(teamId);
         registerRecommendedCandidates(team, openContests, recommendedContestIds);
         chatService.postChatbotCardMessage(
                 team,
                 MessageType.CONTEST_RECOMMEND_CARD,
-                CONTEST_SELECTION_PROMPT,
+                contestSelectionPrompt(autoAssignedLeader),
                 toIdsMetadata(recommendedContestIds));
+    }
+
+    private String contestSelectionPrompt(boolean autoAssignedLeader) {
+        return autoAssignedLeader ? CONTEST_SELECTION_PROMPT_AFTER_GREETING : CONTEST_SELECTION_PROMPT_AFTER_ELECTION;
     }
 
     // AI가 추천한 공모전은 정보성 표시로 끝나지 않고 바로 투표 가능한 후보로 등록돼야 한다

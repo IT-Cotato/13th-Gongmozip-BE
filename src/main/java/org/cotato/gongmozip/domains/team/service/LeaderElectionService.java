@@ -423,7 +423,11 @@ public class LeaderElectionService {
                     .filter(tm -> tm.getTeamMemberId().equals(topCandidateIds.get(0)))
                     .findFirst()
                     .orElseThrow(() -> new TeamException(TeamErrorCode.INVALID_LEADER_CANDIDATE));
-            assignLeader(team, winner, "투표 결과, " + winner.getProfile().getNickname() + "님이 팀장으로 선출되었습니다.");
+            assignLeader(
+                    team,
+                    winner,
+                    "투표 결과, " + winner.getProfile().getNickname()
+                            + "님이 이번 공모전 출품의 팀장으로 선출되셨습니다🎉 이제 팀원들과 함께 공모전 준비를 시작해 보세요.");
         } else {
             // 동률 시 AI 추천 호출(AiGatewayClient, 최대 20초)은 트랜잭션 밖으로 뺐다 — tally()가
             // castVote(유저 요청)뿐 아니라 resolveVoteDeadlineIfDue(스케줄러)에서도 호출될 수

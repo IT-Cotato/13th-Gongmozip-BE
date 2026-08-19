@@ -1,5 +1,6 @@
 package org.cotato.gongmozip.domains.chatbot.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -29,6 +30,7 @@ import org.cotato.gongmozip.domains.team.repository.TeamRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -71,7 +73,7 @@ class ChatbotContestRecommendationTxServiceTest {
                 .willReturn(false);
 
         // when
-        txService.registerCandidatesAndAnnounce(1L, List.of(contest), List.of(100L));
+        txService.registerCandidatesAndAnnounce(1L, List.of(contest), List.of(100L), false);
 
         // then
         verify(contestCandidateRepository).save(any(ContestCandidate.class));
@@ -99,7 +101,7 @@ class ChatbotContestRecommendationTxServiceTest {
                 .willReturn(true);
 
         // when
-        txService.registerCandidatesAndAnnounce(1L, List.of(contest), List.of(100L));
+        txService.registerCandidatesAndAnnounce(1L, List.of(contest), List.of(100L), false);
 
         // then
         verify(contestCandidateRepository, never()).save(any());
@@ -123,12 +125,42 @@ class ChatbotContestRecommendationTxServiceTest {
                 .build();
 
         // when
-        txService.registerCandidatesAndAnnounce(1L, List.of(contest), List.of(100L));
+        txService.registerCandidatesAndAnnounce(1L, List.of(contest), List.of(100L), false);
 
         // then
         verify(contestCandidateRepository, never()).save(any());
         verify(chatService)
                 .postChatbotCardMessage(eq(team), eq(MessageType.CONTEST_RECOMMEND_CARD), anyString(), anyString());
+    }
+
+    @DisplayName("AUTO_ASSIGNED로 전이된 팀은 '자기소개를 마쳤다면'으로, 선출을 거친 팀은 '팀장 선출까지 마쳤다면'으로 안내한다.")
+    @Test
+    void 팀장_선출_경로에_따라_안내_문구가_달라진다() {
+        // given
+        Team team =
+                Team.builder().teamId(1L).status(TeamStatus.CONTEST_SELECTING).build();
+        given(teamRepository.findById(1L)).willReturn(Optional.of(team));
+        TeamMember leader = teamMemberOf(team, 10L, "김민정");
+        leader.assignAsLeader();
+        given(teamMemberRepository.findByTeamIdAndStatus(1L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(leader));
+        Contest contest = Contest.builder()
+                .contestId(100L)
+                .title("공모전")
+                .category(InterestCategory.IT_AI_TECH)
+                .build();
+        given(contestCandidateRepository.existsByTeam_TeamIdAndContest_ContestId(1L, 100L))
+                .willReturn(false);
+
+        // when
+        txService.registerCandidatesAndAnnounce(1L, List.of(contest), List.of(100L), true);
+
+        // then
+        ArgumentCaptor<String> contentCaptor = ArgumentCaptor.forClass(String.class);
+        verify(chatService)
+                .postChatbotCardMessage(
+                        eq(team), eq(MessageType.CONTEST_RECOMMEND_CARD), contentCaptor.capture(), anyString());
+        assertThat(contentCaptor.getValue()).startsWith("자기소개를 마쳤다면");
     }
 
     @DisplayName("일반 안내 메시지를 발행한다.")
@@ -140,7 +172,7 @@ class ChatbotContestRecommendationTxServiceTest {
         given(teamRepository.findById(1L)).willReturn(Optional.of(team));
 
         // when
-        txService.announcePlainPrompt(1L);
+        txService.announcePlainPrompt(1L, false);
 
         // then
         verify(chatService).postChatbotMessage(eq(team), anyString());
@@ -153,7 +185,7 @@ class ChatbotContestRecommendationTxServiceTest {
         given(teamRepository.findById(999L)).willReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> txService.announcePlainPrompt(999L))
+        assertThatThrownBy(() -> txService.announcePlainPrompt(999L, false))
                 .isInstanceOf(TeamException.class)
                 .hasFieldOrPropertyWithValue("errorCode", TeamErrorCode.TEAM_NOT_FOUND);
     }

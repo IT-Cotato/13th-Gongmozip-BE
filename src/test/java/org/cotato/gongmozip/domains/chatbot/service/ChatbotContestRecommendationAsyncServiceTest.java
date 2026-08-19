@@ -1,6 +1,7 @@
 package org.cotato.gongmozip.domains.chatbot.service;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -49,11 +50,11 @@ class ChatbotContestRecommendationAsyncServiceTest {
                 .willReturn(List.of(100L));
 
         // when
-        service.recommendContestsAsync(1L, InterestCategory.IT_AI_TECH);
+        service.recommendContestsAsync(1L, InterestCategory.IT_AI_TECH, false);
 
         // then
-        verify(txService).registerCandidatesAndAnnounce(eq(1L), eq(List.of(contest)), eq(List.of(100L)));
-        verify(txService, never()).announcePlainPrompt(any());
+        verify(txService).registerCandidatesAndAnnounce(eq(1L), eq(List.of(contest)), eq(List.of(100L)), eq(false));
+        verify(txService, never()).announcePlainPrompt(any(), anyBoolean());
     }
 
     @DisplayName("추천할 공모전이 없으면 일반 안내만 위임한다.")
@@ -66,11 +67,11 @@ class ChatbotContestRecommendationAsyncServiceTest {
                 .willReturn(List.of());
 
         // when
-        service.recommendContestsAsync(1L, InterestCategory.IT_AI_TECH);
+        service.recommendContestsAsync(1L, InterestCategory.IT_AI_TECH, false);
 
         // then
-        verify(txService).announcePlainPrompt(1L);
-        verify(txService, never()).registerCandidatesAndAnnounce(any(), any(), any());
+        verify(txService).announcePlainPrompt(1L, false);
+        verify(txService, never()).registerCandidatesAndAnnounce(any(), any(), any(), anyBoolean());
     }
 
     @DisplayName("선호 카테고리 추천이 최소 개수(2개)에 못 미치면 다른 카테고리에서 보충한다.")
@@ -97,12 +98,13 @@ class ChatbotContestRecommendationAsyncServiceTest {
                 .willReturn(new PageImpl<>(List.of(contestA, contestB)));
 
         // when
-        service.recommendContestsAsync(1L, InterestCategory.IT_AI_TECH);
+        service.recommendContestsAsync(1L, InterestCategory.IT_AI_TECH, false);
 
         // then
         verify(txService)
-                .registerCandidatesAndAnnounce(eq(1L), eq(List.of(contestA, contestB)), eq(List.of(100L, 200L)));
-        verify(txService, never()).announcePlainPrompt(any());
+                .registerCandidatesAndAnnounce(
+                        eq(1L), eq(List.of(contestA, contestB)), eq(List.of(100L, 200L)), eq(false));
+        verify(txService, never()).announcePlainPrompt(any(), anyBoolean());
     }
 
     @DisplayName("AI 호출이 실패하면 예외를 삼키고 일반 안내로 폴백한다.")
@@ -114,10 +116,10 @@ class ChatbotContestRecommendationAsyncServiceTest {
         given(aiClient.recommendContests(any(), any())).willThrow(new RuntimeException("AI Gateway timeout"));
 
         // when
-        service.recommendContestsAsync(1L, InterestCategory.IT_AI_TECH);
+        service.recommendContestsAsync(1L, InterestCategory.IT_AI_TECH, false);
 
         // then
-        verify(txService).announcePlainPrompt(1L);
-        verify(txService, never()).registerCandidatesAndAnnounce(any(), any(), any());
+        verify(txService).announcePlainPrompt(1L, false);
+        verify(txService, never()).registerCandidatesAndAnnounce(any(), any(), any(), anyBoolean());
     }
 }

@@ -3,6 +3,7 @@ package org.cotato.gongmozip.domains.chatbot.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -215,7 +216,7 @@ class ChatbotOrchestrationServiceTest {
                         metadataCaptor.capture());
         assertThat(cardContentCaptor.getValue()).contains("김민정").contains("팀장으로 확정");
         assertThat(metadataCaptor.getValue()).contains("leaderTeamMemberId").contains("10");
-        verify(contestRecommendationAsyncService, never()).recommendContestsAsync(any(), any());
+        verify(contestRecommendationAsyncService, never()).recommendContestsAsync(any(), any(), anyBoolean());
     }
 
     @DisplayName("AUTO_ASSIGNED 팀은 전원 인사 완료 시 LEADER_SELECTING과 카드 재발행 없이 바로 공모전 단계로 전이한다.")
@@ -250,7 +251,7 @@ class ChatbotOrchestrationServiceTest {
         verify(leaderNominationAsyncService, never()).recommendLeaderNomineesAsync(any());
 
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
-        verify(contestRecommendationAsyncService).recommendContestsAsync(1L, InterestCategory.IT_AI_TECH);
+        verify(contestRecommendationAsyncService).recommendContestsAsync(1L, InterestCategory.IT_AI_TECH, true);
         verify(leaderNominationAsyncService, never()).recommendLeaderNomineesAsync(any());
     }
 
@@ -285,7 +286,7 @@ class ChatbotOrchestrationServiceTest {
 
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
         verify(leaderNominationAsyncService).recommendLeaderNomineesAsync(1L);
-        verify(contestRecommendationAsyncService, never()).recommendContestsAsync(any(), any());
+        verify(contestRecommendationAsyncService, never()).recommendContestsAsync(any(), any(), anyBoolean());
     }
 
     @DisplayName("CANDIDATE_VOTE 팀은 팀장 여부 투표 없이 사전 후보 전원을 바로 투표 카드로 발행한다.")
@@ -394,11 +395,11 @@ class ChatbotOrchestrationServiceTest {
         assertThat(team.getStatus()).isEqualTo(TeamStatus.CONTEST_SELECTING);
         assertThat(team.getContestCandidateDeadlineAt()).isNotNull();
         // 커밋(afterCommit) 전에는 아직 AI 추천을 호출하지 않는다 — 상태 전이만 동기로 반영된다.
-        verify(contestRecommendationAsyncService, never()).recommendContestsAsync(any(), any());
+        verify(contestRecommendationAsyncService, never()).recommendContestsAsync(any(), any(), anyBoolean());
 
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
 
-        verify(contestRecommendationAsyncService).recommendContestsAsync(1L, InterestCategory.IT_AI_TECH);
+        verify(contestRecommendationAsyncService).recommendContestsAsync(1L, InterestCategory.IT_AI_TECH, false);
     }
 
     @DisplayName("공모전이 확정되면 팀이 IN_PROGRESS로 전이되고 활용 안내 카드도 함께 발행된다.")
