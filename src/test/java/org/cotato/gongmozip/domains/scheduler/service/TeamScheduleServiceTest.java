@@ -94,9 +94,9 @@ class TeamScheduleServiceTest {
         verify(contestVotingService, never()).resolveDeadlineIfDue(any());
     }
 
-    @DisplayName("공모전 투표 마감 10분 이내로 남았고 아직 리마인더를 안 보낸 팀 id 목록을 조회한다.")
+    @DisplayName("공모전 투표 마감 2시간 이내로 남았고 아직 리마인더를 안 보낸 팀 id 목록을 조회한다.")
     @Test
-    void 공모전_투표_마감_10분_이내로_남은_팀_id_목록을_조회한다() {
+    void 공모전_투표_마감_2시간_이내로_남은_팀_id_목록을_조회한다() {
         // given
         Team team1 = Team.builder()
                 .teamId(1L)
