@@ -316,10 +316,12 @@ class ChatbotOrchestrationServiceTest {
         assertThat(candidate1.getLeaderCandidacy()).isEqualTo(LeaderCandidacyStatus.WANTS);
         assertThat(candidate2.getLeaderCandidacy()).isEqualTo(LeaderCandidacyStatus.WANTS);
         assertThat(nonCandidate.getLeaderCandidacy()).isEqualTo(LeaderCandidacyStatus.DOES_NOT_WANT);
+        ArgumentCaptor<String> contentCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> metadataCaptor = ArgumentCaptor.forClass(String.class);
         verify(chatService)
                 .postChatbotCardMessage(
-                        eq(team), eq(MessageType.LEADER_VOTE_CARD), anyString(), metadataCaptor.capture());
+                        eq(team), eq(MessageType.LEADER_VOTE_CARD), contentCaptor.capture(), metadataCaptor.capture());
+        assertThat(contentCaptor.getValue()).contains("김민정님과 이해은님이 팀장 후보입니다");
         assertThat(metadataCaptor.getValue()).contains("10").contains("20").doesNotContain("30");
         verify(chatService, never())
                 .postChatbotCardMessage(any(), eq(MessageType.LEADER_NOMINATION_CARD), anyString(), anyString());

@@ -199,7 +199,9 @@ public class LeaderElectionService {
                     team,
                     randomLeader,
                     "아직 팀장 후보 지원자가 없어요 :( 원활한 팀 운영을 위해 팀원 중 1명을 임시 팀장으로 무작위 지정했어요. "
-                            + randomLeader.getProfile().getNickname() + "님이 임시 팀장으로 선정되었습니다.");
+                            + randomLeader.getProfile().getNickname() + "님이 임시 팀장으로 선정되었습니다. "
+                            + "이후 팀원들과 협의하여 언제든 팀장을 변경할 수 있습니다. 팀장을 변경하게 되면 저에게 꼭 알려주세요"
+                            + " 그래야 새로운 팀장에게도 베네핏을 빠짐없이 드릴 수 있어요.");
         } else if (candidates.size() == 1) {
             TeamMember onlyCandidate = candidates.get(0);
             assignLeader(team, onlyCandidate, onlyCandidate.getProfile().getNickname() + "님이 팀장으로 선정되었습니다.");
@@ -210,7 +212,7 @@ public class LeaderElectionService {
             chatService.postChatbotCardMessage(
                     team,
                     MessageType.LEADER_VOTE_CARD,
-                    "팀장 후보가 여러 명이에요. 팀장이 되면 좋을 것 같은 팀원에게 투표해주세요!",
+                    "바로 팀장 선출 투표를 하도록 하겠습니다. 팀장 지원자 분들은 되도록이면 프로필을 공개로 돌려," + " 팀원들이 볼 수 있도록 해주세요.",
                     toCandidateMetadata(candidateIds));
         }
     }
