@@ -17,6 +17,7 @@ import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.notification.service.NotificationService;
+import org.cotato.gongmozip.domains.notification.service.PushNotificationService;
 import org.cotato.gongmozip.domains.team.entity.Team;
 import org.cotato.gongmozip.domains.team.entity.TeamMember;
 import org.cotato.gongmozip.domains.team.enums.TeamMemberStatus;
@@ -24,6 +25,7 @@ import org.cotato.gongmozip.domains.team.exception.TeamException;
 import org.cotato.gongmozip.domains.team.exception.codes.TeamErrorCode;
 import org.cotato.gongmozip.domains.team.repository.TeamMemberRepository;
 import org.cotato.gongmozip.domains.team.repository.TeamRepository;
+import org.cotato.gongmozip.global.push.PushPayload;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -41,6 +43,8 @@ public class ChatService {
     private static final int DEFAULT_MESSAGE_PAGE_SIZE = 50;
     private static final String TEAM_TOPIC_PREFIX = "/topic/teams/";
     private static final String TEAM_READ_UPDATES_TOPIC_SUFFIX = "/read-updates";
+    // Figma에 명시된 푸시 제목이 없어 임시로 고정 문구를 쓴다 — 추후 조정 대상(docs/decisions/13-fcm-push.md).
+    private static final String PUSH_TITLE = "공모집";
 
     private final MessageRepository messageRepository;
     private final TeamRepository teamRepository;
@@ -48,6 +52,7 @@ public class ChatService {
     private final SimpMessagingTemplate messagingTemplate;
     private final CharacterService characterService;
     private final NotificationService notificationService;
+    private final PushNotificationService pushNotificationService;
 
     @Transactional
     public MessageItemResponse sendMessage(Long teamId, Long senderMemberId, SendMessageRequest request) {
@@ -55,6 +60,7 @@ public class ChatService {
         TeamMember sender = requireActiveMember(teamId, senderMemberId);
 
         Message saved = messageRepository.save(ChatConverter.toMemberMessage(team, sender, request.content()));
+        notifyOtherMembersPush(team, sender, request.content());
         return broadcast(teamId, saved);
     }
 
@@ -166,6 +172,20 @@ public class ChatService {
                         .map(TeamMember::getMember)
                         .toList();
         notificationService.notifyChatroomEvent(activeMembers, team.getTeamId(), content);
+    }
+
+    // 다른 팀원의 일반 채팅 메시지는 알림함엔 안 쌓이지만(위 notifyActiveMembers 주석 참고) OS 푸시는
+    // 나가야 한다(docs/decisions/13-fcm-push.md) — 원 요구사항이 "챗봇이든, 팝업이든, 다른 사람의
+    // 메세지든" 전부 푸시가 가길 원했기 때문. 발신자 본인은 제외한다.
+    private void notifyOtherMembersPush(Team team, TeamMember sender, String content) {
+        Long senderMemberId = sender.getMember().getMemberId();
+        List<Member> otherMembers =
+                teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE).stream()
+                        .map(TeamMember::getMember)
+                        .filter(member -> !member.getMemberId().equals(senderMemberId))
+                        .toList();
+        pushNotificationService.sendToMembers(
+                otherMembers, new PushPayload(PUSH_TITLE, content, Map.of("teamId", String.valueOf(team.getTeamId()))));
     }
 
     // 저장된 메시지를 구독 중인 클라이언트에게 실시간으로 내려준다.
