@@ -59,10 +59,12 @@ CHATBOT_GUIDE_CARD`일 때만 알림을 남기도록 가드한다.
 대상이 아니다.** 알림 본문은 채팅에 실제로 남는 `content`를 그대로 재사용한다(챗봇 카드마다 다른 문구를
 알림용으로 다시 하드코딩하지 않기 위해).
 
-> **알려진 별도 이슈 — 제출확인 재알림 스팸**: `TeamScheduleService.sendSubmissionCheckReminderForTeam`이
-> `SUBMISSION_CHECK_CARD`(카드형)를 "진행완료" 미응답 시 **2시간마다 무한 반복** 발행한다. 이건 알림
-> 필터링 범위와 무관하게 채팅방 자체에도 계속 쌓이는 별도 버그라, 스케줄러 쪽에서 반복 횟수 제한이나
-> 최초 1회 이후 빈도 완화가 필요하다 — 아직 미해결.
+> **제출확인 재알림 스팸 수정 (2026-08-21)**: `TeamScheduleService.sendSubmissionCheckReminderForTeam`이
+> `SUBMISSION_CHECK_CARD`(카드형)를 "진행완료" 미응답 시 **2시간마다 무한 반복** 발행한다 — 이건 채팅방
+> 안내 자체는 의도된 설계(응답할 때까지 계속 채팅으로 리마인드)라 스케줄러 주기는 그대로 두되, **채팅에는
+> 매번 남기고 알림함/푸시는 최초 1회(`sendSubmissionCheckForTeam`)만 나가도록 분리**했다.
+> `ChatService.postChatbotCardMessage`에 `notify` 파라미터가 있는 5-인자 오버로드를 추가해, 반복
+> 재알림 쪽만 `notify=false`로 호출한다 — 채팅 리마인드는 유지하면서 알림 스팸만 없앤 것.
 
 ### MATCHING — 신청 완료
 
@@ -164,7 +166,6 @@ PR #199 리뷰에서 나온 11개 findings 중 5개를 같은 PR에 추가 커�
 우려 자체는 두 잡이 여전히 별개 트랜잭션이라 완전히 해소되진 않았다.
 
 ## 미정 / 추후 확인 필요
-- **제출확인 재알림 2시간마다 무한 반복 버그** — 위 "CHATROOM" 절 참고, `TeamScheduleService` 쪽 수정 필요.
 - 알림 삭제/보관 정책 없음 — 무한히 쌓인다. 트래픽이 늘면 오래된 read=true 알림을 주기적으로 정리하는
   배치가 필요할 수 있다.
 - Phase 2(프론트 실데이터 연동), Phase 3~4(FCM 인앱 배너 + OS 푸시), Phase 5(iOS PWA 설치 유도)는

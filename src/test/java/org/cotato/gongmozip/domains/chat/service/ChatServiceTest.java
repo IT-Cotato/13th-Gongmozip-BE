@@ -317,6 +317,22 @@ class ChatServiceTest {
                 .notifyChatroomEvent(List.of(teamMemberA.getMember(), teamMemberB.getMember()), 100L, "투표해주세요");
     }
 
+    @DisplayName("notify=false로 카드형 메시지를 남기면 채팅엔 남지만 알림함/푸시는 건너뛴다(반복 재알림 스팸 방지).")
+    @Test
+    void notify가_false이면_카드형_메시지는_알림_대상이_아니다() {
+        // given
+        Team team = Team.builder().teamId(100L).chatbotEnabled(true).build();
+        given(messageRepository.save(any(Message.class))).willAnswer(inv -> inv.getArgument(0));
+
+        // when
+        chatService.postChatbotCardMessage(team, MessageType.SUBMISSION_CHECK_CARD, "제출확인 재알림", null, false);
+
+        // then
+        verify(messageRepository).save(any(Message.class));
+        verify(messagingTemplate).convertAndSend(eq("/topic/teams/100"), any(MessageItemResponse.class));
+        verify(notificationService, never()).notifyChatroomEvent(any(), any(), anyString());
+    }
+
     @DisplayName("읽음 처리를 하면 lastReadAt이 갱신된다.")
     @Test
     void 읽음_처리를_하면_lastReadAt이_갱신된다() {
