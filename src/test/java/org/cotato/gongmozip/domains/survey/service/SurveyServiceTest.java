@@ -11,7 +11,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.cotato.gongmozip.domains.character.dto.response.CharacterResponse.CurrentCharacterResponse;
 import org.cotato.gongmozip.domains.character.enums.CharacterPalette;
 import org.cotato.gongmozip.domains.character.service.CharacterService;
@@ -38,6 +40,9 @@ import org.cotato.gongmozip.domains.survey.vo.SurveyScoreSnapshot;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -167,6 +172,40 @@ class SurveyServiceTest {
         assertThat(response.characterYScore()).isEqualByComparingTo("15");
         assertThat(response.axes()).hasSize(3);
         then(surveyOptionRepository).should().findAllByQuestions(fixture.questions());
+    }
+
+    @DisplayName("X·Y축은 10점부터 높은 성향으로 판정해 캐릭터 유형을 결정한다")
+    @ParameterizedTest(name = "X={2}, Y={3}이면 {4}")
+    @MethodSource("characterTypeCases")
+    void submitSurvey_resolvesCharacterTypeAtThreshold(
+            String conscientiousness1Score,
+            String extroversion2Score,
+            String expectedXScore,
+            String expectedYScore,
+            CharacterType expectedCharacterType) {
+        SurveyFixture fixture = surveyFixture(
+                "3",
+                Map.of(
+                        "CONSCIENTIOUSNESS_1", conscientiousness1Score,
+                        "EXTROVERSION_2", extroversion2Score));
+        stubQuestions(fixture);
+        given(surveySubmissionRepository.findByMember(member)).willReturn(Optional.empty());
+        given(surveySubmissionRepository.save(any(SurveySubmission.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        SurveyResultResponse response = surveyService.submitSurvey(member, fixture.request());
+
+        assertThat(response.characterXScore()).isEqualByComparingTo(expectedXScore);
+        assertThat(response.characterYScore()).isEqualByComparingTo(expectedYScore);
+        assertThat(response.characterType()).isEqualTo(expectedCharacterType);
+    }
+
+    private static Stream<Arguments> characterTypeCases() {
+        return Stream.of(
+                Arguments.of("4", "4", "10", "10", CharacterType.LEAD_RUNNER),
+                Arguments.of("4", "3", "10", "9", CharacterType.TRACK_RUNNER),
+                Arguments.of("3", "4", "9", "10", CharacterType.BOOST_RUNNER),
+                Arguments.of("3", "3", "9", "9", CharacterType.FREE_RUNNER));
     }
 
     @DisplayName("직전 제출 후 3개월이 지나면 기존 제출을 재사용하고 답변과 점수만 교체한다")
@@ -325,11 +364,16 @@ class SurveyServiceTest {
     }
 
     private SurveyFixture surveyFixture(String score) {
+        return surveyFixture(score, Map.of());
+    }
+
+    private SurveyFixture surveyFixture(String defaultScore, Map<String, String> scoreOverrides) {
         List<SurveyQuestion> questions = new ArrayList<>();
         List<SurveyOption> options = new ArrayList<>();
         List<AnswerRequest> answers = new ArrayList<>();
         for (int index = 0; index < QUESTION_KEYS.size(); index++) {
             long questionId = index + 1L;
+            String score = scoreOverrides.getOrDefault(QUESTION_KEYS.get(index), defaultScore);
             SurveyQuestion question = SurveyQuestion.builder()
                     .questionId(questionId)
                     .questionKey(QUESTION_KEYS.get(index))
