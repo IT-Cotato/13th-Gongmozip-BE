@@ -100,14 +100,16 @@ id 목록을 내려줍니다 — 실제 이름/아바타 등은 프론트가 팀
 
 챗봇 카드 메시지·매칭 신청완료/결과공개만 쌓이는 알림함입니다. 다른 팀원이 보낸 일반 채팅 메시지는
 여기 쌓이지 않습니다(위 채팅 WebSocket 토픽으로만 옵니다). 설계 배경과 프론트 연동 로드맵은
-[11-notification.md](./decisions/11-notification.md), [12-frontend-notification-integration.md](./decisions/12-frontend-notification-integration.md)
-참고.
+[11-notification.md](./decisions/11-notification.md), [12-frontend-notification-integration.md](./decisions/12-frontend-notification-integration.md),
+OS 푸시(FCM)는 [13-fcm-push.md](./decisions/13-fcm-push.md) 참고.
 
 | Method | Path | 설명 |
 |---|---|---|
 | GET | `/api/notifications?category=&cursor=` | 알림 목록 조회 — `category` 생략 시 전체, `OTHER`/`MATCHING`/`CHATROOM` 중 하나. `cursor`는 messages와 동일한 방식의 20개씩 페이지네이션 |
 | GET | `/api/notifications/unread-exists` | 홈 화면 종 아이콘 빨간 배지 표시 여부 |
 | PATCH | `/api/notifications/read-all` | 알림함 화면 진입 시 호출 — 카테고리 무관 전체 읽음 처리 |
+| POST | `/api/notifications/push-tokens` | body `{ token }` — FCM 등록 토큰 등록(upsert). Firebase 자격증명 준비 전까지는 저장만 되고 실제 발송은 스킵됨([13-fcm-push.md](./decisions/13-fcm-push.md)) |
+| DELETE | `/api/notifications/push-tokens` | body `{ token }` — 로그아웃 시 토큰 해제 |
 
 ## 팀장 선출
 

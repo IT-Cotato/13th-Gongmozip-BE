@@ -121,6 +121,11 @@ ai:
 test:
   api-key: ${TEST_API_KEY:}
 
+# 11. FCM 푸시 설정 - 서비스 계정 JSON을 base64로 인코딩해 넣는다. 비어있으면(기본값)
+# FirebaseFcmClient.isEnabled()가 false를 반환해 발송을 조용히 건너뛴다 (docs/decisions/13-fcm-push.md)
+firebase:
+  credentials-base64: ${FIREBASE_CREDENTIALS_BASE64:}
+
 matching:
   algorithm:
     # 운영값은 matchingBenchmark 결과로 조정한다.

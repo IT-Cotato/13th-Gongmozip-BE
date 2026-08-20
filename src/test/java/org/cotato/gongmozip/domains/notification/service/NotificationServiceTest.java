@@ -26,6 +26,9 @@ class NotificationServiceTest {
     @Mock
     private NotificationRepository notificationRepository;
 
+    @Mock
+    private PushNotificationService pushNotificationService;
+
     @InjectMocks
     private NotificationService notificationService;
 
@@ -52,6 +55,11 @@ class NotificationServiceTest {
         });
         assertThat(saved.get(0).getReceiverMember()).isEqualTo(memberA);
         assertThat(saved.get(1).getReceiverMember()).isEqualTo(memberB);
+        verify(pushNotificationService)
+                .sendToMembers(
+                        List.of(memberA, memberB),
+                        new org.cotato.gongmozip.global.push.PushPayload(
+                                "공모집", "팀장이 확정되었어요!", java.util.Map.of("teamId", "100")));
     }
 
     @DisplayName("매칭 이벤트는 relatedTeamId 없이 MATCHING 카테고리 알림 한 건을 저장한다.")
@@ -71,6 +79,10 @@ class NotificationServiceTest {
         assertThat(saved.getCategory()).isEqualTo(NotificationCategory.MATCHING);
         assertThat(saved.getBody()).isEqualTo("매칭 신청이 완료되었습니다.");
         assertThat(saved.getRelatedTeamId()).isNull();
+        verify(pushNotificationService)
+                .sendToMembers(
+                        List.of(member),
+                        new org.cotato.gongmozip.global.push.PushPayload("공모집", "매칭 신청이 완료되었습니다.", java.util.Map.of()));
     }
 
     @DisplayName("페이지 크기보다 하나 더 많은 알림이 조회되면 hasNext가 true이고 페이지 크기만큼만 반환된다.")

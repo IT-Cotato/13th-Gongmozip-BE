@@ -27,6 +27,7 @@ import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.notification.service.NotificationService;
+import org.cotato.gongmozip.domains.notification.service.PushNotificationService;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.survey.enums.CharacterType;
 import org.cotato.gongmozip.domains.team.entity.Team;
@@ -67,6 +68,9 @@ class ChatServiceTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private PushNotificationService pushNotificationService;
+
     @InjectMocks
     private ChatService chatService;
 
@@ -103,6 +107,10 @@ class ChatServiceTest {
         assertThat(response.senderAvatar()).isEqualTo(avatar);
         assertThat(response.unreadCount()).isEqualTo(1); // 보낸 사람 본인 제외, 나머지 1명(other)만 안읽음
         verify(messagingTemplate).convertAndSend(eq("/topic/teams/100"), any(MessageItemResponse.class));
+        verify(pushNotificationService)
+                .sendToMembers(
+                        List.of(other.getMember()),
+                        new org.cotato.gongmozip.global.push.PushPayload("공모집", "안녕하세요.", Map.of("teamId", "100")));
     }
 
     @DisplayName("존재하지 않는 팀에 메시지를 보내면 예외가 발생한다.")

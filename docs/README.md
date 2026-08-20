@@ -22,6 +22,7 @@
   - [10-matching-algorithm-detail.md](./decisions/10-matching-algorithm-detail.md) — 매칭 알고리즘 상세 설계
   - [11-notification.md](./decisions/11-notification.md) — 알림함, 챗봇/매칭 알림 트리거
   - [12-frontend-notification-integration.md](./decisions/12-frontend-notification-integration.md) — 알림 프론트엔드 연동 가이드
+  - [13-fcm-push.md](./decisions/13-fcm-push.md) — OS 푸시(FCM) 설계 (구현 착수 전, 팀 확인 필요 항목 포함)
 
 각 `decisions/*.md`는 아래 템플릿을 따릅니다.
 
