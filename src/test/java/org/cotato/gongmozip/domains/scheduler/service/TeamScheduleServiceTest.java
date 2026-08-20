@@ -283,7 +283,7 @@ class TeamScheduleServiceTest {
         assertThat(dueTeamIds).containsExactly(1L);
     }
 
-    @DisplayName("진행 완료 응답이 없는 팀에게 재알림 카드를 발행하고 다음 재알림 시각을 다시 미룬다.")
+    @DisplayName("진행 완료 응답이 없는 팀에게 재알림 카드를 발행하고 다음 재알림 시각을 다시 미룬다. " + "2시간마다 반복되므로 알림함/푸시는 매번 나가지 않는다(notify=false).")
     @Test
     void 진행_완료_응답이_없는_팀에게_재알림_카드를_발행하고_다음_재알림_시각을_다시_미룬다() {
         // given
@@ -298,7 +298,8 @@ class TeamScheduleServiceTest {
         assertThat(team.getSubmissionCheckReminderAt())
                 .isAfter(java.time.LocalDateTime.now().plusHours(1));
         verify(chatService)
-                .postChatbotCardMessage(eq(team), eq(MessageType.SUBMISSION_CHECK_CARD), anyString(), eq(null));
+                .postChatbotCardMessage(
+                        eq(team), eq(MessageType.SUBMISSION_CHECK_CARD), anyString(), eq(null), eq(false));
     }
 
     @DisplayName("재알림 시각이 아직 미래로 재예약돼 있으면(예: 방금 미완료 응답) 카드를 발행하지 않는다.")

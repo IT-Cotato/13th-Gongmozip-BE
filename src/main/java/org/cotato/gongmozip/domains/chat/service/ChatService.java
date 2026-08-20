@@ -151,15 +151,27 @@ public class ChatService {
         broadcast(team.getTeamId(), saved);
     }
 
-    /** 팀장 투표 카드 등 metadata가 필요한 챗봇 카드형 메시지를 남길 때 사용한다. 동작은 {@link #postChatbotMessage}와 동일. */
+    /** 팀장 투표 카드 등 metadata가 필요한 챗봇 카드형 메시지를 남길 때 사용한다. 알림함/푸시 대상이다. 동작은 {@link #postChatbotMessage}와 동일. */
     @Transactional
     public void postChatbotCardMessage(Team team, MessageType messageType, String content, String metadata) {
+        postChatbotCardMessage(team, messageType, content, metadata, true);
+    }
+
+    /**
+     * {@code notify=false}로 호출하면 채팅에는 남기되 알림함/푸시는 건너뛴다 — 같은 카드가 반복
+     * 발행되는 재알림(예: {@code TeamScheduleService.sendSubmissionCheckReminderForTeam}, "진행완료"
+     * 미응답 시 2시간마다 반복)처럼, 매번 알림함/푸시로 나가면 스팸이 되는 경우에 쓴다
+     * (docs/decisions/11-notification.md).
+     */
+    @Transactional
+    public void postChatbotCardMessage(
+            Team team, MessageType messageType, String content, String metadata, boolean notify) {
         if (!team.isChatbotEnabled()) {
             return;
         }
         Message saved =
                 messageRepository.save(ChatConverter.toChatbotCardMessage(team, messageType, content, metadata));
-        if (messageType != MessageType.CHATBOT_GUIDE_CARD) {
+        if (notify && messageType != MessageType.CHATBOT_GUIDE_CARD) {
             notifyActiveMembers(team, content);
         }
         broadcast(team.getTeamId(), saved);
