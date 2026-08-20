@@ -3,9 +3,8 @@
 ## 배경/목적
 
 [11-notification.md](./11-notification.md)에서 정리한 세 채널 중 ③(OS 푸시, 폰 알림창)을 위한 백엔드
-설계다. Phase 1(알림함)은 이미 merge됐고([12-frontend-notification-integration.md](./12-frontend-notification-integration.md)
-참고), 이번 문서는 그 다음 단계 — 아직 코드는 없고, 이 문서에 맞춰 구현을 시작하기 전에 팀 확인이 필요한
-지점을 먼저 표시해뒀다("결정 필요" 표시된 항목).
+설계다. Phase 1(알림함)에 이어 이번 Phase 3도 구현·merge·운영 배포까지 완료했다(#200, PR #201) — 아래
+"구현 현황"과 [12-frontend-notification-integration.md](./12-frontend-notification-integration.md) 참고.
 
 Phase 1과 달리 이번엔 알림함(저장)과 무관하게 **두 개의 서로 다른 이벤트가 각각 푸시를 트리거**한다.
 
@@ -109,18 +108,16 @@ FCM이 `UNREGISTERED`(기기에서 앱 삭제/알림 권한 철회 등)를 응�
 - FCM을 택한 이유(순수 Web Push 대신)는 [11-notification.md](./11-notification.md) 이전 논의에서 이미
   결정됨 — 브라우저 호환성을 Google이 관리해줌.
 
-## 미정 / 결정 필요 (구현 착수 전 확인)
+## 미정 / 결정 필요
 
-- **Firebase 프로젝트 및 서비스 계정 키가 아직 없다.** 팀에서 Firebase 프로젝트를 새로 만들지, 이미 있는
-  걸 쓸지 확인이 필요하다 — 이건 코드로 해결할 수 없는 부분이라 팀 확인이 선행돼야 한다. 자격증명이
-  없어도 `FirebaseFcmClient.isEnabled()=false`로 나머지 구현은 그대로 진행 가능하다.
-- **서비스 계정 키 전달 방식**: `AI_GATEWAY`처럼 원문을 환경변수 하나에 그대로 넣을지(JSON은 개행이 많아
-  base64 인코딩 권장), 아니면 마운트된 파일 경로를 가리키는 환경변수로 할지 — 기존 시크릿 관리 방식(JWT
-  secret, AI API key 전부 단순 환경변수)과의 일관성을 고려하면 전자를 권장하지만, 배포 파이프라인(Docker/CI)
-  담당자 확인이 필요하다.
+- **Firebase 프로젝트 및 서비스 계정 키** — 해결됨(아래 "구현 현황" 참고). 학교 Google Workspace
+  조직(skuniv.ac.kr) 계정 밑에 만들어졌다 — 조직 정책상 개인 계정으로 못 만들고 이 방법뿐이었다.
+  팀원 초대가 막히면 그때 개인 계정으로 재생성을 검토한다.
+- **서비스 계정 키 전달 방식** — 해결됨. `AI_GATEWAY`처럼 단순 환경변수를 택했고, JSON은 개행이 많아
+  base64로 인코딩해 `FIREBASE_CREDENTIALS_BASE64` 하나에 담았다.
 - **푸시 제목(title) 문구** — 임시로 모든 카테고리에 고정 문구 `"공모집"`을 쓴다
   (`NotificationService.PUSH_TITLE`, `ChatService.PUSH_TITLE`). Figma에 명시된 게 없어 우선 이렇게
-  두었고, 카테고리별로 다르게 할지는 추후 조정 대상.
+  두었고, 카테고리별로 다르게 할지는 추후 조정 대상(미해결).
 
 ## 구현 현황 (2026-08-20)
 
@@ -141,8 +138,9 @@ FCM이 `UNREGISTERED`(기기에서 앱 삭제/알림 권한 철회 등)를 응�
   `PushTokenControllerTest`, `ChatServiceTest`/`NotificationServiceTest`에 발송 호출 검증 추가
 
 **Firebase 프로젝트 생성 및 서비스 계정 키 발급 완료 (2026-08-20).** `firebase.credentials-base64`가
-비어있으면 `FirebaseFcmClient.isEnabled()`가 false를 반환해 발송을 스킵하는 fail-safe는 여전히 유효하지만,
-이제 로컬 `.env`에 실제 값이 채워져 있다 — 운영(EC2) `.env`에는 아직 반영 전이다(배포 권한자 작업 필요).
+비어있으면 `FirebaseFcmClient.isEnabled()`가 false를 반환해 발송을 스킵하는 fail-safe는 여전히 유효하다.
+로컬 `.env`, **운영(EC2) `.env`** 둘 다 실제 값이 채워졌고, 운영 컨테이너도 `--force-recreate`로 재생성해
+반영을 확인했다(단순 `restart`는 `env_file` 변경을 다시 안 읽어서 재생성이 필요했다).
 
 **로컬 환경에서 실제 자격증명으로 검증 완료**:
 - 앱을 실제로 기동해 `FirebaseFcmClient`가 싱글턴 빈으로 정상 생성됨(실패했다면 컨텍스트 기동 자체가
@@ -150,8 +148,14 @@ FCM이 `UNREGISTERED`(기기에서 앱 삭제/알림 권한 철회 등)를 응�
 - `POST /api/notifications/push-tokens` 실제 호출 → DB에 정상 저장 확인
 - 임시 테스트로 `FirebaseFcmClient.send()`를 더미 토큰으로 직접 호출 → FCM 서버로부터 HTTP 400(Bad
   Request, 더미 토큰이 유효한 형식이 아니라서 나는 정상 응답)을 받음 — 401/403이 아니므로 인증 자체는
-  통과했다는 뜻. 실제 기기로의 전달 확인은 프론트가 FCM SDK로 진짜 토큰을 발급받아야 가능해 아직
-  미검증(구조적으로 지금 시점엔 불가능).
+  통과했다는 뜻.
+
+**FE 연동에 필요한 웹 앱 설정값도 이미 발급받아 전달했다** — `firebaseConfig`(apiKey/authDomain/projectId/
+storageBucket/messagingSenderId/appId) + VAPID 키(웹 푸시 인증서). 값 자체는 시크릿이 아니지만(클라이언트에
+노출되는 값) 문서에는 싣지 않는다 — 전달 경로는 팀 채팅 참고.
+
+**남은 건 실기기 전달 확인뿐이다** — 프론트가 FCM SDK로 진짜 토큰을 발급받아 등록해봐야 가능하고,
+구조적으로 지금까지는 불가능했던 부분이다. FE 연동 시작하면 같이 확인한다.
 
 ## 관련 문서
 
