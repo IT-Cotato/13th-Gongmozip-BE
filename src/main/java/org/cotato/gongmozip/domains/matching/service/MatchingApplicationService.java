@@ -14,6 +14,7 @@ import org.cotato.gongmozip.domains.collaboration.repository.CollaborationPointH
 import org.cotato.gongmozip.domains.matching.converter.MatchingApplicationConverter;
 import org.cotato.gongmozip.domains.matching.dto.request.MatchingApplicationRequest.ApplyRequest;
 import org.cotato.gongmozip.domains.matching.entity.MatchingApplication;
+import org.cotato.gongmozip.domains.matching.entity.MatchingResultNotificationLog;
 import org.cotato.gongmozip.domains.matching.enums.MatchingApplicationStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingGroupMemberStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingGroupStatus;
@@ -23,6 +24,7 @@ import org.cotato.gongmozip.domains.matching.exception.MatchingException;
 import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
 import org.cotato.gongmozip.domains.matching.repository.MatchingApplicationRepository;
 import org.cotato.gongmozip.domains.matching.repository.MatchingGroupMemberRepository;
+import org.cotato.gongmozip.domains.matching.repository.MatchingResultNotificationLogRepository;
 import org.cotato.gongmozip.domains.matching.score.ProjectScoreProvider;
 import org.cotato.gongmozip.domains.matching.score.SkillScoreCalculator;
 import org.cotato.gongmozip.domains.matching.vo.SkillScoreSnapshot;
@@ -55,11 +57,14 @@ public class MatchingApplicationService {
             EnumSet.of(MatchingApplicationStatus.WAITING, MatchingApplicationStatus.MATCHING);
     private static final String APPLY_COMPLETE_NOTIFICATION_BODY = "매칭 신청이 완료되었습니다.";
     private static final String RESULT_PUBLISHED_NOTIFICATION_BODY = "매칭 결과가 공개되었어요! 지금 바로 확인해 보세요.";
-    // 결과 공개 시점(16시)에 이미 확정 결과가 나와있는 상태만 알림 대상으로 본다 — 계산 중(WAITING/
-    // MATCHING)이거나 본인이 이미 철회(CANCELED/PASSED)한 신청은 제외한다.
+    // 결과 공개 시점(16시)에 확인할 결과가 있는 상태만 알림 대상으로 본다 — 계산 중(WAITING/MATCHING)이거나
+    // 그룹 배정 전에 철회(CANCELED)한 신청은 제외한다. PASSED는 그룹 배정 전 철회(볼 결과 없음)와 배정 후
+    // 철회(MatchingResultQueryService.toResult()가 WITHDRAWN + 그룹 상세를 보여줌)가 섞여 있어, 이 목록만으로는
+    // 걸러지지 않고 hasPublishedResult()에서 멤버십 존재 여부로 한 번 더 나눈다.
     private static final EnumSet<MatchingApplicationStatus> RESULT_PUBLISHED_NOTIFIABLE_STATUSES = EnumSet.of(
             MatchingApplicationStatus.PROPOSED,
             MatchingApplicationStatus.MATCHED,
+            MatchingApplicationStatus.PASSED,
             MatchingApplicationStatus.REASSIGN_PENDING,
             MatchingApplicationStatus.FAILED);
 
@@ -77,6 +82,7 @@ public class MatchingApplicationService {
     private final SkillScoreCalculator skillScoreCalculator;
     private final MatchingTimePolicy matchingTimePolicy;
     private final NotificationService notificationService;
+    private final MatchingResultNotificationLogRepository matchingResultNotificationLogRepository;
 
     // 현재 매칭 신청 인원 조회 — 대상 신청일 매칭풀의 WAITING/MATCHING 신청 수
     public ParticipantCountResponse getParticipantCount() {
@@ -236,17 +242,53 @@ public class MatchingApplicationService {
     }
 
     /**
-     * 매칭 결과 공개 시각(MatchingTimePolicy.resultPublishAt, 기본 16시)에 스케줄러
-     * (MatchingResultNotificationJobs)가 호출한다. 해당 신청일에 확정 결과가 나온 신청자
-     * 전원에게 "매칭 결과가 공개되었어요" 알림을 남긴다 (docs/decisions/11-notification.md).
+     * 매칭 결과 공개 시각(MatchingTimePolicy.resultPublishAt, 설정값)이 지났고 오늘 아직 알림을 보내지
+     * 않았으면 {@link #notifyTodayResultPublished}를 실행한다. 스케줄러(MatchingResultNotificationJobs)가
+     * 5분마다 호출한다 — 공개 시각을 cron에 별도로 하드코딩하지 않고 매번 {@code matchingTimePolicy}로
+     * 직접 확인해서, 설정값(matching.algorithm.result-publish-time)만 바뀌면 그대로 반영된다
+     * (docs/decisions/11-notification.md). 하루에 한 번만 보내도록
+     * {@code matching_result_notification_logs}에 신청일 유니크 제약으로 기록해 멱등성을 보장한다 —
+     * 스케줄러의 {@code @SchedulerLock}이 같은 락 이름으로 모든 실행을 직렬화하므로 조회 후 저장 사이의
+     * 경쟁 상태는 없다.
+     */
+    @Transactional
+    public void notifyTodayResultPublishedIfDue() {
+        LocalDate today = matchingTimePolicy.today();
+        if (!matchingTimePolicy.isResultPublished(today, matchingTimePolicy.now())) {
+            return;
+        }
+        if (matchingResultNotificationLogRepository.existsByApplicationDate(today)) {
+            return;
+        }
+        matchingResultNotificationLogRepository.save(
+                MatchingResultNotificationLog.builder().applicationDate(today).build());
+        notifyTodayResultPublished(today);
+    }
+
+    /**
+     * 해당 신청일에 확인할 결과가 있는 신청자 전원에게 "매칭 결과가 공개되었어요" 알림을 남긴다
+     * (docs/decisions/11-notification.md).
      */
     @Transactional
     public void notifyTodayResultPublished(LocalDate applicationDate) {
         List<MatchingApplication> applications =
                 matchingApplicationRepository.findAllByApplicationDateAndStatusInWithMember(
                         applicationDate, RESULT_PUBLISHED_NOTIFIABLE_STATUSES);
-        applications.forEach(application ->
-                notificationService.notifyMatchingEvent(application.getMember(), RESULT_PUBLISHED_NOTIFICATION_BODY));
+        applications.stream()
+                .filter(this::hasPublishedResult)
+                .forEach(application -> notificationService.notifyMatchingEvent(
+                        application.getMember(), RESULT_PUBLISHED_NOTIFICATION_BODY));
+    }
+
+    // PASSED는 그룹 배정 전 철회(볼 결과 없음)와 배정 후 철회(MatchingResultQueryService.toResult()가
+    // WITHDRAWN + 그룹 상세를 보여줌)가 섞여 있다. toResult()가 이 둘을 가르는 것과 같은 기준
+    // (matchingGroupMemberRepository.findResultMembership)을 그대로 재사용해, 실제로 확인할 결과가
+    // 있는 PASSED 신청자만 알림 대상에 남긴다.
+    private boolean hasPublishedResult(MatchingApplication application) {
+        if (application.getStatus() != MatchingApplicationStatus.PASSED) {
+            return true;
+        }
+        return matchingGroupMemberRepository.findResultMembership(application).isPresent();
     }
 
     // 결과 생성 전 철회 처리. PROPOSED 신청은 MatchingWithdrawalService가 그룹 패스 흐름으로 보낸다.

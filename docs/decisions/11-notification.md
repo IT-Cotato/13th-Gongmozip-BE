@@ -60,25 +60,28 @@ Phase 5로 미루고 여기 기록만 남긴다** — iOS Safari는 웹앱이 �
 매칭 결과는 [10-matching-algorithm-detail.md](./10-matching-algorithm-detail.md)/`MatchingResultQueryService`
 설계상 **이벤트가 아니라 시간 게이트(`MatchingTimePolicy.isResultPublished`, 기본 16시)로 조회 시점에
 계산되는 값**이라, 채팅처럼 "결과가 확정되는 순간" 자연스럽게 걸 수 있는 훅이 없다. 그래서 새 스케줄러
-(`MatchingResultNotificationJobs`, `@Scheduled(cron = "0 0 16 * * *")` + ShedLock, `MatchingSchedulerJobs`의
-14시 배치 트리거와 동일한 패턴)를 만들어 결과 공개 시각에 그날 신청 중 확정 결과가 나온 사람들에게
+(`MatchingResultNotificationJobs`)를 만들어 결과 공개 시각에 그날 신청 중 확인할 결과가 있는 사람들에게
 일괄 알림을 남긴다.
 
-> **cron이 `matching.result-publish-time` 프로퍼티(application.yml, 기본 16:00)와 별도로 하드코딩돼
-> 있다.** Spring `@Scheduled(cron=...)`에는 `LocalTime` 프로퍼티를 직접 꽂을 수 없다 — 기존
-> `MatchingSchedulerJobs`가 14시 매칭 배치를 `APPLICATION_DEADLINE` 상수와 별개로 하드코딩 cron
-> `"0 0 14 * * *"`로 트리거하는 것과 같은 제약이다. **운영 중 `MATCHING_RESULT_PUBLISH_TIME` 환경변수를
-> 바꾸면 이 cron도 반드시 함께 바꿔야 한다** — 안 바꾸면 결과는 정상적으로 새 시각에 공개되는데 알림만
-> 예전 16시에 (또는 엉뚱한 시각에) 날아가는 불일치가 생긴다.
+> **cron을 고정 시각으로 하드코딩하지 않고 5분마다 폴링한다 (2026-08-20, 코드리뷰 findings 반영).**
+> 최초 구현은 `@Scheduled(cron = "0 0 16 * * *")`로 `matching.result-publish-time` 프로퍼티(기본 16:00)와
+> 같은 값을 손으로 맞춰뒀었는데, 운영 중 그 프로퍼티만 바꾸면 실제 공개 시각과 알림 발송 시각이 조용히
+> 어긋나는 문제가 있었다. `MatchingResponseDeadlineJobs`와 동일한 5분 폴링(`"0 */5 * * * *"`)으로 바꾸고,
+> 실제 발송 여부는 매번 `MatchingTimePolicy.isResultPublished`로 그 시점의 설정값을 직접 확인하도록
+> `MatchingApplicationService.notifyTodayResultPublishedIfDue()`에 위임했다 — 프로퍼티가 유일한 진실
+> 공급원이 되어 더 이상 두 값이 어긋날 수 없다. 폴링마다 중복 발송되지 않도록
+> `matching_result_notification_logs`(신청일 유니크)에 발송 여부를 기록해 하루 한 번만 보낸다 — 멱등성
+> 체크와 로그 저장 사이의 경쟁은 스케줄러의 `@SchedulerLock`이 모든 실행을 같은 락 이름으로 직렬화해서
+> 막는다(동시에 두 인스턴스가 실행되지 않음).
 
-> **알림 대상 신청 상태를 `PROPOSED`/`MATCHED`/`REASSIGN_PENDING`/`FAILED`로 골랐다.**
-> `MatchingResultQueryService.toResult()`를 보면 16시 이후 이 네 상태만 "확정된 결과"로 상세 화면을
-> 보여주고, `WAITING`/`MATCHING`은 아직 계산 중(PROCESSING), `CANCELED`/`PASSED`는 본인이 이미 철회한
-> 신청이라 새삼 "결과가 공개됐다"고 알릴 대상이 아니라고 판단했다. **다만 이 매핑은 매칭 도메인 코드를
-> 읽고 추론한 것이라 확신도가 100%는 아니다** — 특히 `PASSED`(오후 2시 이후 철회)가 그룹에 이미 속해있던
-> 경우 결과 화면에 뭔가 보여주는 분기가 있어(`toResult` 82~93행), 이들에게도 "결과가 공개됐다"는 알림이
-> 필요한지는 매칭 도메인 담당자 확인이 필요하다. 실사용 중 대상이 이상하면
-> `MatchingApplicationService.RESULT_PUBLISHED_NOTIFIABLE_STATUSES`만 고치면 된다.
+> **알림 대상 신청 상태에 `PASSED`를 조건부로 포함한다 (2026-08-20, 코드리뷰 findings 반영).**
+> `MatchingResultQueryService.toResult()`를 다시 확인해보니, `PASSED`는 두 경우가 섞여 있었다 — 그룹
+> 배정 **전**에 철회했으면(멤버십 없음) 볼 결과가 없어 즉시 `WITHDRAWN` 응답, 배정 **후**에 철회했으면
+> (멤버십 있음) 공개 시각 이후 `WITHDRAWN` + 그룹 상세를 보여주는 실제 결과 화면을 받는다. 후자는 확인할
+> 결과가 있는데 알림에서 빠져있던 버그였다. `notifyTodayResultPublished`가 `toResult()`와 같은 기준
+> (`matchingGroupMemberRepository.findResultMembership`)으로 이 둘을 갈라 멤버십이 있는 `PASSED`만
+> 알림 대상에 포함하도록 `hasPublishedResult()`를 추가했다 — `toResult()`를 직접 재사용하지는 않고
+> 판정 기준(같은 리포지토리 메서드)만 공유한다.
 
 ## API
 
@@ -109,14 +112,16 @@ Phase 5로 미루고 여기 기록만 남긴다** — iOS Safari는 웹앱이 �
   saveAll), `notifyMatchingEvent`(단건), `getNotifications`, `existsUnread`, `markAllAsRead`
 - 컨트롤러: `domains/notification/controller/NotificationController.java` — 위 API 3종
 - 훅: `ChatService.postChatbotMessage`/`postChatbotCardMessage`(CHATROOM),
-  `MatchingApplicationService.apply`(MATCHING 신청완료), `MatchingApplicationService.notifyTodayResultPublished`
-  + `domains/scheduler/MatchingResultNotificationJobs`(MATCHING 결과공개)
+  `MatchingApplicationService.apply`(MATCHING 신청완료), `MatchingApplicationService.notifyTodayResultPublishedIfDue`
+  (5분마다 발행 여부를 직접 확인 → `notifyTodayResultPublished`) + `domains/scheduler/MatchingResultNotificationJobs`
+  (MATCHING 결과공개). 멱등성은 `domains/matching/entity/MatchingResultNotificationLog`
+  (`V43__create_matching_result_notification_logs.sql`, 신청일 유니크)가 보장한다.
 - 테스트: `NotificationServiceTest`(신규), `ChatServiceTest`/`MatchingApplicationServiceTest`에 알림 생성
   검증 케이스 추가
 
 ### 코드리뷰 findings 반영 (2026-08-20)
 
-PR #199 리뷰에서 나온 11개 findings 중 정확성 상위 3개를 같은 PR에 추가 커밋으로 반영했다.
+PR #199 리뷰에서 나온 11개 findings 중 5개를 같은 PR에 추가 커밋으로 반영했다.
 
 - **`Notification.body` VARCHAR(500) → TEXT (`V42__widen_notification_body.sql`)**: 챗봇 자유질의(`@챗봇`)
   응답은 길이 제한이 없는데(`Message.content`는 TEXT) `body`가 500자로 잘려있어, 500자를 넘으면 INSERT
@@ -133,15 +138,18 @@ PR #199 리뷰에서 나온 11개 findings 중 정확성 상위 3개를 같은 P
   (report 도메인의 `ReportConverter.toReportReason`과 동일한 패턴)에서 직접 검증하도록 바꿨다. Spring의
   기본 enum 바인딩(`MethodArgumentTypeMismatchException`)에 맡기면 전역 예외 처리기가 못 잡아 500이
   나가던 문제였다.
+- **결과공개 알림 대상에 `PASSED`(그룹 배정 후 철회) 포함** — 위 "MATCHING — 결과 공개" 단락 참고.
+- **`MatchingResultNotificationJobs`의 cron 하드코딩 드리프트 제거** — 위 "MATCHING — 결과 공개" 단락 참고.
 
-나머지 findings(결과공개 `PASSED` 상태 제외, cron 하드코딩 드리프트, 스케줄러 레이스, 중복 쿼리, 인덱스
-미커버, N+1 저장, `markRead()` 죽은 코드)는 이번엔 반영하지 않았다 — PR #199 "To Reviewer" 체크리스트에
-남아있다.
+나머지 findings(스케줄러 레이스, 중복 쿼리, 인덱스 미커버, N+1 저장, `markRead()` 죽은 코드)는 이번엔
+반영하지 않았다 — PR #199 "To Reviewer" 체크리스트에 남아있다. 특히 "스케줄러 레이스"(`MatchingResponseDeadlineJobs`와
+동시 실행) 항목은 이번에 `MatchingResultNotificationJobs`도 같은 5분 폴링 주기로 바뀌면서 두 잡이 같은
+간격으로 나란히 도는 구조가 됐다 — 서로 다른 락 이름(`SchedulerLock`)을 쓰고 각자 자기 소관 데이터만
+다루므로(하나는 `MatchingGroupMember`, 하나는 `MatchingApplication`/`Notification` 읽기 전용에 가까움)
+직접 충돌하진 않지만, 리뷰에서 지적한 "같은 시각에 상태를 읽는 쪽과 바꾸는 쪽이 겹칠 수 있다"는 원래
+우려 자체는 두 잡이 여전히 별개 트랜잭션이라 완전히 해소되진 않았다.
 
 ## 미정 / 추후 확인 필요
-
-- **결과 공개 알림 대상 상태(`PASSED` 포함 여부)** — 위 "결정사항" 단락 참고, 매칭 도메인 담당자 확인 필요.
-  아직 미반영(PR #199 참고).
 - 알림 삭제/보관 정책 없음 — 무한히 쌓인다. 트래픽이 늘면 오래된 read=true 알림을 주기적으로 정리하는
   배치가 필요할 수 있다.
 - Phase 2(프론트 실데이터 연동), Phase 3~4(FCM 인앱 배너 + OS 푸시), Phase 5(iOS PWA 설치 유도)는
