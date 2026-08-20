@@ -190,8 +190,10 @@ public class TeamScheduleService {
             return;
         }
         team.scheduleSubmissionCheckReminder(now.plusHours(SUBMISSION_CHECK_REMINDER_HOURS));
+        // "진행 완료" 응답 전까지 2시간마다 반복되므로(위 findDueSubmissionCheckReminderTeamIds 참고),
+        // 매번 알림함/푸시로 나가면 스팸이 된다 — 채팅에는 남기되 알림은 최초 1회(sendSubmissionCheckForTeam)로 충분하다.
         chatService.postChatbotCardMessage(
-                team, MessageType.SUBMISSION_CHECK_CARD, SUBMISSION_CHECK_REMINDER_MESSAGE, null);
+                team, MessageType.SUBMISSION_CHECK_CARD, SUBMISSION_CHECK_REMINDER_MESSAGE, null, false);
     }
 
     /** 인사 유도 시작(팀 생성) 후 타임아웃이 지났는데도 여전히 GREETING인 팀 id 목록을 조회한다. */
