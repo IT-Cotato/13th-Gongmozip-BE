@@ -40,10 +40,12 @@ public class TeamScheduleService {
     private static final int SUBMISSION_CHECK_REMINDER_HOURS = 2;
     private static final String CONTEST_VOTE_REMINDER_MESSAGE = "공모전 투표마감까지 얼마 안 남았어요! 투표 현황을 확인해보세요!";
     // 공모전 후보/투표 마감 몇 분 전에 리마인더를 보낼지 (docs/decisions/04-contest-voting.md).
-    private static final int CONTEST_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE = 120;
+    // TODO(시연용 임시값): 원래 120 — 시연 촬영 끝나면 반드시 되돌릴 것.
+    private static final int CONTEST_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE = 1440;
     private static final String LEADER_VOTE_REMINDER_MESSAGE = "팀장 투표 완료하셨나요? 투표마감까지 얼마 안 남았어요!";
     // 팀장 투표 마감 몇 분 전에 리마인더를 보낼지 (docs/decisions/02-leader-election.md).
-    private static final int LEADER_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE = 30;
+    // TODO(시연용 임시값): 원래 30 — 시연 촬영 끝나면 반드시 되돌릴 것.
+    private static final int LEADER_VOTE_REMINDER_MINUTES_BEFORE_DEADLINE = 480;
     // 인사 유도 시작(=팀 생성) 후 이 시간 안에 전원이 인사를 마치지 않으면 강제로 다음 단계로 넘긴다
     // (기능명세서 5.1.3.1 E1).
     private static final int GREETING_TIMEOUT_HOURS = 2;
