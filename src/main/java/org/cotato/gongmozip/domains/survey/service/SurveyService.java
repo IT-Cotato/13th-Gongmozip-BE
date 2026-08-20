@@ -44,8 +44,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class SurveyService {
 
-    // 캐릭터 유형 결정 임계값: 만점(15점)의 절반 초과 기준
-    private static final BigDecimal CHARACTER_THRESHOLD = new BigDecimal("8");
+    // 캐릭터 유형 결정 임계값: 세 문항의 중립 평균(3점)을 초과하는 합계 기준
+    private static final BigDecimal CHARACTER_THRESHOLD = new BigDecimal("10");
     private static final int RETAKE_INTERVAL_MONTHS = 3;
     private static final Set<String> REQUIRED_SCORE_QUESTION_KEYS = Set.of(
             "AGREEABLENESS_1",
@@ -291,7 +291,7 @@ public class SurveyService {
         return ExtroversionType.E;
     }
 
-    // 캐릭터 유형 결정: X·Y 축 점수가 임계값(8점) 이상이면 high로 판정
+    // 캐릭터 유형 결정: X·Y 축 점수가 임계값(10점) 이상이면 high로 판정
     private CharacterType resolveCharacterType(BigDecimal xScore, BigDecimal yScore) {
         boolean highX = xScore.compareTo(CHARACTER_THRESHOLD) >= 0;
         boolean highY = yScore.compareTo(CHARACTER_THRESHOLD) >= 0;
