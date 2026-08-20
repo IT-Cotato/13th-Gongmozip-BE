@@ -19,6 +19,9 @@
   - [07-scheduler.md](./decisions/07-scheduler.md) — 중간점검/제출확인 배치 트리거
   - [08-ai.md](./decisions/08-ai.md) — 팀장 추천/동률 판단/공모전 카테고리 추천 AI 연동
   - [09-review.md](./decisions/09-review.md) — 팀원 리뷰
+  - [10-matching-algorithm-detail.md](./decisions/10-matching-algorithm-detail.md) — 매칭 알고리즘 상세 설계
+  - [11-notification.md](./decisions/11-notification.md) — 알림함, 챗봇/매칭 알림 트리거
+  - [12-frontend-notification-integration.md](./decisions/12-frontend-notification-integration.md) — 알림 프론트엔드 연동 가이드
 
 각 `decisions/*.md`는 아래 템플릿을 따릅니다.
 

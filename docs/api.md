@@ -96,6 +96,19 @@ Phase 0~9([README.md](./README.md) 참고)로 구현한 팀 매칭과 매칭 이
 id 목록을 내려줍니다 — 실제 이름/아바타 등은 프론트가 팀원 목록/캐릭터 API로 조회해서 채웁니다.
 전체 `messageType` 목록은 [08-ai.md](./decisions/08-ai.md)의 표 참고.
 
+## 알림
+
+챗봇 카드 메시지·매칭 신청완료/결과공개만 쌓이는 알림함입니다. 다른 팀원이 보낸 일반 채팅 메시지는
+여기 쌓이지 않습니다(위 채팅 WebSocket 토픽으로만 옵니다). 설계 배경과 프론트 연동 로드맵은
+[11-notification.md](./decisions/11-notification.md), [12-frontend-notification-integration.md](./decisions/12-frontend-notification-integration.md)
+참고.
+
+| Method | Path | 설명 |
+|---|---|---|
+| GET | `/api/notifications?category=&cursor=` | 알림 목록 조회 — `category` 생략 시 전체, `OTHER`/`MATCHING`/`CHATROOM` 중 하나. `cursor`는 messages와 동일한 방식의 20개씩 페이지네이션 |
+| GET | `/api/notifications/unread-exists` | 홈 화면 종 아이콘 빨간 배지 표시 여부 |
+| PATCH | `/api/notifications/read-all` | 알림함 화면 진입 시 호출 — 카테고리 무관 전체 읽음 처리 |
+
 ## 팀장 선출
 
 팀장 선출은 별도 화면 진입 없이 **채팅방 안의 카드 메시지**로 전부 진행됩니다. 판정 로직과

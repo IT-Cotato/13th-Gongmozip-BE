@@ -26,6 +26,7 @@ import org.cotato.gongmozip.domains.chat.enums.MessageSenderType;
 import org.cotato.gongmozip.domains.chat.enums.MessageType;
 import org.cotato.gongmozip.domains.chat.repository.MessageRepository;
 import org.cotato.gongmozip.domains.member.entity.Member;
+import org.cotato.gongmozip.domains.notification.service.NotificationService;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.survey.enums.CharacterType;
 import org.cotato.gongmozip.domains.team.entity.Team;
@@ -62,6 +63,9 @@ class ChatServiceTest {
 
     @Mock
     private CharacterService characterService;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private ChatService chatService;
@@ -252,6 +256,29 @@ class ChatServiceTest {
         // then
         verify(messageRepository).save(any(Message.class));
         verify(messagingTemplate).convertAndSend(eq("/topic/teams/100"), any(MessageItemResponse.class));
+    }
+
+    @DisplayName("챗봇이 켜져있으면 챗봇 메시지가 활성 팀원 전원에게 알림함(CHATROOM) 알림으로도 남는다.")
+    @Test
+    void 챗봇_메시지는_활성_팀원_전원에게_알림함_알림으로_남는다() {
+        // given
+        Team team = Team.builder().teamId(100L).chatbotEnabled(true).build();
+        TeamMember teamMemberA = teamMemberOf(team, 1L, "김철수");
+        TeamMember teamMemberB = teamMemberOf(team, 2L, "이해은");
+        given(messageRepository.save(any(Message.class))).willAnswer(inv -> {
+            Message message = inv.getArgument(0);
+            ReflectionTestUtils.setField(message, "createdAt", LocalDateTime.now());
+            return message;
+        });
+        given(teamMemberRepository.findByTeamIdAndStatus(100L, TeamMemberStatus.ACTIVE))
+                .willReturn(List.of(teamMemberA, teamMemberB));
+
+        // when
+        chatService.postChatbotCardMessage(team, MessageType.LEADER_VOTE_CARD, "투표해주세요", null);
+
+        // then
+        verify(notificationService)
+                .notifyChatroomEvent(List.of(teamMemberA.getMember(), teamMemberB.getMember()), 100L, "투표해주세요");
     }
 
     @DisplayName("읽음 처리를 하면 lastReadAt이 갱신된다.")

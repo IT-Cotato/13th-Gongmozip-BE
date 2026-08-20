@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -20,6 +21,7 @@ import org.cotato.gongmozip.domains.collaboration.service.CollaborationPointServ
 import org.cotato.gongmozip.domains.matching.dto.request.MatchingApplicationRequest.ApplyRequest;
 import org.cotato.gongmozip.domains.matching.entity.MatchingApplication;
 import org.cotato.gongmozip.domains.matching.entity.MatchingGroupMember;
+import org.cotato.gongmozip.domains.matching.entity.MatchingResultNotificationLog;
 import org.cotato.gongmozip.domains.matching.enums.LeaderPreference;
 import org.cotato.gongmozip.domains.matching.enums.MatchingApplicationStatus;
 import org.cotato.gongmozip.domains.matching.enums.MatchingGroupMemberStatus;
@@ -29,11 +31,13 @@ import org.cotato.gongmozip.domains.matching.exception.MatchingException;
 import org.cotato.gongmozip.domains.matching.exception.codes.MatchingErrorCode;
 import org.cotato.gongmozip.domains.matching.repository.MatchingApplicationRepository;
 import org.cotato.gongmozip.domains.matching.repository.MatchingGroupMemberRepository;
+import org.cotato.gongmozip.domains.matching.repository.MatchingResultNotificationLogRepository;
 import org.cotato.gongmozip.domains.matching.score.ProjectScoreProvider;
 import org.cotato.gongmozip.domains.matching.score.SkillScoreCalculator;
 import org.cotato.gongmozip.domains.matching.support.MatchingResponseFixture;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
+import org.cotato.gongmozip.domains.notification.service.NotificationService;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.profile.repository.AwardRepository;
@@ -96,6 +100,12 @@ class MatchingApplicationServiceTest {
     @Mock
     private MatchingTimePolicy matchingTimePolicy;
 
+    @Mock
+    private NotificationService notificationService;
+
+    @Mock
+    private MatchingResultNotificationLogRepository matchingResultNotificationLogRepository;
+
     private MatchingApplicationService matchingApplicationService;
 
     @BeforeEach
@@ -113,7 +123,9 @@ class MatchingApplicationServiceTest {
                 new MatchingPassPenaltyService(matchingApplicationRepository, collaborationPointService),
                 projectScoreProvider,
                 new SkillScoreCalculator(),
-                matchingTimePolicy);
+                matchingTimePolicy,
+                notificationService,
+                matchingResultNotificationLogRepository);
     }
 
     @DisplayName("결과 공개 전에는 오늘 매칭풀의 신청 수와 오늘 기준 카운트다운 시각을 반환한다.")
@@ -344,6 +356,7 @@ class MatchingApplicationServiceTest {
         assertThat(saved.getAgreeablenessScore()).isEqualByComparingTo("4.10");
         assertThat(response.skillScore()).isEqualByComparingTo("52.00");
         assertThat(response.skillGroup()).isNull();
+        verify(notificationService).notifyMatchingEvent(member, "매칭 신청이 완료되었습니다.");
     }
 
     @DisplayName("결과 공개 이후 신청은 다음 날 매칭으로 저장한다.")
@@ -543,6 +556,106 @@ class MatchingApplicationServiceTest {
                 .isInstanceOf(MatchingException.class)
                 .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.INVALID_APPLICATION_STATUS);
         verify(matchingTimePolicy, never()).now();
+    }
+
+    @DisplayName("결과 공개 알림은 확정 결과가 나온(PROPOSED/MATCHED/REASSIGN_PENDING/FAILED) 신청자에게 남긴다.")
+    @Test
+    void notifyTodayResultPublishedNotifiesOnlyResolvedApplications() {
+        Member proposedMember = Member.builder().memberId(1L).build();
+        Member failedMember = Member.builder().memberId(2L).build();
+        MatchingApplication proposed = applicationWithStatus(10L, proposedMember, MatchingApplicationStatus.PROPOSED);
+        MatchingApplication failed = applicationWithStatus(11L, failedMember, MatchingApplicationStatus.FAILED);
+        given(matchingApplicationRepository.findAllByApplicationDateAndStatusInWithMember(
+                        TODAY,
+                        EnumSet.of(
+                                MatchingApplicationStatus.PROPOSED,
+                                MatchingApplicationStatus.MATCHED,
+                                MatchingApplicationStatus.PASSED,
+                                MatchingApplicationStatus.REASSIGN_PENDING,
+                                MatchingApplicationStatus.FAILED)))
+                .willReturn(List.of(proposed, failed));
+
+        matchingApplicationService.notifyTodayResultPublished(TODAY);
+
+        verify(notificationService).notifyMatchingEvent(proposedMember, "매칭 결과가 공개되었어요! 지금 바로 확인해 보세요.");
+        verify(notificationService).notifyMatchingEvent(failedMember, "매칭 결과가 공개되었어요! 지금 바로 확인해 보세요.");
+    }
+
+    @DisplayName("그룹 배정 후 패스한(PASSED, 멤버십 존재) 신청자는 결과 공개 알림을 받는다.")
+    @Test
+    void notifyTodayResultPublishedNotifiesPassedWithMembership() {
+        Member passedMember = Member.builder().memberId(3L).build();
+        MatchingApplication passed = applicationWithStatus(12L, passedMember, MatchingApplicationStatus.PASSED);
+        MatchingGroupMember membership = MatchingGroupMember.builder().build();
+        given(matchingApplicationRepository.findAllByApplicationDateAndStatusInWithMember(eq(TODAY), any()))
+                .willReturn(List.of(passed));
+        given(matchingGroupMemberRepository.findResultMembership(passed)).willReturn(Optional.of(membership));
+
+        matchingApplicationService.notifyTodayResultPublished(TODAY);
+
+        verify(notificationService).notifyMatchingEvent(passedMember, "매칭 결과가 공개되었어요! 지금 바로 확인해 보세요.");
+    }
+
+    @DisplayName("그룹 배정 전에 패스한(PASSED, 멤버십 없음) 신청자는 확인할 결과가 없어 알림을 받지 않는다.")
+    @Test
+    void notifyTodayResultPublishedSkipsPassedWithoutMembership() {
+        Member passedMember = Member.builder().memberId(3L).build();
+        MatchingApplication passed = applicationWithStatus(12L, passedMember, MatchingApplicationStatus.PASSED);
+        given(matchingApplicationRepository.findAllByApplicationDateAndStatusInWithMember(eq(TODAY), any()))
+                .willReturn(List.of(passed));
+        given(matchingGroupMemberRepository.findResultMembership(passed)).willReturn(Optional.empty());
+
+        matchingApplicationService.notifyTodayResultPublished(TODAY);
+
+        verify(notificationService, never())
+                .notifyMatchingEvent(eq(passedMember), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @DisplayName("결과 공개 전이면 notifyTodayResultPublishedIfDue는 아무 것도 하지 않는다.")
+    @Test
+    void notifyTodayResultPublishedIfDueSkipsBeforePublishTime() {
+        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.now()).willReturn(NOW);
+        given(matchingTimePolicy.isResultPublished(TODAY, NOW)).willReturn(false);
+
+        matchingApplicationService.notifyTodayResultPublishedIfDue();
+
+        verify(matchingResultNotificationLogRepository, never()).existsByApplicationDate(any());
+        verify(notificationService, never()).notifyMatchingEvent(any(), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @DisplayName("오늘 이미 알림을 보냈으면 notifyTodayResultPublishedIfDue는 다시 보내지 않는다.")
+    @Test
+    void notifyTodayResultPublishedIfDueSkipsWhenAlreadyLogged() {
+        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.now()).willReturn(NOW);
+        given(matchingTimePolicy.isResultPublished(TODAY, NOW)).willReturn(true);
+        given(matchingResultNotificationLogRepository.existsByApplicationDate(TODAY))
+                .willReturn(true);
+
+        matchingApplicationService.notifyTodayResultPublishedIfDue();
+
+        verify(matchingResultNotificationLogRepository, never()).save(any());
+        verify(matchingApplicationRepository, never()).findAllByApplicationDateAndStatusInWithMember(any(), any());
+    }
+
+    @DisplayName("공개 시각이 지났고 오늘 처음이면 로그를 남기고 결과 공개 알림을 보낸다.")
+    @Test
+    void notifyTodayResultPublishedIfDueLogsAndNotifiesOnFirstRun() {
+        Member member = Member.builder().memberId(1L).build();
+        MatchingApplication application = applicationWithStatus(10L, member, MatchingApplicationStatus.MATCHED);
+        given(matchingTimePolicy.today()).willReturn(TODAY);
+        given(matchingTimePolicy.now()).willReturn(NOW);
+        given(matchingTimePolicy.isResultPublished(TODAY, NOW)).willReturn(true);
+        given(matchingResultNotificationLogRepository.existsByApplicationDate(TODAY))
+                .willReturn(false);
+        given(matchingApplicationRepository.findAllByApplicationDateAndStatusInWithMember(eq(TODAY), any()))
+                .willReturn(List.of(application));
+
+        matchingApplicationService.notifyTodayResultPublishedIfDue();
+
+        verify(matchingResultNotificationLogRepository).save(any(MatchingResultNotificationLog.class));
+        verify(notificationService).notifyMatchingEvent(member, "매칭 결과가 공개되었어요! 지금 바로 확인해 보세요.");
     }
 
     private SurveySubmission submittedSurvey(Member member) {
