@@ -266,6 +266,34 @@ class ChatServiceTest {
         verify(messagingTemplate).convertAndSend(eq("/topic/teams/100"), any(MessageItemResponse.class));
     }
 
+    @DisplayName("일반 텍스트 챗봇 프롬프트(postChatbotMessage)는 알림함/푸시 대상이 아니다.")
+    @Test
+    void 일반_텍스트_챗봇_프롬프트는_알림_대상이_아니다() {
+        // given
+        Team team = Team.builder().teamId(100L).chatbotEnabled(true).build();
+        given(messageRepository.save(any(Message.class))).willAnswer(inv -> inv.getArgument(0));
+
+        // when
+        chatService.postChatbotMessage(team, "@챗봇 자유질의 응답");
+
+        // then
+        verify(notificationService, never()).notifyChatroomEvent(any(), any(), anyString());
+    }
+
+    @DisplayName("CHATBOT_GUIDE_CARD(활용 예시)는 카드형이어도 정적 안내라 알림함/푸시 대상이 아니다.")
+    @Test
+    void 활용예시_카드는_알림_대상이_아니다() {
+        // given
+        Team team = Team.builder().teamId(100L).chatbotEnabled(true).build();
+        given(messageRepository.save(any(Message.class))).willAnswer(inv -> inv.getArgument(0));
+
+        // when
+        chatService.postChatbotCardMessage(team, MessageType.CHATBOT_GUIDE_CARD, "활용 예시", null);
+
+        // then
+        verify(notificationService, never()).notifyChatroomEvent(any(), any(), anyString());
+    }
+
     @DisplayName("챗봇이 켜져있으면 챗봇 메시지가 활성 팀원 전원에게 알림함(CHATROOM) 알림으로도 남는다.")
     @Test
     void 챗봇_메시지는_활성_팀원_전원에게_알림함_알림으로_남는다() {

@@ -41,14 +41,28 @@ Phase 5로 미루고 여기 기록만 남긴다** — iOS Safari는 웹앱이 �
 
 ## 카테고리별 생성 트리거
 
-### CHATROOM — `ChatService.postChatbotMessage` / `postChatbotCardMessage`
+### CHATROOM — `ChatService.postChatbotCardMessage` (카드형만, 2026-08-21 범위 축소)
 
-챗봇이 채팅방에 메시지를 남기는 두 진입점(`ChatbotOrchestrationService`가 호출)에 중앙으로 걸었다 —
+**최초 구현은 `postChatbotMessage`(일반 텍스트)까지 전부 알림 대상이었는데, 실사용 중 알림함이 너무
+시끄러워져서 카드형(`postChatbotCardMessage`)만 남기고 좁혔다.** 특히 "@챗봇" 자유질의 응답
+(`postChatbotMessage`로 발행)은 질문할 때마다 팀 전체에게 알림이 갔는데, 개인 질문에 대한 답이라 팀
+전체 알림함에 쌓일 이유가 없었다. 인사 유도/진행 안내/리뷰 완료 같은 다른 일반 텍스트 프롬프트도 마찬가지로
+제외했다 — 카드형 메시지(팀장 확정, 공모전 확정, 투표 시작/리마인더 등 구조화된 1회성 이벤트)만 알림
+가치가 있다고 판단했다.
+
+카드형 중에서도 `CHATBOT_GUIDE_CARD`("활용 예시", `advanceToInProgress`에서 발행)는 제외했다 — 정적
+안내 카드라 액션이 필요 없어서다. `ChatService.postChatbotCardMessage`가 `messageType !=
+CHATBOT_GUIDE_CARD`일 때만 알림을 남기도록 가드한다.
+
 `Team.chatbotEnabled=false`면 애초에 메시지 자체가 생략되므로 알림도 자연히 생략된다. **다른 팀원이 보낸
-일반 텍스트(`sendMessage`)와 `SYSTEM_NOTICE`(`postSystemMessage`, 나가기/챗봇 토글 안내)는 알림함 대상이
-아니다** — 요구사항이 "챗봇이 보내는 채팅/팝업"과 매칭 알림만 알림함에 쌓이길 원했기 때문. 알림 본문은
-채팅에 실제로 남는 `content`를 그대로 재사용한다(챗봇 카드마다 다른 문구를 알림용으로 다시 하드코딩하지
-않기 위해).
+일반 텍스트(`sendMessage`)와 `SYSTEM_NOTICE`(`postSystemMessage`, 나가기/챗봇 토글 안내)는 처음부터 알림함
+대상이 아니다.** 알림 본문은 채팅에 실제로 남는 `content`를 그대로 재사용한다(챗봇 카드마다 다른 문구를
+알림용으로 다시 하드코딩하지 않기 위해).
+
+> **알려진 별도 이슈 — 제출확인 재알림 스팸**: `TeamScheduleService.sendSubmissionCheckReminderForTeam`이
+> `SUBMISSION_CHECK_CARD`(카드형)를 "진행완료" 미응답 시 **2시간마다 무한 반복** 발행한다. 이건 알림
+> 필터링 범위와 무관하게 채팅방 자체에도 계속 쌓이는 별도 버그라, 스케줄러 쪽에서 반복 횟수 제한이나
+> 최초 1회 이후 빈도 완화가 필요하다 — 아직 미해결.
 
 ### MATCHING — 신청 완료
 
@@ -150,6 +164,7 @@ PR #199 리뷰에서 나온 11개 findings 중 5개를 같은 PR에 추가 커�
 우려 자체는 두 잡이 여전히 별개 트랜잭션이라 완전히 해소되진 않았다.
 
 ## 미정 / 추후 확인 필요
+- **제출확인 재알림 2시간마다 무한 반복 버그** — 위 "CHATROOM" 절 참고, `TeamScheduleService` 쪽 수정 필요.
 - 알림 삭제/보관 정책 없음 — 무한히 쌓인다. 트래픽이 늘면 오래된 read=true 알림을 주기적으로 정리하는
   배치가 필요할 수 있다.
 - Phase 2(프론트 실데이터 연동), Phase 3~4(FCM 인앱 배너 + OS 푸시), Phase 5(iOS PWA 설치 유도)는

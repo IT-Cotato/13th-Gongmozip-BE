@@ -136,6 +136,11 @@ public class ChatService {
      * 챗봇 상태머신(ChatbotOrchestrationService)이 대화형 안내 메시지를 남길 때 사용한다.
      * {@code Team.chatbotEnabled}가 꺼져있으면(챗봇 삭제) 아무 메시지도 남기지 않는다 — 상태
      * 전이 자체는 그대로 진행되고, 그 사실을 알리는 챗봇 메시지만 조용히 생략된다.
+     *
+     * <p>일반 텍스트 프롬프트(인사 유도, 진행 안내, "@챗봇" 자유질의 응답 등)는 알림함/푸시 대상이
+     * 아니다 — 실사용 중 알림함이 너무 시끄러워졌다(특히 "@챗봇" 질의응답은 질문할 때마다 팀 전체에
+     * 알림이 갔음). {@link #postChatbotCardMessage}의 카드형 메시지만 알림 대상으로 좁혔다
+     * (docs/decisions/11-notification.md, 2026-08-21).
      */
     @Transactional
     public void postChatbotMessage(Team team, String content) {
@@ -143,7 +148,6 @@ public class ChatService {
             return;
         }
         Message saved = messageRepository.save(ChatConverter.toChatbotMessage(team, content));
-        notifyActiveMembers(team, content);
         broadcast(team.getTeamId(), saved);
     }
 
@@ -155,14 +159,17 @@ public class ChatService {
         }
         Message saved =
                 messageRepository.save(ChatConverter.toChatbotCardMessage(team, messageType, content, metadata));
-        notifyActiveMembers(team, content);
+        if (messageType != MessageType.CHATBOT_GUIDE_CARD) {
+            notifyActiveMembers(team, content);
+        }
         broadcast(team.getTeamId(), saved);
     }
 
-    // 챗봇이 채팅방에 남기는 메시지는 알림함(CHATROOM 카테고리)에도 활성 팀원 수만큼 쌓인다
-    // (docs/decisions/11-notification.md). 다른 팀원이 보낸 일반 텍스트 메시지(sendMessage)와
-    // SYSTEM_NOTICE(postSystemMessage, 나가기/챗봇 토글 안내)는 알림함 대상이 아니다 — 이번
-    // 요구사항이 "챗봇이 보내는 채팅/팝업"과 매칭 알림만 알림함에 쌓이길 원했기 때문.
+    // 챗봇 카드형 메시지(CHATBOT_GUIDE_CARD 제외)는 알림함(CHATROOM 카테고리)에도 활성 팀원 수만큼
+    // 쌓인다(docs/decisions/11-notification.md). 일반 텍스트 프롬프트(postChatbotMessage), 다른
+    // 팀원이 보낸 일반 텍스트 메시지(sendMessage), SYSTEM_NOTICE(postSystemMessage, 나가기/챗봇
+    // 토글 안내)는 알림함 대상이 아니다. CHATBOT_GUIDE_CARD("활용 예시")는 카드지만 정적 안내라
+    // 알림 가치가 낮아 제외했다.
     //
     // broadcast()(WebSocket 전송, 되돌릴 수 없음)보다 먼저 호출한다 — 알림 저장이 실패해 트랜잭션이
     // 롤백되더라도, 아직 아무 것도 브로드캐스트되지 않은 상태라 정합성이 깨지지 않는다.
