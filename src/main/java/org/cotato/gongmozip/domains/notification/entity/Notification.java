@@ -50,7 +50,10 @@ public class Notification extends BaseEntity {
     @Column(name = "category", nullable = false, length = 20)
     private NotificationCategory category;
 
-    @Column(name = "body", nullable = false, length = 500)
+    // 챗봇 자유질의(@챗봇) 응답 등 Message.content(TEXT, 무제한)를 그대로 옮겨 담을 수 있어야 해서
+    // 길이 제한을 두지 않는다 — VARCHAR(500)로 잘랐을 때 INSERT 실패로 트랜잭션이 롤백되면, 이미
+    // WebSocket으로 브로드캐스트된(되돌릴 수 없는) 메시지와 어긋나는 문제가 있었다.
+    @Column(name = "body", nullable = false, columnDefinition = "TEXT")
     private String body;
 
     // CHATROOM 알림을 탭했을 때 이동할 채팅방. MATCHING/OTHER는 별도 상세 화면이 없어 null.

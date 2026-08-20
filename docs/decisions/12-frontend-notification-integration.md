@@ -55,9 +55,8 @@
   렌더링하면 된다. 문구를 바꾸고 싶으면 백엔드 코드(`ChatbotOrchestrationService`가 남기는 챗봇 메시지
   원문, `MatchingApplicationService`의 `APPLY_COMPLETE_NOTIFICATION_BODY`/
   `RESULT_PUBLISHED_NOTIFICATION_BODY` 상수)를 고쳐야 한다.
-- ⚠️ `category`에 위 세 값 이외의 문자열을 넘기면 현재 전역 예외 처리기에 전용 핸들러가 없어 400이 아니라
-  500으로 응답한다(기존 `TeamController`의 `sort` 파라미터도 동일한 상태) — 탭 값을 하드코딩된 enum
-  문자열로만 보내면 문제없다.
+- `category`에 위 세 값 이외의 문자열을 넘기면 `NOTIFICATION_400_1`(`올바르지 않은 알림 카테고리입니다.`)
+  로 400을 응답한다(코드리뷰 findings 반영, 2026-08-20 — 최초 구현 땐 500이었음).
 
 ### `GET /api/notifications/unread-exists`
 

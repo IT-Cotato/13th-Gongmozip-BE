@@ -106,7 +106,9 @@ public interface MatchingApplicationRepository extends JpaRepository<MatchingApp
 
     // 결과 공개 알림(MatchingResultNotificationJobs) — 해당 신청일에 확정 결과가 나온(제안/확정/재배정
     // 대기/실패) 신청자에게만 "매칭 결과가 공개되었어요" 알림을 남긴다. WAITING/MATCHING(계산 중),
-    // CANCELED/PASSED(본인이 이미 철회)는 대상에서 제외한다.
+    // CANCELED/PASSED(본인이 이미 철회)는 대상에서 제외한다. MemberWithdrawService가 MATCHED/FAILED
+    // 상태의 탈퇴는 막지 않아 결과 확정 이후 탈퇴가 가능하므로, findUnpreparedWaitingWithLock과
+    // 동일하게 ACTIVE 회원만 대상으로 한 번 더 방어한다.
     @Query(
             """
             SELECT ma
@@ -114,6 +116,7 @@ public interface MatchingApplicationRepository extends JpaRepository<MatchingApp
             JOIN FETCH ma.member
             WHERE ma.applicationDate = :applicationDate
               AND ma.status IN :statuses
+              AND ma.member.status = org.cotato.gongmozip.domains.member.enums.MemberStatus.ACTIVE
             """)
     List<MatchingApplication> findAllByApplicationDateAndStatusInWithMember(
             @Param("applicationDate") LocalDate applicationDate,

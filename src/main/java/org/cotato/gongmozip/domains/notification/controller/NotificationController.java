@@ -3,9 +3,10 @@ package org.cotato.gongmozip.domains.notification.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.cotato.gongmozip.domains.notification.converter.NotificationConverter;
 import org.cotato.gongmozip.domains.notification.dto.response.NotificationResponse.NotificationListResponse;
 import org.cotato.gongmozip.domains.notification.dto.response.NotificationResponse.NotificationUnreadExistsResponse;
-import org.cotato.gongmozip.domains.notification.enums.NotificationCategory;
+import org.cotato.gongmozip.domains.notification.exception.codes.NotificationErrorCode;
 import org.cotato.gongmozip.domains.notification.exception.codes.NotificationSuccessCode;
 import org.cotato.gongmozip.domains.notification.service.NotificationService;
 import org.cotato.gongmozip.global.exception.GlobalErrorCode;
@@ -33,14 +34,14 @@ public class NotificationController {
             summary = "알림 목록 조회",
             description = "category를 생략하면 전체 탭, OTHER/MATCHING/CHATROOM을 넘기면 해당 탭만 조회한다. "
                     + "cursor를 생략하면 최신 페이지를, 직전 응답에서 받은 가장 오래된 알림의 notificationId를 cursor로 넘기면 이어서 조회한다.")
-    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class)
+    @CustomErrorCodes(commonErrorCodes = GlobalErrorCode.class, domainErrorCodes = NotificationErrorCode.class)
     @GetMapping
     public ResponseEntity<BaseResponse<NotificationListResponse>> getNotifications(
-            @RequestParam(name = "category", required = false) NotificationCategory category,
+            @RequestParam(name = "category", required = false) String category,
             @RequestParam(name = "cursor", required = false) Long cursor,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
-        NotificationListResponse response =
-                notificationService.getNotifications(userDetails.getMemberId(), category, cursor);
+        NotificationListResponse response = notificationService.getNotifications(
+                userDetails.getMemberId(), NotificationConverter.toNotificationCategory(category), cursor);
         return BaseResponseFormatter.success(NotificationSuccessCode.NOTIFICATION_LIST_RETRIEVED, response);
     }
 

@@ -137,8 +137,8 @@ public class ChatService {
             return;
         }
         Message saved = messageRepository.save(ChatConverter.toChatbotMessage(team, content));
-        broadcast(team.getTeamId(), saved);
         notifyActiveMembers(team, content);
+        broadcast(team.getTeamId(), saved);
     }
 
     /** 팀장 투표 카드 등 metadata가 필요한 챗봇 카드형 메시지를 남길 때 사용한다. 동작은 {@link #postChatbotMessage}와 동일. */
@@ -149,14 +149,17 @@ public class ChatService {
         }
         Message saved =
                 messageRepository.save(ChatConverter.toChatbotCardMessage(team, messageType, content, metadata));
-        broadcast(team.getTeamId(), saved);
         notifyActiveMembers(team, content);
+        broadcast(team.getTeamId(), saved);
     }
 
     // 챗봇이 채팅방에 남기는 메시지는 알림함(CHATROOM 카테고리)에도 활성 팀원 수만큼 쌓인다
     // (docs/decisions/11-notification.md). 다른 팀원이 보낸 일반 텍스트 메시지(sendMessage)와
     // SYSTEM_NOTICE(postSystemMessage, 나가기/챗봇 토글 안내)는 알림함 대상이 아니다 — 이번
     // 요구사항이 "챗봇이 보내는 채팅/팝업"과 매칭 알림만 알림함에 쌓이길 원했기 때문.
+    //
+    // broadcast()(WebSocket 전송, 되돌릴 수 없음)보다 먼저 호출한다 — 알림 저장이 실패해 트랜잭션이
+    // 롤백되더라도, 아직 아무 것도 브로드캐스트되지 않은 상태라 정합성이 깨지지 않는다.
     private void notifyActiveMembers(Team team, String content) {
         List<Member> activeMembers =
                 teamMemberRepository.findByTeamIdAndStatus(team.getTeamId(), TeamMemberStatus.ACTIVE).stream()

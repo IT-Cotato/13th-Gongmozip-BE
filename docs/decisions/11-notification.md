@@ -114,9 +114,34 @@ Phase 5로 미루고 여기 기록만 남긴다** — iOS Safari는 웹앱이 �
 - 테스트: `NotificationServiceTest`(신규), `ChatServiceTest`/`MatchingApplicationServiceTest`에 알림 생성
   검증 케이스 추가
 
+### 코드리뷰 findings 반영 (2026-08-20)
+
+PR #199 리뷰에서 나온 11개 findings 중 정확성 상위 3개를 같은 PR에 추가 커밋으로 반영했다.
+
+- **`Notification.body` VARCHAR(500) → TEXT (`V42__widen_notification_body.sql`)**: 챗봇 자유질의(`@챗봇`)
+  응답은 길이 제한이 없는데(`Message.content`는 TEXT) `body`가 500자로 잘려있어, 500자를 넘으면 INSERT
+  실패로 트랜잭션이 롤백됐다. 문제는 `broadcast()`(WebSocket 전송, 되돌릴 수 없음)가 알림 저장보다 먼저
+  실행돼서, 롤백돼도 이미 브로드캐스트된 메시지는 되돌아오지 않았다 — 컬럼을 TEXT로 넓히는 것과 함께
+  `ChatService.postChatbotMessage`/`postChatbotCardMessage`에서 `notifyActiveMembers`(알림 저장)를
+  `broadcast()`보다 먼저 호출하도록 순서를 바꿨다. 이제 알림 저장이 어떤 이유로든 실패해도, 아직 아무 것도
+  브로드캐스트되지 않은 채로 트랜잭션이 롤백된다.
+- **`MatchingApplicationRepository.findAllByApplicationDateAndStatusInWithMember`에 `member.status = ACTIVE`
+  조건 추가**: `MemberWithdrawService`가 `MATCHED`/`FAILED` 상태의 탈퇴는 막지 않아, 결과 확정 직후
+  탈퇴한 회원에게도 알림 행이 생기던 문제를 `findUnpreparedWaitingWithLock`과 동일한 방어 패턴으로 막았다.
+- **`category` 잘못된 값 → 400**: `NotificationErrorCode.INVALID_CATEGORY`/`NotificationException` 추가,
+  컨트롤러가 `NotificationCategory` 대신 `String`으로 받아 `NotificationConverter.toNotificationCategory`
+  (report 도메인의 `ReportConverter.toReportReason`과 동일한 패턴)에서 직접 검증하도록 바꿨다. Spring의
+  기본 enum 바인딩(`MethodArgumentTypeMismatchException`)에 맡기면 전역 예외 처리기가 못 잡아 500이
+  나가던 문제였다.
+
+나머지 findings(결과공개 `PASSED` 상태 제외, cron 하드코딩 드리프트, 스케줄러 레이스, 중복 쿼리, 인덱스
+미커버, N+1 저장, `markRead()` 죽은 코드)는 이번엔 반영하지 않았다 — PR #199 "To Reviewer" 체크리스트에
+남아있다.
+
 ## 미정 / 추후 확인 필요
 
 - **결과 공개 알림 대상 상태(`PASSED` 포함 여부)** — 위 "결정사항" 단락 참고, 매칭 도메인 담당자 확인 필요.
+  아직 미반영(PR #199 참고).
 - 알림 삭제/보관 정책 없음 — 무한히 쌓인다. 트래픽이 늘면 오래된 read=true 알림을 주기적으로 정리하는
   배치가 필요할 수 있다.
 - Phase 2(프론트 실데이터 연동), Phase 3~4(FCM 인앱 배너 + OS 푸시), Phase 5(iOS PWA 설치 유도)는
