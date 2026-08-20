@@ -122,7 +122,7 @@ FCM이 `UNREGISTERED`(기기에서 앱 삭제/알림 권한 철회 등)를 응�
   (`NotificationService.PUSH_TITLE`, `ChatService.PUSH_TITLE`). Figma에 명시된 게 없어 우선 이렇게
   두었고, 카테고리별로 다르게 할지는 추후 조정 대상.
 
-## 구현 현황 (2026-08-20, Firebase 자격증명 없이 disabled 상태로 구현)
+## 구현 현황 (2026-08-20)
 
 - 엔티티/리포지토리/마이그레이션: `domains/notification/entity/PushToken.java`,
   `repository/PushTokenRepository.java`, `V44__create_push_tokens.sql`
@@ -140,9 +140,18 @@ FCM이 `UNREGISTERED`(기기에서 앱 삭제/알림 권한 철회 등)를 응�
   초기화/afterCommit 트리거 패턴, `ChatbotOrchestrationServiceTest`와 동일), `PushDispatchServiceTest`,
   `PushTokenControllerTest`, `ChatServiceTest`/`NotificationServiceTest`에 발송 호출 검증 추가
 
-**Firebase 프로젝트/자격증명은 아직 없다.** `firebase.credentials-base64`가 비어있으면
-`FirebaseFcmClient.isEnabled()`가 항상 false를 반환해 실제 발송은 전부 스킵된다 — 자격증명이 준비되면
-그 값만 채우면 되고 나머지 코드는 그대로 동작한다.
+**Firebase 프로젝트 생성 및 서비스 계정 키 발급 완료 (2026-08-20).** `firebase.credentials-base64`가
+비어있으면 `FirebaseFcmClient.isEnabled()`가 false를 반환해 발송을 스킵하는 fail-safe는 여전히 유효하지만,
+이제 로컬 `.env`에 실제 값이 채워져 있다 — 운영(EC2) `.env`에는 아직 반영 전이다(배포 권한자 작업 필요).
+
+**로컬 환경에서 실제 자격증명으로 검증 완료**:
+- 앱을 실제로 기동해 `FirebaseFcmClient`가 싱글턴 빈으로 정상 생성됨(실패했다면 컨텍스트 기동 자체가
+  실패했을 것 — 별도 초기화 성공 로그는 없지만 기동 성공이 곧 증거)
+- `POST /api/notifications/push-tokens` 실제 호출 → DB에 정상 저장 확인
+- 임시 테스트로 `FirebaseFcmClient.send()`를 더미 토큰으로 직접 호출 → FCM 서버로부터 HTTP 400(Bad
+  Request, 더미 토큰이 유효한 형식이 아니라서 나는 정상 응답)을 받음 — 401/403이 아니므로 인증 자체는
+  통과했다는 뜻. 실제 기기로의 전달 확인은 프론트가 FCM SDK로 진짜 토큰을 발급받아야 가능해 아직
+  미검증(구조적으로 지금 시점엔 불가능).
 
 ## 관련 문서
 
