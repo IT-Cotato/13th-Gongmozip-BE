@@ -104,6 +104,21 @@ public interface MatchingApplicationRepository extends JpaRepository<MatchingApp
 
     long countByApplicationDateAndStatusIn(LocalDate applicationDate, Collection<MatchingApplicationStatus> statuses);
 
+    // 결과 공개 알림(MatchingResultNotificationJobs) — 해당 신청일에 확정 결과가 나온(제안/확정/재배정
+    // 대기/실패) 신청자에게만 "매칭 결과가 공개되었어요" 알림을 남긴다. WAITING/MATCHING(계산 중),
+    // CANCELED/PASSED(본인이 이미 철회)는 대상에서 제외한다.
+    @Query(
+            """
+            SELECT ma
+            FROM MatchingApplication ma
+            JOIN FETCH ma.member
+            WHERE ma.applicationDate = :applicationDate
+              AND ma.status IN :statuses
+            """)
+    List<MatchingApplication> findAllByApplicationDateAndStatusInWithMember(
+            @Param("applicationDate") LocalDate applicationDate,
+            @Param("statuses") Collection<MatchingApplicationStatus> statuses);
+
     // 최근 패스 횟수로 다음 협업거리 감점(3~11m)을 계산한다
     long countByMemberAndStatusAndCanceledAtGreaterThanEqual(
             Member member, MatchingApplicationStatus status, LocalDateTime since);

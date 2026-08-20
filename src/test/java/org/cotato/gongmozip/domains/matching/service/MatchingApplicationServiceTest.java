@@ -34,6 +34,7 @@ import org.cotato.gongmozip.domains.matching.score.SkillScoreCalculator;
 import org.cotato.gongmozip.domains.matching.support.MatchingResponseFixture;
 import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
+import org.cotato.gongmozip.domains.notification.service.NotificationService;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.enums.InterestCategory;
 import org.cotato.gongmozip.domains.profile.repository.AwardRepository;
@@ -96,6 +97,9 @@ class MatchingApplicationServiceTest {
     @Mock
     private MatchingTimePolicy matchingTimePolicy;
 
+    @Mock
+    private NotificationService notificationService;
+
     private MatchingApplicationService matchingApplicationService;
 
     @BeforeEach
@@ -113,7 +117,8 @@ class MatchingApplicationServiceTest {
                 new MatchingPassPenaltyService(matchingApplicationRepository, collaborationPointService),
                 projectScoreProvider,
                 new SkillScoreCalculator(),
-                matchingTimePolicy);
+                matchingTimePolicy,
+                notificationService);
     }
 
     @DisplayName("결과 공개 전에는 오늘 매칭풀의 신청 수와 오늘 기준 카운트다운 시각을 반환한다.")
@@ -344,6 +349,7 @@ class MatchingApplicationServiceTest {
         assertThat(saved.getAgreeablenessScore()).isEqualByComparingTo("4.10");
         assertThat(response.skillScore()).isEqualByComparingTo("52.00");
         assertThat(response.skillGroup()).isNull();
+        verify(notificationService).notifyMatchingEvent(member, "매칭 신청이 완료되었습니다.");
     }
 
     @DisplayName("결과 공개 이후 신청은 다음 날 매칭으로 저장한다.")
@@ -543,6 +549,28 @@ class MatchingApplicationServiceTest {
                 .isInstanceOf(MatchingException.class)
                 .hasFieldOrPropertyWithValue("errorCode", MatchingErrorCode.INVALID_APPLICATION_STATUS);
         verify(matchingTimePolicy, never()).now();
+    }
+
+    @DisplayName("결과 공개 알림은 확정 결과가 나온(PROPOSED/MATCHED/REASSIGN_PENDING/FAILED) 신청자에게만 남긴다.")
+    @Test
+    void notifyTodayResultPublishedNotifiesOnlyResolvedApplications() {
+        Member proposedMember = Member.builder().memberId(1L).build();
+        Member failedMember = Member.builder().memberId(2L).build();
+        MatchingApplication proposed = applicationWithStatus(10L, proposedMember, MatchingApplicationStatus.PROPOSED);
+        MatchingApplication failed = applicationWithStatus(11L, failedMember, MatchingApplicationStatus.FAILED);
+        given(matchingApplicationRepository.findAllByApplicationDateAndStatusInWithMember(
+                        TODAY,
+                        EnumSet.of(
+                                MatchingApplicationStatus.PROPOSED,
+                                MatchingApplicationStatus.MATCHED,
+                                MatchingApplicationStatus.REASSIGN_PENDING,
+                                MatchingApplicationStatus.FAILED)))
+                .willReturn(List.of(proposed, failed));
+
+        matchingApplicationService.notifyTodayResultPublished(TODAY);
+
+        verify(notificationService).notifyMatchingEvent(proposedMember, "매칭 결과가 공개되었어요! 지금 바로 확인해 보세요.");
+        verify(notificationService).notifyMatchingEvent(failedMember, "매칭 결과가 공개되었어요! 지금 바로 확인해 보세요.");
     }
 
     private SurveySubmission submittedSurvey(Member member) {

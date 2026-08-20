@@ -30,6 +30,7 @@ import org.cotato.gongmozip.domains.member.entity.Member;
 import org.cotato.gongmozip.domains.member.exception.MemberException;
 import org.cotato.gongmozip.domains.member.exception.codes.MemberErrorCode;
 import org.cotato.gongmozip.domains.member.repository.MemberRepository;
+import org.cotato.gongmozip.domains.notification.service.NotificationService;
 import org.cotato.gongmozip.domains.profile.entity.Profile;
 import org.cotato.gongmozip.domains.profile.entity.ProjectExperience;
 import org.cotato.gongmozip.domains.profile.repository.AwardRepository;
@@ -52,6 +53,15 @@ public class MatchingApplicationService {
             EnumSet.of(MatchingApplicationStatus.WAITING, MatchingApplicationStatus.MATCHING);
     private static final EnumSet<MatchingApplicationStatus> PRE_RESULT_WITHDRAWABLE_STATUSES =
             EnumSet.of(MatchingApplicationStatus.WAITING, MatchingApplicationStatus.MATCHING);
+    private static final String APPLY_COMPLETE_NOTIFICATION_BODY = "매칭 신청이 완료되었습니다.";
+    private static final String RESULT_PUBLISHED_NOTIFICATION_BODY = "매칭 결과가 공개되었어요! 지금 바로 확인해 보세요.";
+    // 결과 공개 시점(16시)에 이미 확정 결과가 나와있는 상태만 알림 대상으로 본다 — 계산 중(WAITING/
+    // MATCHING)이거나 본인이 이미 철회(CANCELED/PASSED)한 신청은 제외한다.
+    private static final EnumSet<MatchingApplicationStatus> RESULT_PUBLISHED_NOTIFIABLE_STATUSES = EnumSet.of(
+            MatchingApplicationStatus.PROPOSED,
+            MatchingApplicationStatus.MATCHED,
+            MatchingApplicationStatus.REASSIGN_PENDING,
+            MatchingApplicationStatus.FAILED);
 
     private final MemberRepository memberRepository;
     private final ProfileRepository profileRepository;
@@ -66,6 +76,7 @@ public class MatchingApplicationService {
     private final ProjectScoreProvider projectScoreProvider;
     private final SkillScoreCalculator skillScoreCalculator;
     private final MatchingTimePolicy matchingTimePolicy;
+    private final NotificationService notificationService;
 
     // 현재 매칭 신청 인원 조회 — 대상 신청일 매칭풀의 WAITING/MATCHING 신청 수
     public ParticipantCountResponse getParticipantCount() {
@@ -219,8 +230,23 @@ public class MatchingApplicationService {
                 skillScore,
                 member.getCollaborationPoint());
         matchingApplicationRepository.save(application);
+        notificationService.notifyMatchingEvent(member, APPLY_COMPLETE_NOTIFICATION_BODY);
         return MatchingApplicationConverter.toApplicationResponse(
                 application, matchingTimePolicy.applicationDeadline(applicationDate));
+    }
+
+    /**
+     * 매칭 결과 공개 시각(MatchingTimePolicy.resultPublishAt, 기본 16시)에 스케줄러
+     * (MatchingResultNotificationJobs)가 호출한다. 해당 신청일에 확정 결과가 나온 신청자
+     * 전원에게 "매칭 결과가 공개되었어요" 알림을 남긴다 (docs/decisions/11-notification.md).
+     */
+    @Transactional
+    public void notifyTodayResultPublished(LocalDate applicationDate) {
+        List<MatchingApplication> applications =
+                matchingApplicationRepository.findAllByApplicationDateAndStatusInWithMember(
+                        applicationDate, RESULT_PUBLISHED_NOTIFIABLE_STATUSES);
+        applications.forEach(application ->
+                notificationService.notifyMatchingEvent(application.getMember(), RESULT_PUBLISHED_NOTIFICATION_BODY));
     }
 
     // 결과 생성 전 철회 처리. PROPOSED 신청은 MatchingWithdrawalService가 그룹 패스 흐름으로 보낸다.
